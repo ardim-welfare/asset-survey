@@ -15,9 +15,12 @@ const EFFECTIVE_DATE = formatLegalVersion(PRIVACY_VERSION);
  * - Gemini: functions/src/handlers/callable/ocrDocument.ts, functions/src/handlers/https/submitOrgApplication.ts,
  *           functions/src/handlers/triggers/{autoVerifyDocument,notifyNewFeedback}.ts
  * - Gmail: functions/src/core/mailer.ts 사용처
- * - 알리고·Cafe24: functions/src/services/alimtalk/
- * - Discord: functions/src/core/discord.ts 의 sendDiscordAlert 호출부 전부
- * - Sentry: src/lib/sentry.ts, functions/src/core/sentry.ts
+ *
+ * ⛔ 코드는 있지만 쓰지 않기로 한 연동(2026-11-21 결정) — 목록에서 뺐다. **설정값을 넣으면 개인정보가
+ *    나가는데 처리방침에 없게 된다.** 켜려면 먼저 여기에 수탁자를 되살리고 시행일을 옮긴다.
+ *    - 알리고·Cafe24(카카오 알림톡): functions/src/services/alimtalk/ — `ALIMTALK_PROXY_URL`을 비워 둔다
+ *    - Discord(운영자 알림): functions/src/core/discord.ts — `DISCORD_WEBHOOK_URL`을 비워 둔다
+ *    - Sentry(오류 수집): src/lib/sentry.ts, functions/src/core/sentry.ts — `VITE_SENTRY_DSN`·`SENTRY_DSN_FUNCTIONS`를 비워 둔다
  *
  * 차량운행일지에서 쓰던 Calendar·Slack·Tmap·계기판 OCR·챗봇 연동은 이 서비스에 없다(0단계에서 걷어냄).
  * 그래서 '기관 선택 연동' 수탁자 구분과 제11조의 "외부 연동 인증 토큰 암호화 보관" 문구도 뺐다(2026-11-21,
@@ -56,35 +59,6 @@ const PROCESSORS: {
         task: '기관 신청 승인·반려 안내, 문의 답변, 운영자 알림 메일 발송',
         items: '이메일 주소, 이름, 전화번호, 기관명, 초대 코드, 문의·답변 내용, 반려 사유',
         contact: 'https://support.google.com/policies/troubleshooter/7575787',
-    },
-    {
-        name: '(주)알리고',
-        country: '대한민국',
-        task: '기관 신청 승인·반려 및 등록 안내 카카오 알림톡 발송',
-        items: '휴대전화번호, 이름, 기관명, 초대 코드, 반려 사유',
-        contact: 'https://smartsms.aligo.in',
-    },
-    {
-        name: '카페24 주식회사 (Cafe24)',
-        country: '대한민국',
-        task: '알림톡 발송 요청의 중계(프록시) 서버 운영',
-        items: '휴대전화번호, 이름, 기관명, 초대 코드, 반려 사유',
-        contact: 'https://www.cafe24.com',
-    },
-    {
-        name: 'Discord Inc.',
-        country: '미국',
-        task: '신규 기관 신청, 관리자 권한 변경, 이용자 의견 접수, 시스템 오류의 운영자 실시간 알림',
-        items: '이름, 이메일 주소, 전화번호, 기관명, 문의·의견 내용',
-        contact: 'privacy@discord.com',
-    },
-    {
-        name: 'Functional Software, Inc. (Sentry)',
-        country: '미국',
-        task: '서비스 오류 수집 및 안정성 모니터링',
-        // 프론트(src/lib/sentry.ts setSentryUser)는 uid·역할·기관 ID만 보내고 이메일은 보내지 않는다.
-        items: '사용자 식별자, 사용자 역할, 소속 기관 식별자, 오류 발생 시점의 접속 기록·브라우저 정보',
-        contact: 'compliance@sentry.io',
     },
 ];
 
@@ -158,7 +132,7 @@ export default function PrivacyPage() {
                                 <ul className="list-disc list-inside space-y-1 ml-2">
                                     <li>이메일 주소 (Google 로그인을 통해 자동 수집)</li>
                                     <li>이름 (Google 계정 표시 이름. 기관관리자가 직원 이름을 미리 등록한 경우 그 이름)</li>
-                                    <li>전화번호 (기관 신청 시 신청자의 휴대전화번호 — 승인·반려 결과를 카카오 알림톡으로 안내하는 데 사용)</li>
+                                    <li>전화번호 (기관 신청 시 신청자의 휴대전화번호 — 신청 내용 확인이 필요할 때 연락하는 데 사용)</li>
                                 </ul>
                                 <p className="text-xs text-surface-500 dark:text-surface-400">
                                     Google 계정의 프로필 사진은 가입 화면 표시에만 사용하며 저장하지 않습니다.
@@ -362,10 +336,6 @@ export default function PrivacyPage() {
 
                             <ul className="list-disc list-inside space-y-1 ml-2 text-xs">
                                 <li>
-                                    카카오 알림톡은 카페24 주식회사가 제공하는 호스팅 환경의 중계 서버를 거쳐 (주)알리고로 전달되며,
-                                    최종 발송은 카카오톡을 통해 이루어집니다. 중계 서버는 발송 요청을 전달할 뿐 별도로 개인정보를 저장하지 않습니다.
-                                </li>
-                                <li>
                                     위탁 업무의 내용이나 수탁자가 변경될 경우 본 개인정보 처리방침을 통해 지체 없이 공개합니다.
                                 </li>
                             </ul>
@@ -436,8 +406,7 @@ export default function PrivacyPage() {
                                         <strong>이용하지 않으면 이전되지 않는 항목</strong> — 문의 답변 초안(문의를 남기지 않으면 발생하지 않음).
                                     </li>
                                     <li>
-                                        <strong>개별 거부가 불가한 항목</strong> — 인증·데이터 저장(Firebase), 운영자 알림(Discord),
-                                        오류 모니터링(Sentry), 안내 메일 발송(Gmail)은 서비스 제공과 장애 대응에 필수적입니다.
+                                        <strong>개별 거부가 불가한 항목</strong> — 인증·데이터 저장(Firebase)과 안내 메일 발송(Gmail)은 서비스 제공과 장애 대응에 필수적입니다.
                                         거부하시는 경우 서비스 이용이 불가하며 계정 삭제로 처리됩니다.
                                     </li>
                                 </ul>

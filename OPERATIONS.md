@@ -16,7 +16,7 @@
 | App Check 키(Fraud Defense) | 사용자 + AI | 클래식 reCAPTCHA v3는 지원이 끝났다. 2.5의 3번 |
 | Secret Manager 비밀값 등록 | 사용자 | `GEMINI_API_KEY` · `GMAIL_APP_PASSWORD` · `ALIMTALK_PROXY_TOKEN` → [README](README.md#환경변수) |
 | `functions/.env` 채우기 | 사용자 + AI | [functions/.env.example](functions/.env.example) |
-| 카카오 알림톡 템플릿 새로 등록 | 사용자 | 차량운행일지 템플릿 문구라 그대로 쓰지 않는다. 등록 전까지 알림톡은 끈다 |
+| 카카오 알림톡·Discord·Sentry | **쓰지 않기로 함 (2026-11-21)** | 처리방침 수탁자 목록에서 뺐다. 코드는 남아 있으니 `ALIMTALK_PROXY_URL`·`DISCORD_WEBHOOK_URL`·`VITE_SENTRY_DSN`·`SENTRY_DSN_FUNCTIONS`를 **비워 둔다** — 넣으면 처리방침에 없는 곳으로 개인정보가 나간다. 켜려면 [PrivacyPage.tsx](src/components/auth/PrivacyPage.tsx) 목록부터 되살린다 |
 | 이용약관·개인정보 처리방침 검토 | 사용자 검토 | 6단계에서 재물조사 서비스용 첫 초안으로 바꿨다(차량 처리 제거, 재물·조사 기록 처리 추가). **법률 검토와 시행일 확정**이 남았다 — 시행일은 `src/lib/constants.ts`의 `TERMS_VERSION`·`PRIVACY_VERSION` |
 | Storage 버킷 리전 | 사용자 | 처리방침 제8조는 증빙서류 사본을 **미국(us-east1)**에 둔다고 적었다. 다른 리전으로 만들면 처리방침을 고친다 |
 | 앱 아이콘 교체 | 사용자 + AI | `public/icons/`는 차량운행일지 아이콘이다 |
