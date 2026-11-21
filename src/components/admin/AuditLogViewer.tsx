@@ -209,7 +209,7 @@ export default function AuditLogViewer() {
                         {exporting ? '내보내는 중...' : '엑셀로 내보내기'}
                     </button>
                     <p className="text-xs text-surface-500 dark:text-surface-400 mt-2 leading-relaxed">
-                        선택한 기간·직원·차량·유형의 기록 전체가 담깁니다. 접속지 IP가 포함되므로 파일 보관에 주의해 주세요 —
+                        선택한 기간·직원·유형의 기록 전체가 담깁니다. 접속지 IP가 포함되므로 파일 보관에 주의해 주세요 —
                         내보낸 사실은 접속기록에 남습니다.
                     </p>
                 </div>

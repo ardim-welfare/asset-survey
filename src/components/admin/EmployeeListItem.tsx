@@ -212,7 +212,7 @@ export default function EmployeeListItem({
                                 </button>
                                 <button
                                     onClick={() => onDeletePermanently(member.original)}
-                                    title="계정을 영구 삭제합니다 (운행 기록은 보존)"
+                                    title="계정을 영구 삭제합니다 (조사 기록은 보존)"
                                     className="btn-icon btn-sm text-surface-500 dark:text-surface-400 hover:text-red-500 dark:hover:text-red-400 min-h-[48px] min-w-[48px]"
                                 >
                                     <svg

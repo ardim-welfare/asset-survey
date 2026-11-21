@@ -113,7 +113,7 @@ export default function FAQPage() {
         <div className="min-h-screen bg-gradient-to-br from-surface-50 to-primary-50 flex flex-col">
             <SEOHead
                 title="자주 하는 질문"
-                description="차량 운행일지 사용법, 예약, AI 계기판 인식 등 자주 묻는 질문과 답변입니다."
+                description="재물조사 사용법, 재물 대장 올리기, QR 라벨, 조사 진행 등 자주 묻는 질문과 답변입니다."
                 path="/faq"
                 jsonLd={faqJsonLd}
             />

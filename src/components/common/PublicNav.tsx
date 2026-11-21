@@ -59,7 +59,7 @@ export default function PublicNav({ variant = 'solid' }: PublicNavProps) {
                             : 'text-surface-800 dark:text-surface-200 hover:text-primary-600 dark:hover:text-primary-400'
                     }`}
                 >
-                    차량 운행일지
+                    재물조사
                 </a>
                 <div className="flex items-center gap-1">
                     {NAV_ITEMS.map((item) => {

@@ -75,7 +75,7 @@ export default function AccountSection() {
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-surface-900 dark:text-surface-100">푸시 알림</p>
-                                <p className="text-xs text-surface-500 dark:text-surface-400">예약 알림 및 운행 관련 알림</p>
+                                <p className="text-xs text-surface-500 dark:text-surface-400">공지 및 기관 관련 알림</p>
                             </div>
                         </div>
                         {permission === 'default' ? (
