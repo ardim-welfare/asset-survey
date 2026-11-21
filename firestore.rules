@@ -305,6 +305,99 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ── 조사 회차·대상·스캔 (기획서 F10~F12) ──
+    // 읽기는 같은 기관 구성원(다른 공간 판정·중복 확인에 필요 — 금액은 없다).
+    // 쓰기 경계(사용자 결정 2026-11-21): 스캔은 **내가 담당하는 공간에서만** 남긴다. 관리자는 모든 공간.
+
+    function surveyOf(surveyId) {
+      return get(/databases/$(database)/documents/surveys/$(surveyId)).data;
+    }
+    function isSpaceManager(spaceId, orgId) {
+      let space = get(/databases/$(database)/documents/spaces/$(spaceId));
+      return space != null
+             && space.data.organizationId == orgId
+             && space.data.managerUids.hasAny([request.auth.uid]);
+    }
+
+    // 회차 — 관리자가 시작한다. 마감·수정은 5단계에서 연다
+    match /surveys/{surveyId} {
+      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      allow create: if isOrgAdmin(request.resource.data.organizationId)
+                    && request.resource.data.keys().hasOnly(['organizationId', 'name', 'startDate', 'endDate', 'spaceIds',
+                                                             'includesUnassigned', 'mode', 'status', 'targetCount',
+                                                             'lastEditedByUid', 'createdAt'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+                    && request.resource.data.startDate is string && request.resource.data.startDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                    && request.resource.data.endDate is string && request.resource.data.endDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                    && request.resource.data.endDate >= request.resource.data.startDate
+                    && request.resource.data.spaceIds is list && request.resource.data.spaceIds.size() <= 200
+                    && request.resource.data.includesUnassigned is bool
+                    && request.resource.data.mode in ['delegated', 'solo']
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.targetCount is int
+                    && request.resource.data.lastEditedByUid == request.auth.uid
+                    && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 조사 대상 — 회차를 시작할 때 같은 배치로 만들고 바꾸지 않는다
+    match /surveyTargets/{targetId} {
+      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      allow create: if isOrgAdmin(request.resource.data.organizationId)
+                    && request.resource.data.keys().hasOnly(['organizationId', 'surveyId', 'spaceId', 'items',
+                                                             'lastEditedByUid', 'createdAt'])
+                    && targetId.matches(request.resource.data.surveyId + '__.+')
+                    && getAfter(/databases/$(database)/documents/surveys/$(request.resource.data.surveyId)).data.organizationId
+                       == request.resource.data.organizationId
+                    && request.resource.data.items is list && request.resource.data.items.size() <= 3000
+                    && request.resource.data.lastEditedByUid == request.auth.uid
+                    && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 스캔 — 문서 ID가 회차+재물이라 같은 물건을 다시 찍으면 '수정'이 되고, 핵심 값 수정은 막혀 수가 늘지 않는다
+    match /scans/{scanId} {
+      function scanValid(d) {
+        return d.keys().hasOnly(['organizationId', 'surveyId', 'assetId', 'code', 'name', 'spaceId', 'expectedSpaceId',
+                                 'result', 'method', 'condition', 'memo', 'scannedByUid', 'scannedAt',
+                                 'lastEditedByUid', 'updatedAt'])
+               && nullableString(d.assetId, 300) && d.code is string && d.code.size() > 0 && d.code.size() <= 300
+               && nullableString(d.name, 200)
+               && d.spaceId is string && nullableString(d.expectedSpaceId, 100)
+               && d.result in ['ok', 'otherSpace', 'unregistered', 'outOfScope']
+               && d.method in ['qr', 'manual']
+               && d.condition in ['normal', 'damaged', 'labelDamaged']
+               && d.memo is string && d.memo.size() <= 200
+               && d.updatedAt == request.time
+               && d.lastEditedByUid == request.auth.uid;
+      }
+      // 이 회차에서 이 공간에 스캔을 남길 수 있는가 — 열린 회차, 대상 공간, 관리자 또는 (나눠서 조사일 때) 그 공간 담당자
+      function canScanIn(survey, orgId, spaceId) {
+        return survey.organizationId == orgId
+               && survey.status == 'open'
+               && survey.spaceIds.hasAny([spaceId])
+               && (isOrgAdmin(orgId) || (survey.mode == 'delegated' && isSpaceManager(spaceId, orgId)));
+      }
+
+      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      allow create: if isOrgMember(request.resource.data.organizationId)
+                    && scanId.matches(request.resource.data.surveyId + '__.+')
+                    && canScanIn(surveyOf(request.resource.data.surveyId), request.resource.data.organizationId, request.resource.data.spaceId)
+                    && scanValid(request.resource.data)
+                    && request.resource.data.scannedByUid == request.auth.uid
+                    && request.resource.data.scannedAt == request.time;
+      // 나중에 고칠 수 있는 것은 물건 상태·메모뿐 (기획서 F12)
+      allow update: if isOrgMember(resource.data.organizationId)
+                    && canScanIn(surveyOf(resource.data.surveyId), resource.data.organizationId, resource.data.spaceId)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['condition', 'memo', 'updatedAt', 'lastEditedByUid'])
+                    && scanValid(request.resource.data);
+      // 잘못 찍은 것 지우기 — 열린 회차에서 관리자 또는 찍은 사람 본인
+      allow delete: if isOrgMember(resource.data.organizationId)
+                    && surveyOf(resource.data.surveyId).status == 'open'
+                    && (isOrgAdmin(resource.data.organizationId) || resource.data.scannedByUid == request.auth.uid);
+    }
+
     // === 알림 ===
     match /notifications/{notificationId} {
       allow read: if resource.data.targetUid == request.auth.uid || isSuperAdmin();

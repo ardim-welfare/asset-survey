@@ -106,9 +106,9 @@ export default defineConfig({
          * 그래서 기본값을 뒤집는다. 프리캐시에는 index.html이 실제로 참조하는 셸
          * (index-*.js 2.6KB + firebase-auth-*.js 29.5KB + index-*.css 22.9KB = gzip 55KB)만
          * 두고, 나머지 청크는 **방문 시점에** sw.ts의 `/assets/` 런타임 캐시가 담는다.
-         * 운전자 경로의 오프라인은 `lib/warmDriverRoutes.ts`가 로그인 후 워밍해 보장한다
-         * (오프라인 보장 범위를 운전자 경로로 한정한 결정에 따른 것 — 관리자·통계·내보내기
-         *  화면은 오프라인 대상이 아니다).
+         * 재물조사 앱에서 오프라인을 보장하는 경로는 **현장 스캔**뿐이다 — 진행 중 조사가 있으면
+         * 직원 홈(EmployeeHome)이 스캔 화면·카메라 청크를 미리 받아 둔다(관리자·보고서 화면은
+         * 오프라인 대상이 아니다). (차량운행일지의 `lib/warmDriverRoutes.ts`는 0단계에서 걷어냈다.)
          *
          * ⚠️ 이 패턴이 엔트리 파일명과 어긋나면 셸이 프리캐시에서 조용히 빠져 **오프라인이
          * 통째로 죽는다.** 그 회귀는 `scripts/check-bundle-size.ts`의 프리캐시 게이트가
@@ -170,6 +170,10 @@ export default defineConfig({
             'react-router-dom',
           ],
           'xlsx': ['xlsx'],
+          // QR 카메라(스캔 화면에서만 불러옴). 이름을 따로 주지 않으면 패키지 엔트리 이름을 따라
+          // `index-*.js`가 되어 위 globPatterns의 셸 패턴('assets/index-*')에 걸려 프리캐시로 들어간다
+          // (2026-11-21 4단계에서 프리캐시 게이트가 잡음 — 98KB가 설치 즉시 내려받아졌다).
+          'html5-qrcode': ['html5-qrcode'],
           // sentryClient(재수출 파사드)를 SDK와 같은 청크에 강제 배치 — 파사드가 자체 코드가 없어
           // Rollup이 공유 청크로 접어 넣으면 SDK로의 정적 엣지가 생겨 지연 로딩이 무력화된다
           'sentry': ['@sentry/react', './src/lib/sentryClient.ts'],

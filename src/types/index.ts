@@ -15,3 +15,6 @@ export type { Space, SpacePatch } from './space';
 export type {
     Asset, AssetStatus, AssetAccounting, ImportRecord, HistoryEntry, AssetFields, AccountingFields,
 } from './asset';
+export type {
+    Survey, SurveyStatus, SurveyTarget, SurveyTargetItem, Scan, ScanResult, ScanMethod, ScanCondition,
+} from './survey';

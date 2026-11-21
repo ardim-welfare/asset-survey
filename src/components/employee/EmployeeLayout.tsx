@@ -14,7 +14,7 @@ import ErrorBoundary from '../common/ErrorBoundary';
 
 const MorePage = lazyWithRetry(() => import('./MorePage'));
 const EmployeeHome = lazyWithRetry(() => import('./EmployeeHome'));
-const ScanPlaceholder = lazyWithRetry(() => import('./ScanPlaceholder'));
+const ScanPage = lazyWithRetry(() => import('./ScanPage'));
 const MyAssets = lazyWithRetry(() => import('./MyAssets'));
 const EmployeeAssetDetail = lazyWithRetry(() => import('./EmployeeAssetDetail'));
 
@@ -141,7 +141,7 @@ export default function EmployeeLayout() {
                 <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-8 h-8 spinner" /></div>}>
                     <Routes>
                         <Route path="home" element={<EmployeeHome />} />
-                        <Route path="scan" element={<ScanPlaceholder />} />
+                        <Route path="scan" element={<ScanPage />} />
                         <Route path="assets" element={<MyAssets />} />
                         <Route path="assets/:assetId" element={<EmployeeAssetDetail />} />
                         <Route path="more" element={<MorePage />} />

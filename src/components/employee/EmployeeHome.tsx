@@ -1,14 +1,16 @@
 /**
  * EmployeeHome — 직원(공간 담당자) 첫 화면
  *
- * 1단계: 내가 담당하는 공간을 보여 준다(기획서 F03). 3단계: 공간을 누르면 그 공간의 재물 목록(F08). 조사 대상·진행 상황은
+ * 1단계: 내가 담당하는 공간을 보여 준다(기획서 F03). 3단계: 공간을 누르면 그 공간의 재물 목록(F08).
+ * 4단계: 진행 중인 조사가 있으면 스캔으로 가는 카드(F10·F11). 조사 대상·진행 상황은
  * F10~F13(조사 회차·스캔·제출)에서 이 화면에 더한다.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { getMySpaces } from '../../lib/firestore';
+import { getMySpaces, getOpenSurvey } from '../../lib/firestore';
 import type { Space } from '../../types/space';
+import type { Survey } from '../../types/survey';
 
 export default function EmployeeHome() {
     const { user, userData } = useAuth();
@@ -17,12 +19,21 @@ export default function EmployeeHome() {
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
+    const [survey, setSurvey] = useState<Survey | null>(null);
 
     useEffect(() => {
         if (!orgId || !uid) return;
         let cancelled = false;
         setLoading(true);
         setError(false);
+        // 진행 중 조사는 없어도 화면은 그린다(실패하면 조사 카드만 빠진다)
+        getOpenSurvey(orgId).then((sv) => {
+            if (cancelled) return;
+            setSurvey(sv);
+            // 진행 중 조사가 있으면 스캔 화면·카메라 코드를 미리 받아 둔다 — 지하·창고처럼 인터넷이 끊긴 곳에서
+            // 스캔 탭을 처음 열어도 뜨게(서비스 워커의 /assets/ 런타임 캐시에 담긴다)
+            if (sv) { void import('./ScanPage').catch(() => { }); void import('html5-qrcode').catch(() => { }); }
+        }, () => { });
         getMySpaces(orgId, uid)
             .then((list) => { if (!cancelled) setSpaces(list); })
             .catch(() => { if (!cancelled) setError(true); })
@@ -65,13 +76,22 @@ export default function EmployeeHome() {
                 )}
             </section>
 
-            <div className="glass-card p-6 text-center">
-                <div className="text-4xl mb-3" aria-hidden="true">📋</div>
-                <p className="text-surface-700 dark:text-surface-300 font-medium">진행 중인 재물조사가 없습니다</p>
-                <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-                    재물 담당자가 조사를 시작하면 담당 공간의 조사 목록이 여기에 나옵니다.
-                </p>
-            </div>
+            {survey ? (
+                <section className="glass-card p-5" aria-labelledby="survey-heading">
+                    <p className="text-xs font-medium text-primary-600 dark:text-primary-400">진행 중인 재물조사</p>
+                    <h2 id="survey-heading" className="font-semibold text-surface-900 dark:text-surface-100">{survey.name}</h2>
+                    <p className="text-sm text-surface-500 dark:text-surface-400">{survey.startDate} ~ {survey.endDate}</p>
+                    <Link to="/employee/scan" className="btn-primary w-full min-h-[52px] mt-4">📷 스캔하러 가기</Link>
+                </section>
+            ) : (
+                <div className="glass-card p-6 text-center">
+                    <div className="text-4xl mb-3" aria-hidden="true">📋</div>
+                    <p className="text-surface-700 dark:text-surface-300 font-medium">진행 중인 재물조사가 없습니다</p>
+                    <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+                        재물 담당자가 조사를 시작하면 담당 공간의 조사 목록이 여기에 나옵니다.
+                    </p>
+                </div>
+            )}
         </div>
     );
 }

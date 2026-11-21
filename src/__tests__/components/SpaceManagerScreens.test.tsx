@@ -11,7 +11,7 @@ vi.mock('../../hooks/useSpaceManager', () => ({ default: () => hookState.value }
 vi.mock('../../hooks/useAuth', () => ({
     useAuth: () => ({ user: { uid: 'u1' }, userData: { organizationId: 'org-A', name: '김직원' } }),
 }));
-vi.mock('../../lib/firestore', () => ({ getMySpaces: vi.fn() }));
+vi.mock('../../lib/firestore', () => ({ getMySpaces: vi.fn(), getOpenSurvey: vi.fn(async () => null) }));
 
 import * as firestore from '../../lib/firestore';
 import SpaceManager from '../../components/admin/SpaceManager';
@@ -86,6 +86,14 @@ describe('EmployeeHome — 내 담당 공간', () => {
         expect(await screen.findByText('1층 상담실')).toBeInTheDocument();
         expect(screen.getByRole('link', { name: '1층 상담실' })).toHaveAttribute('href', '/employee/assets?space=a');
         expect(firestore.getMySpaces).toHaveBeenCalledWith('org-A', 'u1');
+    });
+
+    it('진행 중인 조사가 있으면 스캔으로 가는 카드를 보인다', async () => {
+        vi.mocked(firestore.getMySpaces).mockResolvedValueOnce([]);
+        vi.mocked(firestore.getOpenSurvey).mockResolvedValueOnce({ id: 'sv1', name: '2026년 정기 재물조사', startDate: '2026-11-21', endDate: '2026-12-05' } as never);
+        render(<MemoryRouter><EmployeeHome /></MemoryRouter>);
+        expect(await screen.findByText('2026년 정기 재물조사')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /스캔하러 가기/ })).toHaveAttribute('href', '/employee/scan');
     });
 
     it('담당 공간이 없으면 안내를 보인다', async () => {

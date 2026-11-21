@@ -20,6 +20,7 @@ const SpaceManager = lazyWithRetry(() => import('./SpaceManager'));
 const AssetImport = lazyWithRetry(() => import('./AssetImport'));
 const AssetList = lazyWithRetry(() => import('./AssetList'));
 const AssetDetail = lazyWithRetry(() => import('./AssetDetail'));
+const SurveyManager = lazyWithRetry(() => import('./SurveyManager'));
 const Settings = lazyWithRetry(() => import('./Settings'));
 const AuditLogViewer = lazyWithRetry(() => import('./AuditLogViewer'));
 
@@ -89,6 +90,11 @@ export default function AdminLayout() {
             to: '/admin/spaces',
             label: '공간 관리',
             icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>,
+        },
+        {
+            to: '/admin/surveys',
+            label: '재물조사',
+            icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" /></svg>,
         },
         {
             to: '/admin/assets',
@@ -261,6 +267,7 @@ export default function AdminLayout() {
                             <Routes>
                                 <Route path="dashboard" element={<AdminDashboard />} />
                                 <Route path="spaces" element={<SpaceManager />} />
+                                <Route path="surveys" element={<SurveyManager />} />
                                 <Route path="assets" element={<AssetList />} />
                                 <Route path="assets/:assetId" element={<AssetDetail />} />
                                 <Route path="import" element={<AssetImport />} />

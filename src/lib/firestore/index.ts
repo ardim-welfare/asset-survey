@@ -106,6 +106,7 @@ export {
     getAssetHistory,
     getAssetsBySpaces,
     findAssetByTag,
+    findAssetByCode,
     issueTags,
     getAccountingMap,
     getAssetCounts,
@@ -113,3 +114,19 @@ export {
     commitImport,
 } from './assets';
 export type { CommitImportInput } from './assets';
+
+// 조사 회차·대상·스캔 — 기획서 F10~F12
+export {
+    getSurveys,
+    getOpenSurvey,
+    getSurveyTargets,
+    groupTargets,
+    startSurvey,
+    peekScan,
+    saveScan,
+    updateScanCondition,
+    deleteScan,
+    getScans,
+    subscribeSpaceScans,
+} from './surveys';
+export type { StartSurveyInput, SaveScanInput } from './surveys';

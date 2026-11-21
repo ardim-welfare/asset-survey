@@ -38,6 +38,10 @@ const DELETE_PAGE = 400;
 const ORG_SCOPED: ReadonlyArray<readonly [collection: string, field: string]> = [
     ["notifications", "organizationId"],
     ["feedbacks", "organizationId"],
+    // 조사 쪽 — 스캔 → 대상 → 회차 순(스캔이 회차·재물·공간을 가리킨다)
+    ["scans", "organizationId"],
+    ["surveyTargets", "organizationId"],
+    ["surveys", "organizationId"],
     // 재물 쪽 — 이력·기록 → 금액 → 재물 → 공간 순(기록이 재물을, 재물이 공간을 가리킨다)
     ["history", "organizationId"],
     ["imports", "organizationId"],

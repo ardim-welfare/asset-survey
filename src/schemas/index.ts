@@ -9,6 +9,7 @@ export * from './auditLog';
 export * from './broadcast';
 export * from './space';
 export * from './asset';
+export * from './survey';
 
 /**
  * Zod 스키마를 이용한 Firestore Converter를 생성합니다.

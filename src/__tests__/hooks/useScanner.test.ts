@@ -1,0 +1,123 @@
+/**
+ * useScanner — 현장 스캔 흐름 (기획서 F11·F12)
+ *
+ * 고정하는 계약:
+ *   - 직원은 '나눠서 조사' 회차에서 자기 담당 공간만, 관리자는 모든 대상 공간을 찍는다
+ *   - 대상 목록에 없으면 서버에서 재물을 찾아 범위 밖/미등록을 가린다(시작 뒤 뽑은 라벨은 대상으로 다시 맞춤)
+ *   - 이미 찍은 재물(이 공간 목록 또는 서버)은 저장하지 않는다
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import type { Survey, SurveyTarget } from '../../types/survey';
+
+let role = 'employee';
+vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ user: { uid: 'emp1' }, userData: { organizationId: 'org-A', role } }) }));
+const showToast = vi.fn();
+vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ showToast }) }));
+vi.mock('../../lib/firestore', () => ({
+    getOpenSurvey: vi.fn(), getSurveyTargets: vi.fn(), getSpaces: vi.fn(), findAssetByTag: vi.fn(), findAssetByCode: vi.fn(),
+    peekScan: vi.fn(), saveScan: vi.fn(), updateScanCondition: vi.fn(), deleteScan: vi.fn(),
+    subscribeSpaceScans: vi.fn(() => () => { }),
+}));
+
+import * as fs from '../../lib/firestore';
+import useScanner from '../../hooks/useScanner';
+
+const SURVEY = { id: 'sv1', organizationId: 'org-A', name: '조사', startDate: '2026-11-21', endDate: '2026-12-05', spaceIds: ['sp-1', 'sp-2'], includesUnassigned: false, mode: 'delegated', status: 'open', targetCount: 2, lastEditedByUid: 'a' } as Survey;
+const TARGETS = [
+    { id: 'sv1__sp-1', organizationId: 'org-A', surveyId: 'sv1', spaceId: 'sp-1', lastEditedByUid: 'a', items: [{ id: 'org-A__1', code: '1', name: 'TV', tagId: null }] },
+    { id: 'sv1__sp-2', organizationId: 'org-A', surveyId: 'sv1', spaceId: 'sp-2', lastEditedByUid: 'a', items: [{ id: 'org-A__2', code: '2', name: '책상', tagId: 'AAAAAAAAA2' }] },
+] as SurveyTarget[];
+const space = (id: string, managers: string[]) => ({ id, organizationId: 'org-A', name: id, order: 0, managerUids: managers, archived: false });
+
+async function ready(initial: string | null = 'sp-1') {
+    const h = renderHook(() => useScanner(initial));
+    await waitFor(() => expect(h.result.current.loading).toBe(false));
+    return h;
+}
+async function scan(h: Awaited<ReturnType<typeof ready>>, text: string, method: 'qr' | 'manual' = 'qr') {
+    await act(async () => { h.result.current.handle(text, method); });
+    await waitFor(() => expect(h.result.current.checking).toBe(false));
+}
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    role = 'employee';
+    vi.mocked(fs.getOpenSurvey).mockResolvedValue(SURVEY);
+    vi.mocked(fs.getSurveyTargets).mockResolvedValue(TARGETS);
+    vi.mocked(fs.getSpaces).mockResolvedValue([space('sp-1', ['emp1']), space('sp-2', ['emp2']), space('sp-3', ['emp1'])] as never);
+    vi.mocked(fs.peekScan).mockResolvedValue(null);
+    vi.mocked(fs.findAssetByTag).mockResolvedValue(null);
+    vi.mocked(fs.findAssetByCode).mockResolvedValue(null);
+});
+
+describe('찍을 수 있는 공간', () => {
+    it('직원은 회차 대상이면서 자기가 담당하는 공간만', async () => {
+        const h = await ready();
+        expect(h.result.current.mySpaces.map((s) => s.id)).toEqual(['sp-1']);
+        expect(h.result.current.spaceId).toBe('sp-1');
+    });
+    it('남의 공간을 주소로 열면 내 공간으로 바꾼다', async () => {
+        const h = await ready('sp-2');
+        expect(h.result.current.spaceId).toBe('sp-1');
+    });
+    it('관리자는 모든 대상 공간, 혼자 조사 회차는 직원에게 공간이 없다', async () => {
+        role = 'admin';
+        expect((await ready()).result.current.mySpaces.map((s) => s.id)).toEqual(['sp-1', 'sp-2']);
+        role = 'employee';
+        vi.mocked(fs.getOpenSurvey).mockResolvedValue({ ...SURVEY, mode: 'solo' });
+        expect((await ready()).result.current.mySpaces).toEqual([]);
+    });
+});
+
+describe('찍기', () => {
+    it('대상이면 바로 판정해 저장한다(정상)', async () => {
+        const h = await ready();
+        await scan(h, '1', 'manual');
+        expect(fs.saveScan).toHaveBeenCalledWith(expect.objectContaining({
+            orgId: 'org-A', surveyId: 'sv1', spaceId: 'sp-1', method: 'manual',
+            draft: expect.objectContaining({ scanId: 'sv1__org-A__1', result: 'ok' }),
+        }));
+        expect(fs.findAssetByCode).not.toHaveBeenCalled();
+        expect(h.result.current.last).toMatchObject({ kind: 'saved', method: 'manual' });
+    });
+
+    it('다른 공간 대상의 태그 → 다른 공간', async () => {
+        const h = await ready();
+        await scan(h, 'https://app.example/t/AAAAAAAAA2');
+        expect(vi.mocked(fs.saveScan).mock.calls[0][0].draft).toMatchObject({ result: 'otherSpace', expectedSpaceId: 'sp-2' });
+    });
+
+    it('시작 뒤에 뽑은 라벨은 서버에서 찾아 대상으로 다시 맞춘다', async () => {
+        vi.mocked(fs.findAssetByTag).mockResolvedValue({ id: 'org-A__1', code: '1', name: 'TV', status: 'active' } as never);
+        const h = await ready();
+        await scan(h, 'https://app.example/t/BBBBBBBBB1');
+        expect(vi.mocked(fs.saveScan).mock.calls[0][0].draft).toMatchObject({ assetId: 'org-A__1', result: 'ok' });
+    });
+
+    it('대상이 아닌 기관 재물 → 범위 밖, 없는 코드 → 미등록', async () => {
+        vi.mocked(fs.findAssetByCode).mockResolvedValueOnce({ id: 'org-A__9', code: '9', name: '폐기 TV', status: 'disposed' } as never);
+        const h = await ready();
+        await scan(h, '9', 'manual');
+        await scan(h, 'zzz', 'manual');
+        expect(vi.mocked(fs.saveScan).mock.calls.map((c) => c[0].draft.result)).toEqual(['outOfScope', 'unregistered']);
+    });
+
+    it('서버에 이미 있으면(다른 공간에서 찍힘) 저장하지 않고 중복으로 알린다', async () => {
+        vi.mocked(fs.peekScan).mockResolvedValue({ spaceId: 'sp-2', result: 'otherSpace' } as never);
+        const h = await ready();
+        await scan(h, '1', 'manual');
+        expect(fs.saveScan).not.toHaveBeenCalled();
+        expect(h.result.current.last).toMatchObject({ kind: 'duplicate', judgement: { existing: { spaceId: 'sp-2' } } });
+    });
+
+    it('오프라인이라 서버 확인을 못 하면 그대로 저장한다(나중에 서버가 거절하면 알림)', async () => {
+        vi.mocked(fs.findAssetByCode).mockRejectedValue(new Error('offline'));
+        vi.mocked(fs.peekScan).mockResolvedValue(undefined);
+        const h = await ready();
+        await scan(h, '1', 'manual');
+        expect(vi.mocked(fs.saveScan).mock.calls[0][0].draft.result).toBe('ok');
+        vi.mocked(fs.saveScan).mock.calls[0][0].onRejected?.(new Error('denied'));
+        expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/저장되지 않았습니다/), 'error');
+    });
+});

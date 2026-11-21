@@ -906,6 +906,110 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(db.collection('organizations').doc('org-A').update({ labelSize: 'huge' }));
       await assertFails(db.collection('organizations').doc('org-A').update({ labelCustom: '70x37' }));
     });
+
+    // ── 조사 회차·대상·스캔 (기획서 F10~F12) ──
+    const surveyDoc = (org: 'A' | 'B', extra: Record<string, unknown> = {}) => ({
+      organizationId: `org-${org}`, name: '2026년 정기 재물조사', startDate: '2026-11-21', endDate: '2026-12-05',
+      spaceIds: ['sp-1', 'sp-2'], includesUnassigned: true, mode: 'delegated', status: 'open', targetCount: 2,
+      lastEditedByUid: `admin_${org}`, createdAt: serverTs(), ...extra,
+    });
+    const scanDoc = (uid: string, extra: Record<string, unknown> = {}) => ({
+      organizationId: 'org-A', surveyId: 'sv1', assetId: 'org-A__1', code: '1', name: 'TV', spaceId: 'sp-1',
+      expectedSpaceId: 'sp-1', result: 'ok', method: 'qr', condition: 'normal', memo: '',
+      scannedByUid: uid, scannedAt: serverTs(), lastEditedByUid: uid, updatedAt: serverTs(), ...extra,
+    });
+    /** 공간 2개(sp-1 담당 emp_A1, sp-2 담당 emp_A2)와 열린 회차 sv1 */
+    const seedSurvey = async (extra: Record<string, unknown> = {}) => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        for (const [id, mgr] of [['sp-1', 'emp_A1'], ['sp-2', 'emp_A2']]) {
+          await db.collection('spaces').doc(id).set({
+            organizationId: 'org-A', name: id, order: 0, managerUids: [mgr], archived: false, lastEditedByUid: 'admin_A', createdAt: at, updatedAt: at,
+          });
+        }
+        await db.collection('surveys').doc('sv1').set({ ...surveyDoc('A'), createdAt: at, ...extra });
+      });
+    };
+
+    it('#V1 회차는 그 기관 관리자만 시작하고, 대상 묶음과 함께 만든다. 고치거나 지우지 못한다', async () => {
+      const db = admin('A');
+      const batch = db.batch();
+      batch.set(db.collection('surveys').doc('sv9'), surveyDoc('A'));
+      batch.set(db.collection('surveyTargets').doc('sv9__sp-1'), {
+        organizationId: 'org-A', surveyId: 'sv9', spaceId: 'sp-1', items: [{ id: 'org-A__1', code: '1', name: 'TV', tagId: null }],
+        lastEditedByUid: 'admin_A', createdAt: serverTs(),
+      });
+      await assertSucceeds(batch.commit());
+
+      await assertFails(emp('A', 1).collection('surveys').doc('sv8').set({ ...surveyDoc('A'), lastEditedByUid: 'emp_A1' }));
+      await assertFails(admin('B').collection('surveys').doc('sv7').set(surveyDoc('A', { lastEditedByUid: 'admin_B' })));
+      await assertFails(db.collection('surveys').doc('sv6').set(surveyDoc('A', { endDate: '2026-11-01' })));
+      await assertFails(db.collection('surveys').doc('sv5').set(surveyDoc('A', { status: 'closed' })));
+      // 회차 없는 대상
+      await assertFails(db.collection('surveyTargets').doc('nope__sp-1').set({
+        organizationId: 'org-A', surveyId: 'nope', spaceId: 'sp-1', items: [], lastEditedByUid: 'admin_A', createdAt: serverTs(),
+      }));
+      await assertFails(db.collection('surveys').doc('sv9').update({ name: '바꿈' }));
+      await assertFails(db.collection('surveys').doc('sv9').delete());
+      await assertFails(db.collection('surveyTargets').doc('sv9__sp-1').delete());
+      // 같은 기관은 읽고, 다른 기관은 못 읽는다
+      await assertSucceeds(emp('A', 2).collection('surveyTargets').doc('sv9__sp-1').get());
+      await assertFails(emp('B', 1).collection('surveys').doc('sv9').get());
+    });
+
+    it('#V2 스캔은 내 담당 공간에서만 — 남의 공간·다른 기관·회차 대상 밖 공간은 막힌다', async () => {
+      await seedSurvey();
+      await assertSucceeds(emp('A', 1).collection('scans').doc('sv1__org-A__1').set(scanDoc('emp_A1')));
+      // 다른 공간 재물도 내 공간에서 찍으면 남는다(다른 공간 판정)
+      await assertSucceeds(emp('A', 1).collection('scans').doc('sv1__org-A__2').set(scanDoc('emp_A1', {
+        assetId: 'org-A__2', code: '2', expectedSpaceId: 'sp-2', result: 'otherSpace',
+      })));
+      await assertFails(emp('A', 2).collection('scans').doc('sv1__org-A__3').set(scanDoc('emp_A2', { assetId: 'org-A__3', code: '3' })));
+      await assertFails(emp('B', 1).collection('scans').doc('sv1__org-A__4').set(scanDoc('emp_B1', { assetId: 'org-A__4', code: '4' })));
+      await assertFails(admin('A').collection('scans').doc('sv1__org-A__5').set(scanDoc('admin_A', { assetId: 'org-A__5', code: '5', spaceId: 'sp-9' })));
+      await assertSucceeds(admin('A').collection('scans').doc('sv1__org-A__6').set(scanDoc('admin_A', { assetId: 'org-A__6', code: '6', spaceId: 'sp-2' })));
+      // 남의 이름·모르는 판정·ID가 회차로 시작하지 않음
+      await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__7').set(scanDoc('emp_A2', { assetId: 'org-A__7' })));
+      await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__8').set(scanDoc('emp_A1', { result: 'great' })));
+      await assertFails(emp('A', 1).collection('scans').doc('zz__org-A__9').set(scanDoc('emp_A1')));
+    });
+
+    it('#V3 같은 물건을 다시 찍어도 기록이 바뀌지 않는다 — 물건 상태·메모만 고친다', async () => {
+      await seedSurvey();
+      const ref = (db: ReturnType<typeof admin>) => db.collection('scans').doc('sv1__org-A__1');
+      await assertSucceeds(ref(emp('A', 1)).set(scanDoc('emp_A1')));
+      // 두 번째 저장(다른 사람·다른 판정)은 막힌다 → 수가 늘지 않는다
+      await assertFails(ref(admin('A')).set(scanDoc('admin_A', { spaceId: 'sp-2', result: 'otherSpace' })));
+      await assertFails(ref(emp('A', 1)).set(scanDoc('emp_A1', { method: 'manual' })));
+      // 상태·메모는 그 공간 담당·관리자가 고친다
+      const cond = { condition: 'damaged', memo: '다리 부러짐', updatedAt: serverTs() };
+      await assertSucceeds(ref(emp('A', 1)).update({ ...cond, lastEditedByUid: 'emp_A1' }));
+      await assertSucceeds(ref(admin('A')).update({ ...cond, condition: 'labelDamaged', lastEditedByUid: 'admin_A' }));
+      await assertFails(ref(emp('A', 2)).update({ ...cond, lastEditedByUid: 'emp_A2' }));
+      await assertFails(ref(emp('A', 1)).update({ ...cond, condition: 'lost', lastEditedByUid: 'emp_A1' }));
+      // 지우기는 찍은 사람·관리자만
+      await assertFails(ref(emp('A', 2)).delete());
+      await assertSucceeds(ref(emp('A', 1)).delete());
+    });
+
+    it('#V4 혼자 조사 회차는 관리자만 찍고, 마감된 회차에는 아무도 못 찍는다', async () => {
+      await seedSurvey({ mode: 'solo' });
+      await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__1').set(scanDoc('emp_A1')));
+      await assertSucceeds(admin('A').collection('scans').doc('sv1__org-A__1').set(scanDoc('admin_A')));
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('surveys').doc('sv1').update({ status: 'closed' });
+      });
+      await assertFails(admin('A').collection('scans').doc('sv1__org-A__2').set(scanDoc('admin_A', { assetId: 'org-A__2', code: '2' })));
+      await assertFails(admin('A').collection('scans').doc('sv1__org-A__1').delete());
+    });
+
+    it('#V5 스캔은 같은 기관이 읽는다(중복 확인) — 다른 기관은 못 읽는다', async () => {
+      await seedSurvey();
+      await assertSucceeds(emp('A', 1).collection('scans').doc('sv1__org-A__1').set(scanDoc('emp_A1')));
+      await assertSucceeds(emp('A', 2).collection('scans').doc('sv1__org-A__1').get());
+      await assertSucceeds(emp('A', 2).collection('scans').where('organizationId', '==', 'org-A').where('surveyId', '==', 'sv1').where('expectedSpaceId', '==', 'sp-2').get());
+      await assertFails(emp('B', 1).collection('scans').doc('sv1__org-A__1').get());
+    });
   });
 
   // 직원 화면 더보기 › 기관 나가기 — 문서 삭제는 superAdmin 전용이라 본인은 소속만 비우는 update 분기를 쓴다.

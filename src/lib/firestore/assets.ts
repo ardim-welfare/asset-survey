@@ -134,6 +134,29 @@ export const findAssetByTag = async (orgId: string, tagId: string): Promise<Asse
 };
 
 /**
+ * 자산코드로 재물 찾기 — 내 기관 안에서만. 코드는 엑셀에 적힌 그대로 저장돼 있어 그대로 먼저 찾고,
+ * 없으면 띄어쓰기를 뺀 대문자로 한 번 더 찾는다(직접 입력·옛 QR).
+ */
+export const findAssetByCode = async (orgId: string, code: string): Promise<Asset | null> => {
+    const tries = [...new Set([code.trim(), code.replace(/\s+/g, '').toUpperCase()])].filter(Boolean);
+    try {
+        for (const c of tries) {
+            const snap = await getDocs(query(
+                collection(db, 'assets').withConverter(assetConverter),
+                where('organizationId', '==', orgId),
+                where('code', '==', c),
+                limit(1),
+            ));
+            if (!snap.empty) return snap.docs[0].data() as Asset;
+        }
+        return null;
+    } catch (error) {
+        captureError(error, { context: 'findAssetByCode', orgId });
+        throw error;
+    }
+};
+
+/**
  * 라벨 태그 발급 — 태그가 없는 재물에만 새로 만들어 저장한다(기획서 F09).
  * 이미 있는 태그는 그대로 둔다(붙인 라벨을 다시 뽑아도 같은 QR이 나오게). Rules가 바꾸기를 막는다.
  *
