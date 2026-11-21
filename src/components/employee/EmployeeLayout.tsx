@@ -15,6 +15,8 @@ import ErrorBoundary from '../common/ErrorBoundary';
 const MorePage = lazyWithRetry(() => import('./MorePage'));
 const EmployeeHome = lazyWithRetry(() => import('./EmployeeHome'));
 const ScanPlaceholder = lazyWithRetry(() => import('./ScanPlaceholder'));
+const MyAssets = lazyWithRetry(() => import('./MyAssets'));
+const EmployeeAssetDetail = lazyWithRetry(() => import('./EmployeeAssetDetail'));
 
 interface NavItem {
     to: string;
@@ -140,6 +142,8 @@ export default function EmployeeLayout() {
                     <Routes>
                         <Route path="home" element={<EmployeeHome />} />
                         <Route path="scan" element={<ScanPlaceholder />} />
+                        <Route path="assets" element={<MyAssets />} />
+                        <Route path="assets/:assetId" element={<EmployeeAssetDetail />} />
                         <Route path="more" element={<MorePage />} />
                         <Route path="" element={<Navigate to="home" replace />} />
                     </Routes>

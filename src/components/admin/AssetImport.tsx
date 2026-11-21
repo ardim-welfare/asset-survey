@@ -9,17 +9,11 @@ import { useNavigate } from 'react-router-dom';
 import useAssetImport from '../../hooks/useAssetImport';
 import { IMPORT_FIELDS, type ImportField } from '../../lib/import/columns';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
-import type { CompareField, ChangedAsset } from '../../lib/import/diff';
+import { COMPARE_FIELD_LABEL as COMPARE_LABEL, type CompareField, type ChangedAsset } from '../../lib/import/diff';
 import type { Space } from '../../types/space';
 
 const won = (n: number | null | undefined) => (n == null ? '-' : `${n.toLocaleString('ko-KR')}원`);
 
-const COMPARE_LABEL: Record<CompareField, string> = {
-    name: '품명', category: '분류', spec: '규격', acquiredAt: '취득일자', acquiredQuantity: '취득수량',
-    quantity: '현재수량', status: '상태', statusRaw: '상태(원문)', locationRaw: '위치(원문)', spaceId: '공간',
-    department: '부서', usage: '용도', amount: '자산금액', depreciation: '감가상각충당금', residual: '잔존가액',
-    missingFromSource: '대장에 없음',
-};
 
 function showValue(field: CompareField, value: unknown, spaces: Space[]): string {
     if (value == null || value === '') return '(빈 칸)';

@@ -98,9 +98,15 @@ export {
     validateSpaceName,
 } from './spaces';
 
-// 재물 (Assets) — 기획서 F04~F08
+// 재물 (Assets) — 기획서 F04~F09
 export {
     getAssets,
+    getAsset,
+    getAssetAccounting,
+    getAssetHistory,
+    getAssetsBySpaces,
+    findAssetByTag,
+    issueTags,
     getAccountingMap,
     getAssetCounts,
     getRecentImports,

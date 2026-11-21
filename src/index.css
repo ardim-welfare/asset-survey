@@ -488,3 +488,31 @@ html.font-large .text-sm {
     animation-iteration-count: infinite !important;
   }
 }
+
+/* ── QR 라벨 인쇄 (기획서 F09, LabelPrintDialog) ──
+   인쇄 영역은 body 바로 아래 포털로 그린다. 화면에서는 숨기고, 인쇄하는 동안(body.label-printing)만
+   인쇄 영역만 보이게 한다. A4·여백 0(@page)은 대화상자가 열린 동안만 따로 넣는다. */
+.label-print-root {
+  display: none;
+}
+
+@media print {
+  body.label-printing > *:not(.label-print-root) {
+    display: none !important;
+  }
+  body.label-printing {
+    background: #fff !important;
+    margin: 0 !important;
+  }
+  body.label-printing .label-print-root {
+    display: block !important;
+  }
+  .label-print-root .label-page {
+    break-after: page;
+    page-break-after: always;
+  }
+  .label-print-root .label-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}

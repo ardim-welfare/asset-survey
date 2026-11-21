@@ -1,0 +1,179 @@
+/**
+ * AssetDetailView — 재물 한 건 (기획서 F08)
+ *
+ * 관리자(`/admin/assets/:assetId`)와 직원(`/employee/assets/:assetId`)이 함께 쓴다.
+ * 라벨 QR을 휴대폰 기본 카메라로 찍으면 `/t/태그ID` → 이 화면으로 온다.
+ * 금액·변경 이력·라벨 인쇄는 관리자에게만 보인다(사용자 결정 2026-11-21: 금액은 관리자만).
+ */
+import { useState, type ReactNode } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import useAssetDetail from '../../hooks/useAssetDetail';
+import { StatusBadge, MissingBadge } from './AssetBadges';
+import { COMPARE_FIELD_LABEL, type CompareField } from '../../lib/import/diff';
+import { ASSET_STATUS_LABEL } from '../../lib/import/values';
+import { toDateOrNull } from '../../lib/dateUtils';
+import type { Asset, HistoryEntry } from '../../types/asset';
+import type { Space } from '../../types/space';
+
+const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const won = (n: number | null | undefined) => (n == null ? '-' : `${n.toLocaleString('ko-KR')}원`);
+
+function when(ts: HistoryEntry['at']): string {
+    const d = toDateOrNull(ts ?? null);
+    if (!d) return '-';
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function showValue(field: string, value: unknown, spaces: Space[]): string {
+    if (value == null || value === '') return '(빈 칸)';
+    if (field === 'spaceId') return spaces.find((s) => s.id === value)?.name ?? '(지운 공간)';
+    if (field === 'status') return ASSET_STATUS_LABEL[value as keyof typeof ASSET_STATUS_LABEL] ?? String(value);
+    if (field === 'missingFromSource') return value ? '예' : '아니오';
+    if (field === 'amount' || field === 'depreciation' || field === 'residual') return won(value as number);
+    return String(value);
+}
+
+const HISTORY_TYPE_LABEL: Record<HistoryEntry['type'], string> = {
+    'import-change': '다시 가져오기로 바뀜',
+    'import-missing': '대장에서 빠짐',
+};
+
+/** 라벨 인쇄 대화상자 — 관리자 화면이 넘겨준다(공용 화면이 관리자 컴포넌트를 직접 부르지 않게) */
+export type RenderLabelPrint = (p: {
+    assets: Asset[];
+    orgId: string | null;
+    onClose: () => void;
+    onTags: (tags: Map<string, string>) => void;
+    onReloadNeeded: () => void;
+}) => ReactNode;
+
+interface Props {
+    /** 관리자 화면 — 금액·변경 이력을 읽는다 */
+    admin: boolean;
+    /** 있으면 라벨 인쇄 버튼을 보인다 */
+    renderLabelPrint?: RenderLabelPrint;
+}
+
+export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
+    const { assetId } = useParams<{ assetId: string }>();
+    const d = useAssetDetail(assetId, { admin });
+    const [printing, setPrinting] = useState(false);
+    const listPath = admin ? '/admin/assets' : '/employee/assets';
+
+    if (d.loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
+    if (d.error || d.notFound || !d.asset) {
+        return (
+            <div className="max-w-lg mx-auto glass-card p-6 text-center">
+                <p className="text-surface-700 dark:text-surface-300 mb-4">
+                    {d.notFound ? '이 기관에 없는 재물입니다.' : '재물 정보를 불러오지 못했습니다.'}
+                </p>
+                <div className="flex justify-center gap-2">
+                    {!d.notFound && <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={() => void d.reload()}>다시 불러오기</button>}
+                    <Link to={listPath} className="btn-primary min-h-[48px] px-5">목록으로</Link>
+                </div>
+            </div>
+        );
+    }
+
+    const a = d.asset;
+    const rows: Array<[string, string | null]> = [
+        ['분류', a.category],
+        ['규격', a.spec],
+        ['취득일자', a.acquiredAt],
+        ['수량', a.quantity == null ? null : `${a.quantity}${a.acquiredQuantity != null && a.acquiredQuantity !== a.quantity ? ` (취득 ${a.acquiredQuantity})` : ''}`],
+        ['공간', d.space ? `${d.space.name}${d.space.archived ? ' (숨김)' : ''}` : a.spaceId ? '(지운 공간)' : '미지정'],
+        ['대장의 위치', a.locationRaw],
+        ['대장의 상태', a.statusRaw],
+        ['부서', a.department],
+        ['용도', a.usage],
+    ];
+
+    return (
+        <div className="max-w-2xl mx-auto animate-fade-in space-y-4">
+            <Link to={listPath} className="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 min-h-[44px]">
+                <span aria-hidden="true">←</span> 재물 목록
+            </Link>
+
+            <section className="glass-card p-5">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <StatusBadge status={a.status} />
+                    {a.missingFromSource && <MissingBadge />}
+                </div>
+                <h1 className="text-xl font-bold text-surface-900 dark:text-surface-100 break-keep">{a.name ?? '(품명 없음)'}</h1>
+                <p className="font-mono text-surface-700 dark:text-surface-300">{a.code}</p>
+                {a.missingFromSource && (
+                    <p className="mt-3 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
+                        마지막으로 가져온 대장 파일에 이 재물이 없었습니다. 실제로 없어진 것인지 확인해 주세요.
+                    </p>
+                )}
+                <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                    {rows.map(([label, value]) => (
+                        <div key={label} className="contents">
+                            <dt className="text-surface-500 dark:text-surface-400">{label}</dt>
+                            <dd className="text-surface-900 dark:text-surface-100 break-words">{value ?? '-'}</dd>
+                        </div>
+                    ))}
+                </dl>
+            </section>
+
+            {admin && (
+                <section className="glass-card p-5" aria-labelledby="asset-money">
+                    <h2 id="asset-money" className="font-semibold text-surface-900 dark:text-surface-100 mb-1">금액</h2>
+                    <p className={`${sub} mb-3`}>희망이음 대장의 값을 그대로 보여 줍니다. 관리자만 볼 수 있습니다.</p>
+                    <dl className="grid grid-cols-3 gap-3 text-sm">
+                        {([['자산금액', d.accounting?.amount], ['감가상각충당금', d.accounting?.depreciation], ['잔존가액', d.accounting?.residual]] as const).map(([label, v]) => (
+                            <div key={label} className="rounded-xl bg-surface-50 dark:bg-surface-800 p-3">
+                                <dt className={sub}>{label}</dt>
+                                <dd className="font-semibold text-surface-900 dark:text-surface-100">{won(v)}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                </section>
+            )}
+
+            <section className="glass-card p-5" aria-labelledby="asset-label">
+                <h2 id="asset-label" className="font-semibold text-surface-900 dark:text-surface-100 mb-1">QR 라벨</h2>
+                <p className="text-sm text-surface-700 dark:text-surface-300">
+                    {a.tagId ? <>발급됨 · 라벨 번호 <span className="font-mono">{a.tagId}</span></> : '아직 라벨을 뽑지 않았습니다.'}
+                </p>
+                {renderLabelPrint && (
+                    <button type="button" className="btn-secondary min-h-[48px] px-4 mt-3" onClick={() => setPrinting(true)}>
+                        {a.tagId ? '라벨 다시 인쇄' : '라벨 인쇄'}
+                    </button>
+                )}
+                {renderLabelPrint && a.tagId && <p className={`${sub} mt-2`}>다시 인쇄해도 같은 QR이 나옵니다(훼손된 라벨 바꿔 붙이기).</p>}
+            </section>
+
+            {admin && (
+                <section className="glass-card p-5" aria-labelledby="asset-history">
+                    <h2 id="asset-history" className="font-semibold text-surface-900 dark:text-surface-100 mb-3">변경 이력</h2>
+                    {d.history.length === 0 ? (
+                        <p className="text-sm text-surface-500 dark:text-surface-400">처음 가져온 뒤 바뀐 내용이 없습니다.</p>
+                    ) : (
+                        <ol className="space-y-3">
+                            {d.history.map((h) => (
+                                <li key={h.id} className="text-sm">
+                                    <p className="text-surface-900 dark:text-surface-100 font-medium">
+                                        {HISTORY_TYPE_LABEL[h.type]} <span className={`${sub} font-normal`}>{when(h.at)}</span>
+                                    </p>
+                                    <ul className="mt-1 space-y-0.5 text-surface-700 dark:text-surface-300">
+                                        {Object.entries(h.changes).map(([f, ch]) => (
+                                            <li key={f}>
+                                                {COMPARE_FIELD_LABEL[f as CompareField] ?? f}: {showValue(f, ch.before, d.spaces)} → {showValue(f, ch.after, d.spaces)}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </li>
+                            ))}
+                        </ol>
+                    )}
+                </section>
+            )}
+
+            {printing && renderLabelPrint?.({
+                assets: [a], orgId: d.orgId, onClose: () => setPrinting(false), onTags: d.applyTags, onReloadNeeded: () => void d.reload(),
+            })}
+        </div>
+    );
+}

@@ -1,10 +1,11 @@
 /**
  * EmployeeHome — 직원(공간 담당자) 첫 화면
  *
- * 1단계: 내가 담당하는 공간을 보여 준다(기획서 F03). 조사 대상·진행 상황은
+ * 1단계: 내가 담당하는 공간을 보여 준다(기획서 F03). 3단계: 공간을 누르면 그 공간의 재물 목록(F08). 조사 대상·진행 상황은
  * F10~F13(조사 회차·스캔·제출)에서 이 화면에 더한다.
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getMySpaces } from '../../lib/firestore';
 import type { Space } from '../../types/space';
@@ -46,13 +47,21 @@ export default function EmployeeHome() {
                         아직 담당 공간이 없습니다. 조사를 맡게 되면 재물 담당자가 공간을 지정해 줍니다.
                     </p>
                 ) : (
-                    <ul className="flex flex-wrap gap-2">
-                        {spaces.map((s) => (
-                            <li key={s.id} className="px-3 py-2 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium">
-                                {s.name}
-                            </li>
-                        ))}
-                    </ul>
+                    <>
+                        <ul className="flex flex-wrap gap-2">
+                            {spaces.map((s) => (
+                                <li key={s.id}>
+                                    <Link to={`/employee/assets?space=${encodeURIComponent(s.id)}`}
+                                        className="inline-flex items-center px-3 min-h-[44px] rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium">
+                                        {s.name}
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                        <Link to="/employee/assets" className="inline-block mt-3 text-sm font-medium text-primary-600 dark:text-primary-400 min-h-[44px] leading-[44px]">
+                            내 공간 재물 보기 →
+                        </Link>
+                    </>
                 )}
             </section>
 

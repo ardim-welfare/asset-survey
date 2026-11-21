@@ -14,11 +14,14 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth, authReady } from './lib/firebaseAuth';
 import { readReturningHint, writeReturningHint, noteUnauthenticatedBoot } from './lib/sessionBoot';
 import { captureInviteCodeFromUrl } from './lib/inviteCodeCapture';
+import { capturePendingTag } from './lib/pendingTag';
 import './index.css';
 
 // 초대 링크의 ?code=를 **어느 화면으로 시작하든** 먼저 보관한다. 비로그인 경량 화면에서
 // 로그인으로 넘어가며 코드가 떨어지던 문제 — inviteCodeCapture.ts 머리 주석 참고.
 captureInviteCodeFromUrl();
+// 로그인 전에 라벨 QR(/t/태그ID)을 연 사람을 로그인 뒤 그 재물로 데려가기 위해 보관 (pendingTag.ts)
+capturePendingTag();
 
 // 로딩 표시 (Auth 상태 확인 중)
 const root = document.getElementById('root')!;

@@ -17,7 +17,7 @@ const MAP = { '101호': 'sp1' };
 
 function existingFrom(r: ParsedAsset, over: Partial<Asset> = {}): Asset {
     const d = toDraft(ORG, r, MAP);
-    return { id: d.id, organizationId: ORG, ...d.fields, missingFromSource: false, lastImportId: 'old', ...over };
+    return { id: d.id, organizationId: ORG, ...d.fields, missingFromSource: false, lastImportId: 'old', tagId: null, ...over } as Asset;
 }
 function accFrom(r: ParsedAsset): [string, AssetAccounting] {
     const id = assetDocId(ORG, r.code);

@@ -5,6 +5,7 @@ import { SA_TEST_ROLE_KEY, LoadingScreen } from '../../App';
 import { clearUserOrganization } from '../../lib/firestore';
 import { logout } from '../../lib/auth';
 import { adminHomePath } from '../../lib/lastArea';
+import { peekPendingTag } from '../../lib/pendingTag';
 
 /** 비활성화/기관 삭제 등 차단 상태 공통 화면 */
 export function BlockedScreen({ emoji, title, description, uid, allowTransfer = false }: {
@@ -88,6 +89,9 @@ export function AuthGuard({
     }
 
     if (effectiveRole === 'superAdmin') return <Navigate to="/super-admin" replace />;
+    // 로그인 전에 라벨 QR을 열었으면 그 재물로 간다 (pendingTag.ts) — 기관이 있는 관리자·직원만
+    const pendingTag = (effectiveRole === 'admin' || effectiveRole === 'employee') && userData?.organizationId ? peekPendingTag() : null;
+    if (pendingTag) return <Navigate to={`/t/${pendingTag}`} replace />;
     // 기관 관리자는 마지막에 쓴 화면(관리자/직원)으로 연다 — 슈퍼관리자 테스트 모드는 제외
     if (effectiveRole === 'admin') {
       return <Navigate to={isSuperAdmin ? '/admin' : adminHomePath(user.uid)} replace />;

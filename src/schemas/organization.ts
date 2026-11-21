@@ -10,6 +10,14 @@ export const orgStatusSchema = z.enum(['pending', 'approved', 'rejected', 'delet
 export const surveyModeSchema = z.enum(['delegated', 'solo']);
 export const DEFAULT_SURVEY_MODE = 'delegated' as const;
 
+/** 라벨 규격 (기획서 F09) — 검증된 3종 + 직접 치수 */
+export const labelSizeSchema = z.enum(['small', 'medium', 'large', 'custom']);
+/** 직접 치수(mm) — A4 한 장 안의 칸 배치 */
+export const labelCustomSchema = z.object({
+    w: z.number(), h: z.number(), cols: z.number(), rows: z.number(),
+    top: z.number(), left: z.number(), hpitch: z.number(), vpitch: z.number(),
+});
+
 export const withdrawReasonSchema = z.enum(['no_longer_needed', 'too_difficult', 'missing_features', 'other']);
 
 export const organizationSchema = z.object({
@@ -31,6 +39,9 @@ export const organizationSchema = z.object({
     importColumnMap: z.record(z.string(), z.string()).optional().catch(undefined),
     /** 대장 위치 원문 → 공간 ID. 다시 가져오기 때 같은 위치를 같은 공간으로 맞춘다(기획서 F06) */
     locationSpaceMap: z.record(z.string(), z.string()).optional().catch(undefined),
+    /** 라벨 인쇄 기본 규격 — 마지막에 인쇄한 규격을 기관 기본으로 기억한다 */
+    labelSize: labelSizeSchema.optional().catch(undefined),
+    labelCustom: labelCustomSchema.optional().catch(undefined),
     status: orgStatusSchema.catch('pending'),
     inviteCode: z.string().optional().catch(undefined),
     uniqueNumber: z.string().optional().catch(undefined),

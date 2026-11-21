@@ -1,0 +1,80 @@
+/**
+ * useAssetList — 관리자 재물 목록 거르기·고르기 (기획서 F08·F09)
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import type { Asset } from '../../types/asset';
+
+vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ userData: { organizationId: 'org-A' } }) }));
+vi.mock('../../lib/firestore', () => ({ getAssets: vi.fn(), getSpaces: vi.fn() }));
+
+import * as firestore from '../../lib/firestore';
+import useAssetList, { filterAssets, sortAssets, DEFAULT_FILTERS, LIST_PAGE } from '../../hooks/useAssetList';
+
+const asset = (code: string, over: Partial<Asset> = {}): Asset => ({
+    id: `org-A__${code}`, organizationId: 'org-A', code, name: 'TV', category: null, spec: null, acquiredAt: null,
+    acquiredQuantity: null, quantity: 1, status: 'active', statusRaw: null, locationRaw: '101호', spaceId: 'sp1',
+    department: null, usage: null, missingFromSource: false, lastImportId: null, tagId: null, ...over,
+});
+
+describe('sortAssets·filterAssets', () => {
+    it('자산코드는 숫자 크기 순', () => {
+        expect(sortAssets([asset('1-10'), asset('1-2'), asset('1-1')]).map((a) => a.code)).toEqual(['1-1', '1-2', '1-10']);
+    });
+
+    const list = [
+        asset('1', { name: '냉 장 고' }),
+        asset('2', { status: 'disposed' }),
+        asset('3', { spaceId: null, locationRaw: '창고' }),
+        asset('4', { missingFromSource: true, tagId: 'ABCDEFGH23' }),
+    ];
+    const codes = (f: Partial<typeof DEFAULT_FILTERS>) => filterAssets(list, { ...DEFAULT_FILTERS, ...f }).map((a) => a.code);
+
+    it('기본은 운영만', () => {
+        expect(codes({})).toEqual(['1', '3', '4']);
+        expect(codes({ status: 'all' })).toEqual(['1', '2', '3', '4']);
+    });
+    it('검색은 띄어쓰기 무시, 위치 원문도 찾는다', () => {
+        expect(codes({ search: '냉장' })).toEqual(['1']);
+        expect(codes({ search: '창고' })).toEqual(['3']);
+    });
+    it('공간 미지정·특정 공간', () => {
+        expect(codes({ space: 'none' })).toEqual(['3']);
+        expect(codes({ space: 'sp1' })).toEqual(['1', '4']);
+    });
+    it('대장에 없음만·라벨 발급 여부', () => {
+        expect(codes({ onlyMissing: true })).toEqual(['4']);
+        expect(codes({ label: 'untagged' })).toEqual(['1', '3']);
+        expect(codes({ label: 'tagged' })).toEqual(['4']);
+    });
+});
+
+describe('useAssetList', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(firestore.getAssets).mockResolvedValue(Array.from({ length: 150 }, (_, i) => asset(String(i + 1))));
+        vi.mocked(firestore.getSpaces).mockResolvedValue([]);
+    });
+
+    it('100건씩 그리고, 걸러진 결과 전부를 고를 수 있다', async () => {
+        const { result } = renderHook(() => useAssetList());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.visible).toHaveLength(LIST_PAGE);
+        expect(result.current.hasMore).toBe(true);
+
+        act(() => result.current.selectFiltered());
+        expect(result.current.selected.size).toBe(150);
+        expect(result.current.selectedAssets[0].code).toBe('1');
+
+        act(() => result.current.setMany(['org-A__1', 'org-A__2'], false));
+        expect(result.current.selected.size).toBe(148);
+    });
+
+    it('발급한 태그를 다시 읽지 않고 목록에 반영한다', async () => {
+        const { result } = renderHook(() => useAssetList());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        act(() => result.current.applyTags(new Map([['org-A__1', 'ABCDEFGH23']])));
+        expect(result.current.assets[0].tagId).toBe('ABCDEFGH23');
+        expect(firestore.getAssets).toHaveBeenCalledTimes(1);
+    });
+});

@@ -5,17 +5,18 @@
  * 재물은 지우지 않는다 — 대장에서 빠지면 `missingFromSource`로 표시만 한다.
  */
 import {
-    collection, doc, query, where, getDocs, getCountFromServer, writeBatch,
+    collection, doc, query, where, getDoc, getDocs, getCountFromServer, writeBatch,
     serverTimestamp, orderBy, limit,
     type DocumentReference,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
-    createZodConverter, assetSchema, assetAccountingSchema, importRecordSchema,
+    createZodConverter, assetSchema, assetAccountingSchema, importRecordSchema, historySchema,
 } from '../../schemas';
 import { captureError } from '../sentry';
 import { actorStamp } from './actorStamp';
-import type { Asset, AssetAccounting, ImportRecord, AssetStatus } from '../../types/asset';
+import type { Asset, AssetAccounting, ImportRecord, AssetStatus, HistoryEntry } from '../../types/asset';
+import { newTagId } from '../labels/tag';
 import type { ImportDiff, LocationSpaceMap } from '../import/diff';
 import type { ColumnMap } from '../import/columns';
 import type { ParseResult } from '../import/parseSheet';
@@ -23,6 +24,7 @@ import type { ParseResult } from '../import/parseSheet';
 const assetConverter = createZodConverter(assetSchema);
 const accountingConverter = createZodConverter(assetAccountingSchema);
 const importConverter = createZodConverter(importRecordSchema);
+const historyConverter = createZodConverter(historySchema);
 
 /** 한 배치에 넣는 쓰기 수 — Firestore 상한(500)보다 여유를 둔다 */
 const BATCH_SIZE = 400;
@@ -51,6 +53,120 @@ export const getAccountingMap = async (orgId: string): Promise<Map<string, Asset
         return new Map(snap.docs.map((d) => [d.id, d.data() as AssetAccounting]));
     } catch (error) {
         captureError(error, { context: 'getAccountingMap', orgId });
+        throw error;
+    }
+};
+
+/** 재물 한 건 — 없으면 null. 같은 기관 구성원만 읽힌다(Rules) */
+export const getAsset = async (assetId: string): Promise<Asset | null> => {
+    try {
+        const snap = await getDoc(doc(db, 'assets', assetId).withConverter(assetConverter));
+        return snap.exists() ? (snap.data() as Asset) : null;
+    } catch (error) {
+        captureError(error, { context: 'getAsset', assetId });
+        throw error;
+    }
+};
+
+/** 재물 한 건의 금액 — 관리자만 읽힌다. 금액 문서가 없으면 null */
+export const getAssetAccounting = async (assetId: string): Promise<AssetAccounting | null> => {
+    try {
+        const snap = await getDoc(doc(db, 'assetAccounting', assetId).withConverter(accountingConverter));
+        return snap.exists() ? (snap.data() as AssetAccounting) : null;
+    } catch (error) {
+        captureError(error, { context: 'getAssetAccounting', assetId });
+        throw error;
+    }
+};
+
+/** 재물 한 건의 변경 이력(최근 순) — 관리자만 읽힌다 */
+export const getAssetHistory = async (orgId: string, assetId: string, max = 20): Promise<HistoryEntry[]> => {
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'history').withConverter(historyConverter),
+            where('organizationId', '==', orgId),
+            where('assetId', '==', assetId),
+            orderBy('at', 'desc'),
+            limit(max),
+        ));
+        return snap.docs.map((d) => d.data() as HistoryEntry);
+    } catch (error) {
+        captureError(error, { context: 'getAssetHistory', orgId, assetId });
+        throw error;
+    }
+};
+
+/** `in` 조건 한 번에 넣을 수 있는 값 수(Firestore 상한 30) */
+const IN_LIMIT = 30;
+
+/** 여러 공간의 재물 — 직원의 '내 공간 재물' 목록 */
+export const getAssetsBySpaces = async (orgId: string, spaceIds: string[]): Promise<Asset[]> => {
+    if (spaceIds.length === 0) return [];
+    try {
+        const chunks: string[][] = [];
+        for (let i = 0; i < spaceIds.length; i += IN_LIMIT) chunks.push(spaceIds.slice(i, i + IN_LIMIT));
+        const snaps = await Promise.all(chunks.map((ids) => getDocs(query(
+            collection(db, 'assets').withConverter(assetConverter),
+            where('organizationId', '==', orgId),
+            where('spaceId', 'in', ids),
+        ))));
+        return snaps.flatMap((snap) => snap.docs.map((d) => d.data() as Asset));
+    } catch (error) {
+        captureError(error, { context: 'getAssetsBySpaces', orgId, spaces: spaceIds.length });
+        throw error;
+    }
+};
+
+/** 라벨 태그로 재물 찾기 — 내 기관 안에서만 찾는다(다른 기관 라벨이면 null) */
+export const findAssetByTag = async (orgId: string, tagId: string): Promise<Asset | null> => {
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'assets').withConverter(assetConverter),
+            where('organizationId', '==', orgId),
+            where('tagId', '==', tagId),
+            limit(1),
+        ));
+        return snap.empty ? null : (snap.docs[0].data() as Asset);
+    } catch (error) {
+        captureError(error, { context: 'findAssetByTag', orgId });
+        throw error;
+    }
+};
+
+/**
+ * 라벨 태그 발급 — 태그가 없는 재물에만 새로 만들어 저장한다(기획서 F09).
+ * 이미 있는 태그는 그대로 둔다(붙인 라벨을 다시 뽑아도 같은 QR이 나오게). Rules가 바꾸기를 막는다.
+ *
+ * @returns 재물 문서 ID → 태그 ID (이미 있던 것 포함, 넘긴 재물 전부)
+ */
+export const issueTags = async (
+    assets: Array<Pick<Asset, 'id' | 'tagId'>>,
+    onProgress?: (done: number, total: number) => void,
+): Promise<Map<string, string>> => {
+    const result = new Map<string, string>();
+    const missing: Array<{ id: string; tagId: string }> = [];
+    for (const a of assets) {
+        if (a.tagId) result.set(a.id, a.tagId);
+        else missing.push({ id: a.id, tagId: newTagId() });
+    }
+    if (missing.length === 0) return result;
+
+    const stamp = actorStamp();
+    const now = serverTimestamp();
+    let done = 0;
+    try {
+        for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+            const chunk = missing.slice(i, i + BATCH_SIZE);
+            const batch = writeBatch(db);
+            for (const m of chunk) batch.update(doc(db, 'assets', m.id), { tagId: m.tagId, updatedAt: now, ...stamp });
+            await batch.commit();
+            for (const m of chunk) result.set(m.id, m.tagId);
+            done += chunk.length;
+            onProgress?.(done, missing.length);
+        }
+        return result;
+    } catch (error) {
+        captureError(error, { context: 'issueTags', done, total: missing.length });
         throw error;
     }
 };

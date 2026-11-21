@@ -49,7 +49,9 @@ vi.mock('../../../lib/firebase', () => ({ db: {}, auth: { currentUser: { uid: 'a
 vi.mock('../../../lib/sentry', () => ({ captureError: vi.fn() }));
 
 import * as fs from 'firebase/firestore';
-import { commitImport, getAssets, getAssetCounts } from '../../../lib/firestore/assets';
+import {
+    commitImport, getAssets, getAssetCounts, issueTags, findAssetByTag, getAssetsBySpaces, getAssetHistory,
+} from '../../../lib/firestore/assets';
 import { diffAssets } from '../../../lib/import/diff';
 import type { ParsedAsset, ParseResult } from '../../../lib/import/parseSheet';
 import type { Asset } from '../../../types/asset';
@@ -76,10 +78,10 @@ describe('commitImport', () => {
         const existing: Asset[] = [
             { id: 'org-A__keep', organizationId: 'org-A', code: 'keep', name: '옛 이름', category: null, spec: null, acquiredAt: null,
                 acquiredQuantity: null, quantity: 1, status: 'active', statusRaw: null, locationRaw: '101호', spaceId: 'sp1',
-                department: null, usage: null, missingFromSource: false, lastImportId: 'old' },
+                department: null, usage: null, missingFromSource: false, lastImportId: 'old', tagId: null },
             { id: 'org-A__gone', organizationId: 'org-A', code: 'gone', name: 'x', category: null, spec: null, acquiredAt: null,
                 acquiredQuantity: null, quantity: 1, status: 'active', statusRaw: null, locationRaw: '101호', spaceId: 'sp1',
-                department: null, usage: null, missingFromSource: false, lastImportId: 'old' },
+                department: null, usage: null, missingFromSource: false, lastImportId: 'old', tagId: null },
         ];
         const rows = [row('new', { amount: null }), row('keep', { name: '새 이름' })];
         const diff = diffAssets('org-A', rows, { '101호': 'sp1' }, existing,
@@ -150,5 +152,64 @@ describe('조회', () => {
             .mockResolvedValueOnce({ data: () => ({ count: 3 }) } as never);
         expect(await getAssetCounts('org-A')).toEqual({ active: 10, inactive: 2, disposed: 3 });
         expect(fs.where).toHaveBeenCalledWith('status', '==', 'inactive');
+    });
+});
+
+describe('라벨 태그 (기획서 F09)', () => {
+    it('issueTags는 태그 없는 재물에만 발급하고 있던 태그는 그대로 돌려준다', async () => {
+        const onProgress = vi.fn();
+        const tags = await issueTags([{ id: 'org-A__a', tagId: 'ABCDEFGH23' }, { id: 'org-A__b', tagId: null }], onProgress);
+
+        expect(tags.get('org-A__a')).toBe('ABCDEFGH23');
+        expect(tags.get('org-A__b')).toMatch(/^[0-9A-HJKMNP-TV-Z]{10}$/);
+        expect(batches).toHaveLength(1);
+        expect(batches[0].ops).toEqual([{
+            kind: 'update', label: 'doc:assets/org-A__b',
+            data: { tagId: tags.get('org-A__b'), updatedAt: '__ts__', lastEditedByUid: 'admin-1' },
+        }]);
+        expect(onProgress).toHaveBeenLastCalledWith(1, 1);
+    });
+
+    it('모두 태그가 있으면 아무것도 쓰지 않는다', async () => {
+        await issueTags([{ id: 'x', tagId: 'ABCDEFGH23' }]);
+        expect(batches).toHaveLength(0);
+    });
+
+    it('400건이 넘으면 나눠 쓴다', async () => {
+        const list = Array.from({ length: 450 }, (_, i) => ({ id: `org-A__${i}`, tagId: null }));
+        const tags = await issueTags(list);
+        expect(batches.map((b) => b.ops.length)).toEqual([400, 50]);
+        expect(new Set(tags.values()).size).toBe(450);
+    });
+
+    it('findAssetByTag는 내 기관 안에서만 찾는다', async () => {
+        vi.mocked(fs.getDocs).mockResolvedValue({ empty: true, docs: [] } as never);
+        expect(await findAssetByTag('org-A', 'ABCDEFGH23')).toBeNull();
+        expect(fs.where).toHaveBeenCalledWith('organizationId', '==', 'org-A');
+        expect(fs.where).toHaveBeenCalledWith('tagId', '==', 'ABCDEFGH23');
+    });
+});
+
+describe('직원 목록·재물 이력', () => {
+    it('getAssetsBySpaces는 공간 30개씩 나눠 묻고 기관으로 거른다', async () => {
+        vi.mocked(fs.getDocs).mockResolvedValue({ docs: [] } as never);
+        const ids = Array.from({ length: 35 }, (_, i) => `sp${i}`);
+        await getAssetsBySpaces('org-A', ids);
+        expect(fs.getDocs).toHaveBeenCalledTimes(2);
+        expect(fs.where).toHaveBeenCalledWith('spaceId', 'in', ids.slice(0, 30));
+        expect(fs.where).toHaveBeenCalledWith('spaceId', 'in', ids.slice(30));
+        expect(vi.mocked(fs.where).mock.calls.filter((c) => c[0] === 'organizationId')).toHaveLength(2);
+    });
+
+    it('담당 공간이 없으면 묻지 않는다', async () => {
+        expect(await getAssetsBySpaces('org-A', [])).toEqual([]);
+        expect(fs.getDocs).not.toHaveBeenCalled();
+    });
+
+    it('getAssetHistory는 기관·재물로 거른다', async () => {
+        vi.mocked(fs.getDocs).mockResolvedValue({ docs: [] } as never);
+        await getAssetHistory('org-A', 'org-A__1');
+        expect(fs.where).toHaveBeenCalledWith('organizationId', '==', 'org-A');
+        expect(fs.where).toHaveBeenCalledWith('assetId', '==', 'org-A__1');
     });
 });

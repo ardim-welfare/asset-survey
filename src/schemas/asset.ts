@@ -35,6 +35,11 @@ export const assetSchema = z.object({
     usage: z.string().nullable().catch(null),
     missingFromSource: z.boolean().catch(false),
     lastImportId: z.string().nullable().catch(null),
+    /**
+     * QR 라벨의 태그 ID(기획서 F09) — 라벨을 처음 인쇄할 때 발급한다. 없으면 null.
+     * 기관·물건 정보를 담지 않은 무작위 글자다. 한 번 정하면 바꾸지 않는다(이미 붙인 라벨이 있으므로) — Rules가 막는다.
+     */
+    tagId: z.string().nullable().catch(null),
     lastEditedByUid: z.string().optional().catch(undefined),
     createdAt: timestampSchema.optional().catch(undefined),
     updatedAt: timestampSchema.optional().catch(undefined),

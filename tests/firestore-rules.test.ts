@@ -875,6 +875,37 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(db.collection('organizations').doc('org-A').update({ importColumnMap: '자산코드' }));
       await assertFails(db.collection('organizations').doc('org-A').update({ locationSpaceMap: ['sp1'] }));
     });
+
+    it('#A8 QR 태그는 형식이 맞아야 하고, 한 번 정하면 바꾸거나 지울 수 없다 (기획서 F09)', async () => {
+      await seedAsset('org-A__1-1-1', 'A');
+      const ref = (db: ReturnType<typeof admin>) => db.collection('assets').doc('org-A__1-1-1');
+      const upd = { updatedAt: serverTs(), lastEditedByUid: 'admin_A' };
+      // 형식: 헷갈리는 글자(I·L·O·U) 없는 대문자·숫자 10자
+      await assertFails(ref(admin('A')).update({ ...upd, tagId: 'abcdefgh23' }));
+      await assertFails(ref(admin('A')).update({ ...upd, tagId: 'ABCDEFGHIO' }));
+      await assertFails(ref(admin('A')).update({ ...upd, tagId: 'ABC' }));
+      // 직원은 발급하지 못한다
+      await assertFails(ref(emp('A', 1)).update({ updatedAt: serverTs(), lastEditedByUid: 'emp_A1', tagId: 'ABCDEFGH23' }));
+      // 관리자 발급
+      await assertSucceeds(ref(admin('A')).update({ ...upd, tagId: 'ABCDEFGH23' }));
+      // 바꾸기·지우기 금지, 같은 값 유지와 다른 필드 수정은 된다(다시 가져오기)
+      await assertFails(ref(admin('A')).update({ ...upd, tagId: 'ZZZZZZZZZZ' }));
+      await assertFails(ref(admin('A')).update({ ...upd, tagId: null }));
+      await assertSucceeds(ref(admin('A')).update({ ...upd, name: '모니터' }));
+      // 직원은 태그로 내 기관 재물을 찾을 수 있고, 다른 기관은 못 찾는다
+      await assertSucceeds(emp('A', 1).collection('assets').where('organizationId', '==', 'org-A').where('tagId', '==', 'ABCDEFGH23').get());
+      await assertFails(emp('B', 1).collection('assets').where('organizationId', '==', 'org-A').where('tagId', '==', 'ABCDEFGH23').get());
+    });
+
+    it('#A9 기관 라벨 기본 규격은 정해진 값·맵만 저장된다', async () => {
+      const db = admin('A');
+      await assertSucceeds(db.collection('organizations').doc('org-A').update({ labelSize: 'small' }));
+      await assertSucceeds(db.collection('organizations').doc('org-A').update({
+        labelSize: 'custom', labelCustom: { w: 70, h: 37, cols: 3, rows: 8, top: 0, left: 0, hpitch: 70, vpitch: 37 },
+      }));
+      await assertFails(db.collection('organizations').doc('org-A').update({ labelSize: 'huge' }));
+      await assertFails(db.collection('organizations').doc('org-A').update({ labelCustom: '70x37' }));
+    });
   });
 
   // 직원 화면 더보기 › 기관 나가기 — 문서 삭제는 superAdmin 전용이라 본인은 소속만 비우는 update 분기를 쓴다.

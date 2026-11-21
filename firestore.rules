@@ -148,6 +148,10 @@ service cloud.firestore {
                     // 엑셀 가져오기의 열·위치 연결 (기획서 F04·F06) — 맵이어야 한다
                     && (!('importColumnMap' in request.resource.data) || request.resource.data.importColumnMap is map)
                     && (!('locationSpaceMap' in request.resource.data) || request.resource.data.locationSpaceMap is map)
+                    // 라벨 기본 규격 (기획서 F09)
+                    && (!('labelSize' in request.resource.data)
+                        || request.resource.data.labelSize in ['small', 'medium', 'large', 'custom'])
+                    && (!('labelCustom' in request.resource.data) || request.resource.data.labelCustom is map)
                     && (
                       isSuperAdmin()
                       || (isOrgAdmin(orgId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -221,7 +225,7 @@ service cloud.firestore {
       return d.keys().hasOnly(['organizationId', 'code', 'name', 'category', 'spec', 'acquiredAt',
                                'acquiredQuantity', 'quantity', 'status', 'statusRaw', 'locationRaw',
                                'spaceId', 'department', 'usage', 'missingFromSource', 'lastImportId',
-                               'lastEditedByUid', 'createdAt', 'updatedAt'])
+                               'tagId', 'lastEditedByUid', 'createdAt', 'updatedAt'])
              && d.organizationId is string
              && d.code is string && d.code.size() > 0 && d.code.size() <= 100
              && nullableString(d.name, 200) && nullableString(d.category, 100) && nullableString(d.spec, 200)
@@ -233,6 +237,8 @@ service cloud.firestore {
              && nullableString(d.department, 100) && nullableString(d.usage, 500)
              && d.missingFromSource is bool
              && nullableString(d.lastImportId, 100)
+             // QR 태그 ID(기획서 F09) — 헷갈리는 글자(I·L·O·U)를 뺀 대문자·숫자 10자. 없으면 null
+             && (d.get('tagId', null) == null || (d.tagId is string && d.tagId.matches('^[0-9A-HJKMNP-TV-Z]{10}$')))
              && d.updatedAt == request.time
              && d.lastEditedByUid == request.auth.uid;
     }
@@ -247,7 +253,10 @@ service cloud.firestore {
                     && assetDataValid(request.resource.data)
                     && request.resource.data.organizationId == resource.data.organizationId
                     && request.resource.data.code == resource.data.code
-                    && request.resource.data.createdAt == resource.data.createdAt;
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    // 한 번 발급한 태그는 바꾸거나 지우지 못한다 — 이미 붙인 라벨이 못 쓰게 된다
+                    && (resource.data.get('tagId', null) == null
+                        || request.resource.data.get('tagId', null) == resource.data.tagId);
       allow delete: if false;
     }
 

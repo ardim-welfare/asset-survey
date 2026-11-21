@@ -18,6 +18,8 @@ const AdminDashboard = lazyWithRetry(() => import('./AdminDashboard'));
 const EmployeeManager = lazyWithRetry(() => import('./EmployeeManager'));
 const SpaceManager = lazyWithRetry(() => import('./SpaceManager'));
 const AssetImport = lazyWithRetry(() => import('./AssetImport'));
+const AssetList = lazyWithRetry(() => import('./AssetList'));
+const AssetDetail = lazyWithRetry(() => import('./AssetDetail'));
 const Settings = lazyWithRetry(() => import('./Settings'));
 const AuditLogViewer = lazyWithRetry(() => import('./AuditLogViewer'));
 
@@ -87,6 +89,11 @@ export default function AdminLayout() {
             to: '/admin/spaces',
             label: '공간 관리',
             icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>,
+        },
+        {
+            to: '/admin/assets',
+            label: '재물 목록',
+            icon: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>,
         },
         {
             to: '/admin/import',
@@ -254,6 +261,8 @@ export default function AdminLayout() {
                             <Routes>
                                 <Route path="dashboard" element={<AdminDashboard />} />
                                 <Route path="spaces" element={<SpaceManager />} />
+                                <Route path="assets" element={<AssetList />} />
+                                <Route path="assets/:assetId" element={<AssetDetail />} />
                                 <Route path="import" element={<AssetImport />} />
                                 <Route path="employees" element={<EmployeeManager />} />
                                 <Route path="settings" element={<Settings />} />

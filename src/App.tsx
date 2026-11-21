@@ -20,6 +20,7 @@ const SuperAdminLayout = lazyWithRetry(() => import('./components/superAdmin/Sup
 const AdminLayout = lazyWithRetry(() => import('./components/admin/AdminLayout'));
 const EmployeeLayout = lazyWithRetry(() => import('./components/employee/EmployeeLayout'));
 const ConsentGate = lazyWithRetry(() => import('./components/common/ConsentGate'));
+const TagRedirect = lazyWithRetry(() => import('./components/common/TagRedirect'));
 
 // auth 페이지 (lazy 전환 — 번들 최적화)
 const LoginPage = lazyWithRetry(() => import('./components/auth/LoginPage'));
@@ -279,6 +280,13 @@ function AppContent() {
         <Route path="/employee/*" element={
           <AuthGuard requireAuth requireOrgSetup allowedRoles={['admin', 'employee']}>
             <EmployeeLayout />
+          </AuthGuard>
+        } />
+
+        {/* 라벨 QR 주소 — 그 재물 화면으로 잇는다 (기획서 F09). 로그인 전이면 main.tsx가 태그를 보관한다 */}
+        <Route path="/t/:tagId" element={
+          <AuthGuard requireAuth requireOrgSetup allowedRoles={['admin', 'employee']}>
+            <TagRedirect />
           </AuthGuard>
         } />
 

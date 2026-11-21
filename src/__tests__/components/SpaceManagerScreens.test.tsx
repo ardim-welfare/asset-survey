@@ -80,22 +80,23 @@ describe('SpaceManager', () => {
 });
 
 describe('EmployeeHome — 내 담당 공간', () => {
-    it('담당 공간 이름을 보인다', async () => {
+    it('담당 공간 이름을 보이고, 누르면 그 공간의 재물 목록으로 간다', async () => {
         vi.mocked(firestore.getMySpaces).mockResolvedValueOnce([space({ id: 'a', name: '1층 상담실' })]);
-        render(<EmployeeHome />);
+        render(<MemoryRouter><EmployeeHome /></MemoryRouter>);
         expect(await screen.findByText('1층 상담실')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: '1층 상담실' })).toHaveAttribute('href', '/employee/assets?space=a');
         expect(firestore.getMySpaces).toHaveBeenCalledWith('org-A', 'u1');
     });
 
     it('담당 공간이 없으면 안내를 보인다', async () => {
         vi.mocked(firestore.getMySpaces).mockResolvedValueOnce([]);
-        render(<EmployeeHome />);
+        render(<MemoryRouter><EmployeeHome /></MemoryRouter>);
         expect(await screen.findByText(/아직 담당 공간이 없습니다/)).toBeInTheDocument();
     });
 
     it('불러오기에 실패하면 알린다', async () => {
         vi.mocked(firestore.getMySpaces).mockRejectedValueOnce(new Error('denied'));
-        render(<EmployeeHome />);
+        render(<MemoryRouter><EmployeeHome /></MemoryRouter>);
         expect(await screen.findByText(/불러오지 못했습니다/)).toBeInTheDocument();
     });
 });
