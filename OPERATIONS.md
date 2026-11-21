@@ -30,16 +30,10 @@
 > 아래 순서대로 하고, **사용자** 표시가 붙은 단계를 마치면 AI에게 값을 알려 주면 나머지를 이어 받는다.
 > 비밀값(키·토큰·서비스 계정 JSON)은 채팅에 붙여 넣지 말고 각자 콘솔·GitHub 설정에 직접 넣는다.
 
-### 2.1 GitHub 저장소 (사용자)
-1. GitHub에서 **비공개(Private)** 저장소를 만든다. `docs/`의 참고 자료에 실명·이메일이 든 화면 캡처가 있어 공개 저장소로 올리면 안 된다(공개하려면 `docs/`를 먼저 뺀다).
+### 2.1 GitHub 저장소 — 완료 (2026-11-21)
+1. **비공개** 저장소 `dreamworker0/asset-survey`를 만들고 `master`를 올렸다(AI가 `gh`로). `docs/` 참고 자료는 실명이 든 화면 캡처가 있어 `.gitignore`로 빼고 **이력에서도 지웠다**(지우기 전 전체 백업: `D:\apps\재물조사앱_백업_docs제외전_20261121.bundle`).
 2. 기본 브랜치는 **`master`**다. CI·배포 워크플로가 모두 `master`를 기준으로 돈다(이 PC의 저장소는 2026-11-21에 `main`에서 `master`로 바꿨다). GitHub 저장소를 만들 때 기본 브랜치도 `master`로 둔다.
-3. 원격을 연결하고 올린다(AI에게 맡겨도 된다).
-   ```powershell
-   git remote add origin https://github.com/<계정>/<저장소>.git
-   ```
-   ```powershell
-   git push -u origin master
-   ```
+3. 원격 `origin` = `https://github.com/dreamworker0/asset-survey.git`. Dependabot이 의존성 갱신 PR을 열 수 있다.
 
 ### 2.2 Firebase 프로젝트 (사용자)
 1. [Firebase 콘솔](https://console.firebase.google.com)에서 새 프로젝트를 만든다(이름 예: `asset-survey`). Google 애널리틱스는 켠다(처리방침 제1조가 이용 통계를 적고 있다).
