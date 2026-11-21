@@ -12,7 +12,8 @@
 |---|---|---|
 | Firebase 프로젝트 생성 (Blaze, 예산 알림) | 사용자 | Firestore는 서울(asia-northeast3). 만든 뒤 `.firebaserc`의 `demo-asset-survey`를 실제 ID로 바꾼다 |
 | 웹 앱 등록 → `.env` 값 채우기 | 사용자 + AI | [.env.example](.env.example) |
-| Google 로그인 사용 설정, OAuth 동의 화면 | 사용자 | 전용 도메인을 정하면 승인된 리디렉션 URI에 `https://<도메인>/__/auth/handler` 추가 |
+| Google 로그인 사용 설정, OAuth 동의 화면 | 사용자 | **기본 주소부터** OAuth 클라이언트에 등록해야 한다 — 2.5의 2번. 전용 도메인을 정하면 같은 자리에 그 도메인도 추가 |
+| App Check 키(Fraud Defense) | 사용자 + AI | 클래식 reCAPTCHA v3는 지원이 끝났다. 2.5의 3번 |
 | Secret Manager 비밀값 등록 | 사용자 | `GEMINI_API_KEY` · `GMAIL_APP_PASSWORD` · `ALIMTALK_PROXY_TOKEN` → [README](README.md#환경변수) |
 | `functions/.env` 채우기 | 사용자 + AI | [functions/.env.example](functions/.env.example) |
 | 카카오 알림톡 템플릿 새로 등록 | 사용자 | 차량운행일지 템플릿 문구라 그대로 쓰지 않는다. 등록 전까지 알림톡은 끈다 |
@@ -59,6 +60,12 @@
 ### 2.4 배포용 계정과 GitHub 설정 (사용자)
 1. Google Cloud 콘솔 → IAM → 서비스 계정 만들기(예: `github-deploy`) → 역할: **Firebase 관리자**, **Cloud Functions 관리자**, **서비스 계정 사용자**, **Secret Manager 보안 비밀 접근자**, **Cloud Scheduler 관리자**.
    (첫 배포가 권한 오류로 멈추면 AI가 로그를 보고 더 붙일 역할을 알려 준다.)
+   **asset-survey-sp 첫 배포(2026-11-21)에서 실제로 더 필요했던 것** — 배포용 계정은 프로젝트 IAM·API를 바꿀 수 없어 소유자 계정으로 미리 해 둔다:
+   - 배포용 계정 역할 추가: Artifact Registry·Cloud Run·Eventarc 관리자, Service Usage 소비자, **Datastore 인덱스 관리자**(인덱스 빌드 대기 스텝).
+   - API 켜기: artifactregistry·cloudfunctions·cloudbuild·run·eventarc·pubsub·secretmanager·cloudscheduler·firebasehosting·firebaseextensions·storage·cloudresourcemanager·iamcredentials·**cloudbilling**·firebaseappcheck·recaptchaenterprise.
+   - 서비스 에이전트 역할(배포 로그가 `gcloud projects add-iam-policy-binding …` 세 줄로 알려 준다): Pub/Sub 에이전트 → 서비스 계정 토큰 생성자, 기본 컴퓨트 계정 → Cloud Run 호출자·Eventarc 이벤트 수신자.
+   - Secret Manager 비밀마다 기본 컴퓨트 계정(`<프로젝트 번호>-compute@developer.gserviceaccount.com`)에 **보안 비밀 접근자**.
+   - 처음 함수 배포 때 Eventarc 권한이 퍼지는 몇 분 동안 트리거 함수가 실패할 수 있다 — 배포 워크플로가 재시도한다.
 2. 그 계정의 **키(JSON)**를 만든다.
 3. GitHub 저장소 → Settings → Secrets and variables → Actions:
    - **Secrets**: `FIREBASE_SERVICE_ACCOUNT`(키 JSON 전체), `ENV_FILE`(완성한 `.env` 전체), `FUNCTIONS_ENV_FILE`(완성한 `functions/.env` 전체), `SENTRY_AUTH_TOKEN`(Sentry를 쓰면)
@@ -67,9 +74,11 @@
 
 ### 2.5 첫 배포와 확인 (AI + 사용자)
 1. `master`에 올리면 CI가 돌고, 초록이면 Deploy 워크플로가 Functions·Rules·인덱스·Hosting을 배포한다. AI가 결과를 확인해 알린다.
-2. `https://<프로젝트 ID>.web.app`에 Google 로그인으로 한 번 들어간다.
-3. **첫 시스템 관리자 지정(사용자)** — Firebase 콘솔 → Firestore → `users` → 내 문서의 `role` 값을 `superAdmin`으로 바꾼다. 사용자 문서가 바뀌면 서버 함수(`setCustomClaims`)가 권한을 붙인다. 로그아웃했다가 다시 들어오면 시스템 관리자 화면이 열린다.
-4. 협력 기관이 기관 신청 → 시스템 관리자 화면에서 승인 → [시범운영안내.md](시범운영안내.md)대로 진행.
+2. **Google 로그인 주소 등록(사용자)** — 앱은 로그인 뒤 접속한 주소(`<프로젝트 ID>.web.app`)로 돌아오게 되어 있는데, Firebase가 자동으로 만든 OAuth 클라이언트에는 `firebaseapp.com`만 들어 있어 `400 redirect_uri_mismatch`가 난다. [Google Cloud 콘솔 → API 및 서비스 → 사용자 인증 정보](https://console.cloud.google.com/apis/credentials) → **Web client (auto created by Google Service)** → 승인된 JavaScript 원본에 `https://<프로젝트 ID>.web.app`, 승인된 리디렉션 URI에 `https://<프로젝트 ID>.web.app/__/auth/handler` 추가 → 저장(반영까지 몇 분). 명령줄로는 못 바꾼다.
+3. **App Check 키(사용자 + AI)** — 클래식 reCAPTCHA v3는 지원이 끝나 Firebase 콘솔에서 새로 등록되지 않는다. Google Cloud 콘솔 → 보안 → Fraud Defense에서 **웹·점수 기반** 키(도메인: `<프로젝트 ID>.web.app`, `<프로젝트 ID>.firebaseapp.com`)를 만들고, App Check에 `recaptchaEnterpriseConfig`로 등록한다(토큰 TTL 1일 — 월 1만 건 무료 한도를 아끼려고). 사이트 키를 `VITE_RECAPTCHA_SITE_KEY`로 `ENV_FILE`(Actions·Dependabot 둘 다)에 넣고 다시 배포한다. 키가 없으면 앱은 App Check를 켜지 않아 로그인은 되지만 `enforceAppCheck` 서버 함수가 거부된다.
+4. `https://<프로젝트 ID>.web.app`에 Google 로그인으로 한 번 들어간다 — 초대 코드 화면이 나오면 정상이다(사용자 문서는 기관에 가입할 때 생긴다).
+5. **첫 시스템 관리자 지정** — 첫 로그인만 한 계정에는 `users` 문서가 **없다**. Firebase 콘솔 → Authentication에서 내 UID를 확인하고, Firestore `users/{UID}` 문서를 새로 만든다: `role`=`superAdmin`, `name`, `email`, `organizationId`=null, `status`=`active`. 문서가 생기면 서버 함수(`setCustomClaims`)가 권한을 붙인다. 로그아웃했다가 다시 들어오면 시스템 관리자 화면이 열린다. (asset-survey-sp는 2026-11-21 AI가 소유자 권한으로 만들었다.)
+6. 협력 기관이 기관 신청 → 시스템 관리자 화면에서 승인 → [시범운영안내.md](시범운영안내.md)대로 진행.
 
 ### 2.6 배포 뒤 남은 운영 준비 (사용자)
 - 백업 버킷 `{프로젝트 ID}-backups`(asia-northeast3)와 `auditLogs` TTL 정책 — 위 1장 표
