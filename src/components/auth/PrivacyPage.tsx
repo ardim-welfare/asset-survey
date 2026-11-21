@@ -20,6 +20,8 @@ const EFFECTIVE_DATE = formatLegalVersion(PRIVACY_VERSION);
  * - Sentry: src/lib/sentry.ts, functions/src/core/sentry.ts
  *
  * 차량운행일지에서 쓰던 Calendar·Slack·Tmap·계기판 OCR·챗봇 연동은 이 서비스에 없다(0단계에서 걷어냄).
+ * 그래서 '기관 선택 연동' 수탁자 구분과 제11조의 "외부 연동 인증 토큰 암호화 보관" 문구도 뺐다(2026-11-21,
+ * 법률 검토 요청서를 쓰다 실제와 다른 것을 찾았다). 기관이 켜는 연동을 다시 만들면 둘 다 되살린다.
  * 재물 정보(품명·자산코드·금액)는 개인정보가 아니지만, 누가 찍고 제출·승인했는지는 계정에 묶여 남는다.
  */
 const PROCESSORS: {
@@ -33,8 +35,6 @@ const PROCESSORS: {
     items: string;
     /** 수탁자 개인정보 문의처 */
     contact: string;
-    /** 기관이 별도로 연동을 설정한 경우에만 발생하는지 여부 */
-    optional?: boolean;
 }[] = [
     {
         name: 'Google LLC (Firebase)',
@@ -347,11 +347,6 @@ export default function PrivacyPage() {
                                     <div key={`${p.name}-${p.task}`} className="p-4 space-y-1.5 bg-surface-50 dark:bg-surface-800/60">
                                         <p className="font-medium text-surface-700 dark:text-surface-300 flex flex-wrap items-center gap-x-2 gap-y-1">
                                             <span>{p.name}</span>
-                                            {p.optional && (
-                                                <span className="text-[11px] font-normal px-1.5 py-0.5 rounded-md bg-surface-200 text-surface-600 dark:bg-surface-700 dark:text-surface-300">
-                                                    기관 선택 연동 시
-                                                </span>
-                                            )}
                                         </p>
                                         <p className="text-xs">
                                             <span className="text-surface-500 dark:text-surface-400">위탁 업무 · </span>
@@ -369,10 +364,6 @@ export default function PrivacyPage() {
                                 <li>
                                     카카오 알림톡은 카페24 주식회사가 제공하는 호스팅 환경의 중계 서버를 거쳐 (주)알리고로 전달되며,
                                     최종 발송은 카카오톡을 통해 이루어집니다. 중계 서버는 발송 요청을 전달할 뿐 별도로 개인정보를 저장하지 않습니다.
-                                </li>
-                                <li>
-                                    &lsquo;기관 선택 연동 시&rsquo; 항목은 기관관리자가 해당 연동을 직접 설정한 경우에만 발생하며,
-                                    설정하지 않으면 개인정보가 전달되지 않습니다.
                                 </li>
                                 <li>
                                     위탁 업무의 내용이나 수탁자가 변경될 경우 본 개인정보 처리방침을 통해 지체 없이 공개합니다.
@@ -397,12 +388,6 @@ export default function PrivacyPage() {
                                             <span className="text-[11px] font-normal px-1.5 py-0.5 rounded-md bg-surface-200 text-surface-600 dark:bg-surface-700 dark:text-surface-300">
                                                 {p.country}
                                             </span>
-                                            {/* 제7조와 동일하게 선택 연동 수탁자를 구분 — 배지가 없으면 상시 국외 이전으로 오인된다 */}
-                                            {p.optional && (
-                                                <span className="text-[11px] font-normal px-1.5 py-0.5 rounded-md bg-surface-200 text-surface-600 dark:bg-surface-700 dark:text-surface-300">
-                                                    기관 선택 연동 시
-                                                </span>
-                                            )}
                                         </p>
                                         <p className="text-xs">
                                             <span className="text-surface-500 dark:text-surface-400">이전 항목 · </span>
@@ -507,7 +492,6 @@ export default function PrivacyPage() {
                                 <li>모든 데이터 전송은 HTTPS(SSL/TLS)로 암호화됩니다.</li>
                                 <li>Firebase 보안 규칙을 통해 기관 간 데이터가 완전히 격리됩니다.</li>
                                 <li>역할 기반 접근 제어(슈퍼관리자, 기관관리자, 직원)로 권한이 관리됩니다.</li>
-                                <li>외부 연동에 사용하는 인증 토큰은 암호화하여 보관합니다.</li>
                             </ul>
                         </div>
                     </section>
