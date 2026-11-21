@@ -24,8 +24,12 @@ on:
   workflow_call:
 
 # 최소 권한 — CI는 코드 체크아웃만 필요하고 저장소에 쓰지 않는다.
+# pull-requests: read는 changes 잡의 dorny/paths-filter가 PR 변경 파일 목록을 API로 읽는 데 쓴다.
+# 공개 저장소에서는 없어도 읽혔지만 비공개 저장소에서는 `Resource not accessible by integration`으로
+# 실패했다(2026-11-21 Dependabot PR — 그 PR의 토큰은 이 권한 블록만큼만 받는다).
 permissions:
   contents: read
+  pull-requests: read
 
 # 연속 푸시가 겹치면 낡은 CI를 취소한다 — 마지막 푸시만 검증·배포된다.
 # (취소된 CI는 conclusion이 success가 아니므로 Deploy(workflow_run)로 이어지지 않아 안전)
