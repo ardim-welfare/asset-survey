@@ -32,10 +32,7 @@
 
 ### 2.1 GitHub 저장소 (사용자)
 1. GitHub에서 **비공개(Private)** 저장소를 만든다. `docs/`의 참고 자료에 실명·이메일이 든 화면 캡처가 있어 공개 저장소로 올리면 안 된다(공개하려면 `docs/`를 먼저 뺀다).
-2. **브랜치 이름을 `master`로 맞춘다.** CI·배포 워크플로가 모두 `master`를 기준으로 돈다(이 PC의 저장소는 지금 `main`이다).
-   ```powershell
-   git branch -m main master
-   ```
+2. 기본 브랜치는 **`master`**다. CI·배포 워크플로가 모두 `master`를 기준으로 돈다(이 PC의 저장소는 2026-11-21에 `main`에서 `master`로 바꿨다). GitHub 저장소를 만들 때 기본 브랜치도 `master`로 둔다.
 3. 원격을 연결하고 올린다(AI에게 맡겨도 된다).
    ```powershell
    git remote add origin https://github.com/<계정>/<저장소>.git
