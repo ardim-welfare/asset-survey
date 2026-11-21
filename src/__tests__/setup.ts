@@ -14,7 +14,7 @@ vi.mock('@/lib/firestore/statistics', () => ({
 // 단위 테스트는 없으므로(lib/firebase를 쓰는 테스트는 getAppCheckBlock을 직접 목으로 둔다) 전부 비운다.
 vi.mock('firebase/app-check', () => ({
     initializeAppCheck: vi.fn(() => ({})),
-    ReCaptchaV3Provider: class {},
+    ReCaptchaEnterpriseProvider: class {},
     onTokenChanged: vi.fn(() => () => { }),
     getToken: vi.fn().mockResolvedValue({ token: 'test-app-check-token' }),
 }));

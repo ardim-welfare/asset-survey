@@ -4,7 +4,7 @@ import { authReady as _authReady } from './firebaseAuth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, getFirestore, clearIndexedDbPersistence, terminate, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
-import { initializeAppCheck, ReCaptchaV3Provider, onTokenChanged } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, onTokenChanged } from 'firebase/app-check';
 import { isInAppBrowser } from './inAppBrowser';
 import { runCacheClearWithMarker, runPendingCacheClear } from './offline/cacheClearMarker';
 import { markFirestoreTerminated } from './firestoreLifecycle';
@@ -53,7 +53,11 @@ export function getAppCheckBlock(): { code: string; at: number } | null {
 
 // === App Check 초기화 (initializeApp 직후, 다른 서비스보다 먼저) ===
 // 개발 환경: VITE_APPCHECK_DEBUG_TOKEN으로 에뮬레이터/로컬 통과
-// 프로덕션: reCAPTCHA v3 토큰 자동 발급
+// 프로덕션: reCAPTCHA Enterprise(Fraud Defense) 토큰 자동 발급
+//   클래식 reCAPTCHA v3는 지원이 끝나 Firebase 콘솔에서 새로 등록할 수 없다(2026-11-21 확인).
+//   키는 Google Cloud 콘솔 → 보안 → Fraud Defense에서 만든 웹·점수 기반 키이고,
+//   App Check에 recaptchaEnterpriseConfig(토큰 TTL 1일)로 등록돼 있다. 월 1만 건까지 무료라
+//   TTL을 기본 1시간보다 길게 잡았다 — 토큰 발급 1회가 평가 1건이다.
 //
 // 사이트 키(VITE_RECAPTCHA_SITE_KEY)가 없으면 켜지 않는다. 빈 키로 켜면 reCAPTCHA가
 // `Missing required parameters: sitekey`로 죽고, App Check 토큰을 기다리던 Auth 요청까지
@@ -104,7 +108,7 @@ if (typeof window !== 'undefined' && !USE_EMULATOR && !isInAppBrowser() && RECAP
     // @ts-expect-error -- HMR 및 중복 실행 시 reCAPTCHA 중복 렌더링 에러 방지
     if (!window.__APP_CHECK_INITIALIZED__) {
         appCheck = initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+            provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY),
             isTokenAutoRefreshEnabled: true,
         });
         // @ts-expect-error -- window.__APP_CHECK_INITIALIZED__ 속성 할당 허용
