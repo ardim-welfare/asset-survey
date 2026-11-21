@@ -231,6 +231,7 @@ jobs:
       - name: 인덱스 빌드 완료 대기
         env:
           WAIT_MINUTES: "15"
+          PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"

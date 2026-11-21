@@ -24,7 +24,7 @@
  *
  * ## 사용법
  *   ACCESS_TOKEN=$(gcloud auth print-access-token) npx tsx scripts/wait-for-firestore-indexes.ts
- * 환경변수: ACCESS_TOKEN(필수) · PROJECT_ID(기본 vehicle-drive-log) · WAIT_MINUTES(기본 15)
+ * 환경변수: ACCESS_TOKEN(필수) · PROJECT_ID(필수) · WAIT_MINUTES(기본 15)
  *          POLL_SECONDS(기본 15)
  */
 import fs from 'fs';
@@ -79,7 +79,14 @@ async function main(): Promise<void> {
         console.error('❌ ACCESS_TOKEN이 없습니다. gcloud auth print-access-token 결과를 넘기세요.');
         process.exit(1);
     }
-    const projectId = process.env.PROJECT_ID || 'vehicle-drive-log';
+    // 기본값을 두지 않는다 — 차량운행일지에서 복사해 올 때 `|| 'vehicle-drive-log'`가 남아 있었고,
+    // deploy.yml이 PROJECT_ID를 넘기지 않아 첫 배포가 남의 프로젝트를 조회하다 PERMISSION_DENIED로
+    // 멈췄다(2026-11-21). 대상 프로젝트는 호출자가 반드시 밝힌다.
+    const projectId = process.env.PROJECT_ID;
+    if (!projectId) {
+        console.error('❌ PROJECT_ID가 없습니다. 배포 대상 프로젝트 ID를 넘기세요.');
+        process.exit(1);
+    }
     const waitMinutes = Number(process.env.WAIT_MINUTES || 15);
     const pollSeconds = Number(process.env.POLL_SECONDS || 15);
 
