@@ -20,7 +20,7 @@
 | 이용약관·개인정보 처리방침 검토 | 사용자 검토 | 6단계에서 재물조사 서비스용 첫 초안으로 바꿨다(차량 처리 제거, 재물·조사 기록 처리 추가). **법률 검토와 시행일 확정**이 남았다 — 시행일은 `src/lib/constants.ts`의 `TERMS_VERSION`·`PRIVACY_VERSION` |
 | Storage 버킷 리전 | 사용자 | 처리방침 제8조는 증빙서류 사본을 **미국(us-east1)**에 둔다고 적었다. 다른 리전으로 만들면 처리방침을 고친다 |
 | 앱 아이콘 교체 | 사용자 + AI | `public/icons/`는 차량운행일지 아이콘이다 |
-| 백업 버킷 `{프로젝트 ID}-backups` (asia-northeast3) | 사용자 | [dailyNightlyBatch.ts](functions/src/handlers/scheduled/dailyNightlyBatch.ts) |
+| 백업 버킷 `{프로젝트 ID}-backups` (asia-northeast3) | **완료 (2026-11-21, AI)** | `asset-survey-sp-backups` 서울·공개 차단·90일 자동 삭제([storage-lifecycle-backups.json](storage-lifecycle-backups.json)). Firestore 서비스 에이전트에 버킷 `storage.admin`, 기본 컴퓨트 계정에 `datastore.importExportAdmin`. 수동 export 시험 통과 — [dailyNightlyBatch.ts](functions/src/handlers/scheduled/dailyNightlyBatch.ts) |
 | `auditLogs` TTL 정책 (`expiresAt`) | 사용자 | 접속기록 1년 보관 |
 | GitHub 저장소·Actions Secrets | 사용자 | `ENV_FILE` · `FUNCTIONS_ENV_FILE` · `FIREBASE_SERVICE_ACCOUNT` · `SENTRY_AUTH_TOKEN` |
 
@@ -82,7 +82,7 @@
 6. 협력 기관이 기관 신청 → 시스템 관리자 화면에서 승인 → [시범운영안내.md](시범운영안내.md)대로 진행.
 
 ### 2.6 배포 뒤 남은 운영 준비 (사용자)
-- 백업 버킷 `{프로젝트 ID}-backups`(asia-northeast3)와 `auditLogs` TTL 정책 — 위 1장 표
+- `auditLogs` TTL 정책 — 위 1장 표 (백업 버킷은 2026-11-21 만들었다)
 - 전용 도메인을 정하면: Hosting 사용자 지정 도메인 연결 → Authentication 승인된 도메인 추가 → `VITE_APP_URL`·`SERVICE_URL`에 넣고 다시 배포. **QR 라벨은 주소를 정한 뒤 뽑는 것이 좋다**(기본 카메라로 찍었을 때 새 주소로 열리게).
 
 ## 3. 배포
