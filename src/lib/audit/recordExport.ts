@@ -21,7 +21,9 @@ import { captureError } from '../sentry';
 /** 서버(recordExport.ts)의 DATASETS 화이트리스트와 1:1로 맞춘다 */
 export type ExportDataset =
     /** 접속기록 자체의 반출 — 점검 결과 보관용. IP를 담으므로 이것도 개인정보 반출이다 */
-    | 'auditLogs';
+    | 'auditLogs'
+    /** 재물조사 결과 보고서 — 제출·승인한 사람 이름을 담는다(기획서 F15) */
+    | 'surveyReport';
 
 export type ExportFormat = 'excel' | 'pdf';
 

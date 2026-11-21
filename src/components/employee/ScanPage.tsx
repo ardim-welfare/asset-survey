@@ -10,7 +10,7 @@ import useScanner, { type LastScan } from '../../hooks/useScanner';
 import QrCamera, { type CameraState } from './QrCamera';
 import { SCAN_RESULT_LABEL, CONDITION_LABEL } from '../../lib/survey/judge';
 import { SCAN_MEMO_MAX } from '../../schemas';
-import type { Scan, ScanCondition, ScanResult } from '../../types/survey';
+import type { Scan, ScanCondition, ScanResult, SurveySubmission } from '../../types/survey';
 
 const sub = 'text-xs text-surface-500 dark:text-surface-400';
 
@@ -108,6 +108,12 @@ export default function ScanPage() {
                 </div>
             </section>
 
+            {sc.survey.mode === 'delegated' && (
+                <SubmissionPanel submission={sc.submission} remaining={sc.remaining.length} submitting={sc.submitting}
+                    onSubmit={() => void sc.submit(sc.remaining.length)} />
+            )}
+
+            {!sc.locked && (<>
             <div className="flex gap-2" role="group" aria-label="입력 방법">
                 {(['camera', 'manual'] as const).map((m) => (
                     <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}
@@ -140,9 +146,10 @@ export default function ScanPage() {
                     <button type="submit" className="btn-primary min-h-[48px] px-4" disabled={!code.trim() || sc.checking}>확인</button>
                 </form>
             )}
+            </>)}
 
             {sc.checking && <p className={sub} role="status">확인하는 중…</p>}
-            {sc.last && <ResultCard last={sc.last} spaceName={sc.spaceName} scan={sc.last.kind === 'saved' ? sc.scanMap.get(sc.last.draft.scanId) : undefined}
+            {sc.last && !sc.locked && <ResultCard last={sc.last} spaceName={sc.spaceName} scan={sc.last.kind === 'saved' ? sc.scanMap.get(sc.last.draft.scanId) : undefined}
                 onCondition={sc.setCondition} onUndo={sc.undo} />}
 
             <div className="flex gap-2 pt-2" role="tablist" aria-label="목록">
@@ -176,13 +183,50 @@ export default function ScanPage() {
                                     {s.condition !== 'normal' && <span className="ml-1 text-xs text-red-700 dark:text-red-300">{CONDITION_LABEL[s.condition]}</span>}
                                 </span>
                             </button>
-                            {editing === s.id && <ConditionEditor scan={s} onSave={sc.setCondition} onUndo={sc.undo} />}
+                            {editing === s.id && !sc.locked && <ConditionEditor scan={s} onSave={sc.setCondition} onUndo={sc.undo} />}
                         </li>
                     ))}
                 </ul>
             )}
             <p className={`${sub} text-center pb-4`}>인터넷이 끊겨도 찍은 기록은 이 기기에 남았다가 연결되면 저장됩니다.</p>
         </div>
+    );
+}
+
+function SubmissionPanel({ submission, remaining, submitting, onSubmit }: {
+    submission: SurveySubmission | null; remaining: number; submitting: boolean; onSubmit: () => void;
+}) {
+    if (submission?.state === 'submitted') {
+        return (
+            <section className="rounded-2xl border-2 p-4 bg-sky-50 border-sky-300 text-sky-900 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-200" role="status">
+                <p className="font-bold">제출했습니다</p>
+                <p className="text-sm">재물 담당자가 확인하는 동안 이 공간은 스캔이 잠깁니다. 반려되면 다시 열립니다.</p>
+            </section>
+        );
+    }
+    if (submission?.state === 'approved') {
+        return (
+            <section className="rounded-2xl border-2 p-4 bg-emerald-50 border-emerald-300 text-emerald-900 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-200" role="status">
+                <p className="font-bold">승인됐습니다{submission.proxyApproved ? ' (재물 담당자 대신 승인)' : ''}</p>
+                <p className="text-sm">이 공간의 조사가 끝났습니다. 수고하셨습니다.</p>
+            </section>
+        );
+    }
+    return (
+        <section className="glass-card p-4">
+            {submission?.state === 'rejected' && (
+                <div className="mb-3 rounded-xl bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-200" role="alert">
+                    <p className="font-semibold">반려됐습니다 — 다시 확인해 주세요</p>
+                    <p>사유: {submission.reason}</p>
+                </div>
+            )}
+            <p className="text-sm text-surface-700 dark:text-surface-300 mb-2">
+                이 공간을 다 찍었으면 제출하세요.{remaining > 0 && <> 남은 재물 <strong>{remaining}건</strong>은 '미발견'으로 보고됩니다.</>}
+            </p>
+            <button type="button" className="btn-secondary w-full min-h-[48px]" onClick={onSubmit} disabled={submitting}>
+                {submitting ? '제출하는 중…' : submission?.state === 'rejected' ? '다시 제출' : '이 공간 조사 제출'}
+            </button>
+        </section>
     );
 }
 

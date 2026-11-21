@@ -6,19 +6,23 @@
  *
  * 찍을 수 있는 공간: 관리자는 회차의 모든 공간, 직원은 '나눠서 조사' 회차에서 자기가 담당하는 공간만
  * (Rules도 같은 경계로 막는다). '혼자 조사' 회차는 관리자만 찍는다.
+ *
+ * '나눠서 조사' 회차는 공간을 다 찍으면 제출한다(기획서 F13). 제출·승인된 공간은 스캔이 잠기고(Rules),
+ * 반려되면 사유와 함께 다시 열린다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './useAuth';
 import { useToast } from './useToast';
+import { useConfirm } from './useConfirm';
 import {
     getOpenSurvey, getSurveyTargets, getSpaces, findAssetByTag, findAssetByCode, peekScan, saveScan,
-    updateScanCondition, deleteScan, subscribeSpaceScans,
+    updateScanCondition, deleteScan, subscribeSpaceScans, subscribeSubmission, submitSpace,
 } from '../lib/firestore';
 import {
     buildTargetIndex, findInTargets, judge, resolveInput, targetKey,
     type FoundAsset, type IndexedTarget, type Judgement, type ScanDraft,
 } from '../lib/survey/judge';
-import type { Survey, SurveyTarget, Scan, ScanCondition, ScanMethod } from '../types/survey';
+import type { Survey, SurveyTarget, Scan, ScanCondition, ScanMethod, SurveySubmission } from '../types/survey';
 import type { Space } from '../types/space';
 
 export type LastScan =
@@ -32,6 +36,7 @@ function vibrate(pattern: number | number[]) {
 export default function useScanner(initialSpaceId: string | null) {
     const { user, userData } = useAuth();
     const { showToast } = useToast();
+    const { confirm } = useConfirm();
     const orgId = userData?.organizationId ?? null;
     const uid = user?.uid ?? null;
     const isAdmin = userData?.role === 'admin';
@@ -46,6 +51,8 @@ export default function useScanner(initialSpaceId: string | null) {
     const [last, setLast] = useState<LastScan | null>(null);
     const busy = useRef(false);
     const [checking, setChecking] = useState(false);
+    const [submission, setSubmission] = useState<SurveySubmission | null>(null);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         if (!orgId) return;
@@ -92,6 +99,16 @@ export default function useScanner(initialSpaceId: string | null) {
         return subscribeSpaceScans(orgId, survey.id, spaceId, setScans, () => setError(true));
     }, [orgId, survey, spaceId]);
 
+    // 이 공간의 제출 상태 실시간('나눠서 조사'만)
+    useEffect(() => {
+        setSubmission(null);
+        if (!survey || !spaceId || survey.mode !== 'delegated') return;
+        return subscribeSubmission(survey.id, spaceId, setSubmission);
+    }, [survey, spaceId]);
+
+    /** 제출·승인돼 스캔이 잠긴 공간 */
+    const locked = !!submission && submission.state !== 'rejected';
+
     const index = useMemo(() => buildTargetIndex(targets), [targets]);
     const scanMap = useMemo(() => new Map(scans.map((s) => [s.id, s])), [scans]);
     const spaceName = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
@@ -99,6 +116,7 @@ export default function useScanner(initialSpaceId: string | null) {
     /** 찍힌 글자 처리 — 처리 중이면 false(카메라가 다음 프레임에 다시 넘긴다) */
     const handle = useCallback((text: string, method: ScanMethod): boolean => {
         if (busy.current || !orgId || !survey || !spaceId) return false;
+        if (locked) return true; // 잠긴 공간 — 화면이 입력을 숨기지만 카메라 콜백이 남아 있을 수 있다
         const lookup = resolveInput(text, method);
         if (!lookup) return true;
         busy.current = true;
@@ -141,7 +159,7 @@ export default function useScanner(initialSpaceId: string | null) {
             }
         })();
         return true;
-    }, [orgId, survey, spaceId, index, scanMap, showToast]);
+    }, [orgId, survey, spaceId, index, scanMap, showToast, locked]);
 
     const setCondition = useCallback((scanId: string, condition: ScanCondition, memo: string) => {
         updateScanCondition(scanId, condition, memo, () => showToast('물건 상태를 저장하지 못했습니다.', 'error'));
@@ -172,7 +190,30 @@ export default function useScanner(initialSpaceId: string | null) {
         return { target: bucket?.items.length ?? 0, found: foundIds.size, remaining, here };
     }, [targets, scans, spaceId]);
 
+    /** 이 공간 제출 — 남은 재물이 있으면 미발견으로 보고된다고 알린다 */
+    const submit = useCallback(async (remaining: number) => {
+        if (!orgId || !survey || !spaceId || submitting) return;
+        const ok = await confirm({
+            title: '이 공간 조사를 제출할까요?',
+            message: remaining > 0
+                ? `아직 못 찾은 재물이 ${remaining}건 있습니다. 제출하면 이 공간은 스캔이 잠기고, 승인되면 남은 재물은 '미발견'으로 보고됩니다.`
+                : '제출하면 이 공간은 스캔이 잠기고 재물 담당자가 확인합니다.',
+            confirmText: '제출',
+        });
+        if (!ok) return;
+        setSubmitting(true);
+        try {
+            await submitSpace(orgId, survey.id, spaceId);
+            showToast('제출했습니다. 재물 담당자가 확인합니다.', 'success');
+        } catch {
+            showToast('제출하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.', 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    }, [orgId, survey, spaceId, submitting, confirm, showToast]);
+
     return {
+        submission, locked, submit, submitting,
         loading, error, survey, isAdmin, mySpaces, spaceId, setSpaceId, spaceName,
         handle, checking, last, clearLast: () => setLast(null), scanMap, setCondition, undo, ...view,
     };

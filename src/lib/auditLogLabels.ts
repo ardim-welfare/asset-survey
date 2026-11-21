@@ -27,6 +27,7 @@ export const TARGET_LABEL: Record<AuditTargetType, string> = {
 /** 반출 대상 — 서버(recordExport)의 DATASETS 화이트리스트와 1:1 */
 export const DATASET_LABEL: Record<string, string> = {
     auditLogs: '접속기록',
+    surveyReport: '재물조사 결과 보고서',
 };
 
 export const FORMAT_LABEL: Record<string, string> = { excel: '엑셀', pdf: 'PDF' };

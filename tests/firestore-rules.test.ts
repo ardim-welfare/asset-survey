@@ -1009,6 +1009,136 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertSucceeds(emp('A', 2).collection('scans').doc('sv1__org-A__1').get());
       await assertSucceeds(emp('A', 2).collection('scans').where('organizationId', '==', 'org-A').where('surveyId', '==', 'sv1').where('expectedSpaceId', '==', 'sp-2').get());
       await assertFails(emp('B', 1).collection('scans').doc('sv1__org-A__1').get());
+      // 없는 문서는 '없음'을 확인할 수 있다(다른 공간에서 찍혔는지 미리 확인) — 로그인 안 하면 못 한다
+      await assertSucceeds(emp('A', 2).collection('scans').doc('sv1__org-A__404').get());
+      await assertSucceeds(emp('A', 1).collection('surveySubmissions').doc('sv1__sp-1').get());
+      await assertFails(anon().collection('scans').doc('sv1__org-A__404').get());
+    });
+
+    // ── 제출·승인·마감·이력·반영 목록 (기획서 F13~F17) ──
+    const subDoc = (uid: string, extra: Record<string, unknown> = {}) => ({
+      organizationId: 'org-A', surveyId: 'sv1', spaceId: 'sp-1', state: 'submitted',
+      submittedByUid: uid, submittedAt: serverTs(), reviewedByUid: null, reviewedAt: null,
+      reason: '', selfApproved: false, proxyApproved: false, lastEditedByUid: uid, updatedAt: serverTs(), ...extra,
+    });
+    const review = (uid: string, extra: Record<string, unknown>) => ({
+      reviewedByUid: uid, reviewedAt: serverTs(), lastEditedByUid: uid, updatedAt: serverTs(), ...extra,
+    });
+
+    it('#V6 제출은 그 공간 담당자가, 검토는 관리자가 — 반려·본인 승인은 사유 필수', async () => {
+      await seedSurvey();
+      const ref = (db: ReturnType<typeof admin>) => db.collection('surveySubmissions').doc('sv1__sp-1');
+      await assertFails(ref(emp('A', 2)).set(subDoc('emp_A2')));                       // 남의 공간
+      await assertFails(emp('A', 1).collection('surveySubmissions').doc('sv1__sp-9').set(subDoc('emp_A1', { spaceId: 'sp-9' }))); // ID·공간 불일치
+      await assertSucceeds(ref(emp('A', 1)).set(subDoc('emp_A1')));
+      // 직원은 승인 못 함, 관리자 반려는 사유 필수
+      await assertFails(ref(emp('A', 1)).update(review('emp_A1', { state: 'approved' })));
+      await assertFails(ref(admin('A')).update(review('admin_A', { state: 'rejected', reason: '' })));
+      await assertSucceeds(ref(admin('A')).update(review('admin_A', { state: 'rejected', reason: '창고 다시' })));
+      // 반려 뒤 다시 제출 → 승인
+      await assertSucceeds(ref(emp('A', 1)).set(subDoc('emp_A1')));
+      await assertFails(ref(admin('A')).update(review('admin_A', { state: 'approved', selfApproved: true, reason: '거짓 본인' })));
+      await assertSucceeds(ref(admin('A')).update(review('admin_A', { state: 'approved' })));
+      // 승인된 것은 다시 제출·검토 못 함
+      await assertFails(ref(emp('A', 1)).set(subDoc('emp_A1')));
+      await assertFails(ref(admin('A')).update(review('admin_A', { state: 'rejected', reason: 'x' })));
+      await assertFails(ref(admin('A')).delete());
+    });
+
+    it('#V7 본인 승인·대신 승인은 표시와 사유가 있어야 한다', async () => {
+      await seedSurvey();
+      const ref = admin('A').collection('surveySubmissions').doc('sv1__sp-1');
+      await assertSucceeds(ref.set(subDoc('admin_A')));                                // 관리자 본인 제출
+      await assertFails(ref.update(review('admin_A', { state: 'approved' })));          // 본인 승인 표시 없음
+      await assertFails(ref.update(review('admin_A', { state: 'approved', selfApproved: true, reason: '' })));
+      await assertSucceeds(ref.update(review('admin_A', { state: 'approved', selfApproved: true, reason: '혼자 담당' })));
+      // 대신 승인 — 제출 없이, 사유 필수, 관리자만
+      const proxy = {
+        organizationId: 'org-A', surveyId: 'sv1', spaceId: 'sp-2', state: 'approved', submittedByUid: null, submittedAt: null,
+        reviewedByUid: 'admin_A', reviewedAt: serverTs(), reason: '담당자 휴가', selfApproved: false, proxyApproved: true,
+        lastEditedByUid: 'admin_A', updatedAt: serverTs(),
+      };
+      const pref = (db: ReturnType<typeof admin>) => db.collection('surveySubmissions').doc('sv1__sp-2');
+      await assertFails(pref(admin('A')).set({ ...proxy, reason: '' }));
+      await assertFails(pref(emp('A', 2)).set({ ...proxy, reviewedByUid: 'emp_A2', lastEditedByUid: 'emp_A2' }));
+      await assertSucceeds(pref(admin('A')).set(proxy));
+    });
+
+    it('#V8 제출·승인된 공간은 스캔이 잠기고, 반려되면 다시 열린다. 혼자 조사 회차는 제출이 없다', async () => {
+      await seedSurvey();
+      const sref = (db: ReturnType<typeof admin>) => db.collection('surveySubmissions').doc('sv1__sp-1');
+      await assertSucceeds(emp('A', 1).collection('scans').doc('sv1__org-A__1').set(scanDoc('emp_A1')));
+      await assertSucceeds(sref(emp('A', 1)).set(subDoc('emp_A1')));
+      await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__2').set(scanDoc('emp_A1', { assetId: 'org-A__2', code: '2' })));
+      await assertFails(admin('A').collection('scans').doc('sv1__org-A__3').set(scanDoc('admin_A', { assetId: 'org-A__3', code: '3' })));
+      await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__1').update({ condition: 'damaged', memo: 'x', updatedAt: serverTs(), lastEditedByUid: 'emp_A1' }));
+      await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__1').delete());
+      // 다른 공간은 계속 찍는다
+      await assertSucceeds(emp('A', 2).collection('scans').doc('sv1__org-A__5').set(scanDoc('emp_A2', { assetId: 'org-A__5', code: '5', spaceId: 'sp-2' })));
+      await assertSucceeds(sref(admin('A')).update(review('admin_A', { state: 'rejected', reason: '다시' })));
+      await assertSucceeds(emp('A', 1).collection('scans').doc('sv1__org-A__2').set(scanDoc('emp_A1', { assetId: 'org-A__2', code: '2' })));
+
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('surveys').doc('sv1').update({ mode: 'solo' });
+      });
+      await assertFails(admin('A').collection('surveySubmissions').doc('sv1__sp-2').set(subDoc('admin_A', { spaceId: 'sp-2' })));
+    });
+
+    it('#V9 마감은 관리자만, 정해진 필드만 — 마감 뒤에는 스캔·제출이 막힌다', async () => {
+      await seedSurvey();
+      const close = (uid: string, extra: Record<string, unknown> = {}) => ({
+        status: 'closed', closedAt: serverTs(), closedByUid: uid, lastEditedByUid: uid,
+        spaceNames: { 'sp-1': '101호' }, summary: { target: 1, found: 1 }, ...extra,
+      });
+      await assertFails(emp('A', 1).collection('surveys').doc('sv1').update(close('emp_A1')));
+      await assertFails(admin('B').collection('surveys').doc('sv1').update(close('admin_B')));
+      await assertFails(admin('A').collection('surveys').doc('sv1').update(close('admin_A', { name: '바꿈' })));
+      await assertFails(admin('A').collection('surveys').doc('sv1').update(close('admin_A', { closedByUid: 'emp_A1' })));
+      await assertSucceeds(admin('A').collection('surveys').doc('sv1').update(close('admin_A')));
+      await assertFails(admin('A').collection('surveys').doc('sv1').update({ status: 'open' }));
+      await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__1').set(scanDoc('emp_A1')));
+      await assertFails(emp('A', 1).collection('surveySubmissions').doc('sv1__sp-1').set(subDoc('emp_A1')));
+    });
+
+    it('#V10 조사 이력은 생성만 — 직원은 제출 기록만, 관리자만 읽는다', async () => {
+      await seedSurvey();
+      const ev = (uid: string, type: string) => ({
+        organizationId: 'org-A', surveyId: 'sv1', spaceId: 'sp-1', type, reason: '', targetId: null, byUid: uid, at: serverTs(),
+      });
+      await assertSucceeds(emp('A', 1).collection('surveyEvents').doc('e1').set(ev('emp_A1', 'submit')));
+      await assertFails(emp('A', 1).collection('surveyEvents').doc('e2').set(ev('emp_A1', 'approve')));
+      await assertFails(emp('A', 1).collection('surveyEvents').doc('e3').set(ev('emp_A2', 'submit')));
+      await assertSucceeds(admin('A').collection('surveyEvents').doc('e4').set(ev('admin_A', 'close')));
+      await assertFails(admin('A').collection('surveyEvents').doc('e5').set(ev('admin_A', 'delete-all')));
+      await assertFails(admin('A').collection('surveyEvents').doc('e1').update({ reason: '바꿈' }));
+      await assertFails(admin('A').collection('surveyEvents').doc('e1').delete());
+      await assertSucceeds(admin('A').collection('surveyEvents').doc('e1').get());
+      await assertFails(emp('A', 1).collection('surveyEvents').doc('e1').get());
+      await assertFails(admin('B').collection('surveyEvents').doc('e6').set({ ...ev('admin_B', 'close'), organizationId: 'org-B' }));
+    });
+
+    it('#V11 희망이음 반영 목록 — 열린 회차를 마감하며 관리자가 만들고, 처리 완료만 체크한다', async () => {
+      await seedSurvey();
+      const task = {
+        organizationId: 'org-A', surveyId: 'sv1', kind: 'move', assetId: 'org-A__1', code: '1', name: 'TV',
+        fromSpaceId: 'sp-1', toSpaceId: 'sp-2', memo: '', done: false, doneByUid: null, doneAt: null,
+      };
+      const ref = (db: ReturnType<typeof admin>) => db.collection('syncTasks').doc('sv1__move__org-A__1');
+      await assertFails(ref(emp('A', 1)).set(task));
+      await assertFails(ref(admin('A')).set({ ...task, done: true }));
+      await assertSucceeds(ref(admin('A')).set(task));
+      await assertSucceeds(ref(admin('A')).set(task)); // 마감 재시도 — 같은 내용
+      // 마감 뒤 체크
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('surveys').doc('sv1').update({ status: 'closed' });
+      });
+      await assertFails(admin('A').collection('syncTasks').doc('sv1__move__org-A__2').set({ ...task, assetId: 'org-A__2' }));
+      await assertFails(ref(admin('A')).update({ done: true, doneByUid: 'emp_A1', doneAt: serverTs() }));
+      await assertFails(ref(admin('A')).update({ code: '바꿈' }));
+      await assertSucceeds(ref(admin('A')).update({ done: true, doneByUid: 'admin_A', doneAt: serverTs() }));
+      await assertSucceeds(ref(admin('A')).update({ done: false, doneByUid: null, doneAt: null }));
+      await assertFails(ref(admin('A')).delete());
+      await assertFails(ref(emp('A', 1)).get());
     });
   });
 

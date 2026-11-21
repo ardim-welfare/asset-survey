@@ -1,14 +1,17 @@
 /**
- * SurveyManager — 관리자 재물조사 회차 (기획서 F10)
+ * SurveyManager — 관리자 재물조사 (기획서 F10·F13·F14·F15)
  *
- * 새 회차 시작(이름·기간·대상 공간 → 대상 목록 고정), 진행 중 회차의 공간별 진행, 지난 회차 목록.
- * 마감·보고서·현황판은 5단계(F13~F16).
+ * 진행 중 회차가 없으면 새 조사 시작, 있으면 현황판(남은 기간·진행률·공간별 진행과 제출 상태·최근 스캔)과
+ * 승인·반려·대신 승인, 마감. 지난 조사는 결과 보고서로 연결한다.
  */
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import useSurveyAdmin, { type StartForm } from '../../hooks/useSurveyAdmin';
-import { NO_SPACE_KEY } from '../../schemas';
+import { useConfirm } from '../../hooks/useConfirm';
+import { NO_SPACE_KEY, REASON_MAX } from '../../schemas';
+import { SCAN_RESULT_LABEL } from '../../lib/survey/judge';
+import { daysLeft } from '../../lib/survey/report';
 import type { Space } from '../../types/space';
-import type { SpaceProgress } from '../../lib/survey/judge';
+import type { SurveySubmission } from '../../types/survey';
 
 const sub = 'text-xs text-surface-500 dark:text-surface-400';
 const card = 'glass-card p-5 mb-4';
@@ -16,6 +19,8 @@ const MODE_LABEL = { delegated: '나눠서 조사', solo: '혼자 조사' } as c
 
 export default function SurveyManager() {
     const s = useSurveyAdmin();
+    const { confirm } = useConfirm();
+    const navigate = useNavigate();
 
     if (s.loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
     if (s.error) {
@@ -27,19 +32,40 @@ export default function SurveyManager() {
         );
     }
 
+    /** 사유를 받아 검토한다 — 반려·본인 승인·대신 승인은 사유 필수 */
+    const askReview = async (spaceId: string, spaceName: string, decision: 'approved' | 'rejected', current: SurveySubmission | null) => {
+        const self = !!current && current.submittedByUid === s.uid;
+        const needsReason = decision === 'rejected' || !current || self;
+        if (!needsReason) {
+            const ok = await confirm({ title: `${spaceName} 승인`, message: '이 공간의 조사 결과를 승인할까요? 승인하면 이 공간은 스캔이 잠깁니다.', confirmText: '승인' });
+            if (ok) await s.review({ spaceId, decision, reason: '' });
+            return;
+        }
+        const title = decision === 'rejected' ? `${spaceName} 반려` : !current ? `${spaceName} 대신 승인` : `${spaceName} 본인 승인`;
+        const message = decision === 'rejected'
+            ? '반려 사유를 적어 주세요. 공간 담당자 화면에 그대로 보이고, 담당자가 다시 찍고 제출합니다.'
+            : !current
+                ? '담당자 제출 없이 승인합니다. 사유를 적어 주세요(보고서에 \'대신 승인\'으로 남습니다).'
+                : '내가 제출한 공간을 내가 승인합니다. 사유를 적어 주세요(보고서에 \'본인 승인\'으로 남습니다).';
+        const reason = await confirm({
+            title, message, type: 'input', inputLabel: '사유', inputPlaceholder: decision === 'rejected' ? '예: 창고 안쪽 선반 다시 확인' : '예: 담당자 휴가',
+            confirmText: decision === 'rejected' ? '반려' : '승인', confirmColor: decision === 'rejected' ? 'danger' : 'primary',
+        });
+        if (typeof reason !== 'string') return;
+        await s.review({ spaceId, decision, reason: reason.slice(0, REASON_MAX) });
+    };
+
+    const closed = s.surveys.filter((x) => x.status === 'closed');
+
     return (
-        <div className="max-w-3xl mx-auto animate-fade-in">
+        <div className="max-w-4xl mx-auto animate-fade-in">
             <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">재물조사</h1>
             <p className="text-sm text-surface-500 dark:text-surface-400 mb-6">
                 조사를 시작하면 그때의 운영 재물이 공간별 대상 목록으로 고정되고, 공간 담당자 화면의 스캔 탭이 열립니다.
             </p>
 
             {s.open ? (
-                <OpenSurvey
-                    name={s.open.name} start={s.open.startDate} end={s.open.endDate} mode={s.open.mode}
-                    spaces={s.spaces} spaceIds={s.open.spaceIds} includesUnassigned={s.open.includesUnassigned}
-                    progress={s.progress} totals={s.totals} onRefresh={() => void s.refreshProgress()}
-                />
+                <Dashboard s={s} onReview={askReview} onClose={async () => { const id = await s.close(); if (id) navigate(`/admin/surveys/${id}`); }} />
             ) : s.form ? (
                 <StartFormView
                     form={s.form} setForm={s.setForm} spaces={s.spaces} preview={s.preview} error={s.formError}
@@ -57,18 +83,167 @@ export default function SurveyManager() {
                 </section>
             )}
 
-            {s.surveys.filter((x) => x.status === 'closed').length > 0 && (
+            {closed.length > 0 && (
                 <section className={card}>
-                    <h2 className="font-semibold text-surface-900 dark:text-surface-100 mb-2">지난 조사</h2>
+                    <h2 className="font-semibold text-surface-900 dark:text-surface-100 mb-2">지난 조사 · 결과 보고서</h2>
                     <ul className="divide-y divide-surface-100 dark:divide-surface-700">
-                        {s.surveys.filter((x) => x.status === 'closed').map((x) => (
-                            <li key={x.id} className="py-2 text-sm text-surface-800 dark:text-surface-200">
-                                {x.name} <span className={sub}>{x.startDate} ~ {x.endDate} · 대상 {x.targetCount}건</span>
+                        {closed.map((x) => (
+                            <li key={x.id}>
+                                <Link to={`/admin/surveys/${x.id}`} className="flex flex-wrap items-center justify-between gap-2 py-3 min-h-[48px] text-sm">
+                                    <span className="font-medium text-primary-600 dark:text-primary-400">{x.name}</span>
+                                    <span className={sub}>
+                                        {x.startDate} ~ {x.endDate}
+                                        {x.summary && ` · 확인 ${x.summary.found}/${x.summary.target} · 미발견 ${x.summary.missing}`}
+                                    </span>
+                                </Link>
                             </li>
                         ))}
                     </ul>
                 </section>
             )}
+        </div>
+    );
+}
+
+type Admin = ReturnType<typeof useSurveyAdmin>;
+
+function SubmissionBadge({ sub: x, names }: { sub: SurveySubmission | null; names: Map<string, string> }) {
+    if (!x) return <span className="text-xs text-surface-500 dark:text-surface-400">조사 중</span>;
+    const who = (uid: string | null) => (uid ? names.get(uid) ?? '알 수 없음' : '');
+    if (x.state === 'submitted') return <span className="text-xs font-medium text-sky-700 dark:text-sky-300">제출됨 · {who(x.submittedByUid)}</span>;
+    if (x.state === 'rejected') return <span className="text-xs font-medium text-red-700 dark:text-red-300" title={x.reason}>반려 · 다시 제출 기다림</span>;
+    return (
+        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300" title={x.reason || undefined}>
+            승인{x.proxyApproved ? '(대신)' : x.selfApproved ? '(본인)' : ''} · {who(x.reviewedByUid)}
+        </span>
+    );
+}
+
+function Dashboard({ s, onReview, onClose }: {
+    s: Admin;
+    onReview: (spaceId: string, name: string, decision: 'approved' | 'rejected', current: SurveySubmission | null) => Promise<void>;
+    onClose: () => void;
+}) {
+    const open = s.open!;
+    const rows = [
+        ...s.spaces.filter((x) => open.spaceIds.includes(x.id)).sort((a, b) => a.order - b.order).map((x) => ({ key: x.id, name: x.name })),
+        ...(open.includesUnassigned ? [{ key: NO_SPACE_KEY, name: '공간 미지정' }] : []),
+    ];
+    const nameOf = (key: string) => rows.find((r) => r.key === key)?.name ?? '(지운 공간)';
+    const pct = s.totals.target > 0 ? Math.round((s.totals.found / s.totals.target) * 100) : 0;
+    const left = daysLeft(open.endDate);
+    const delegated = open.mode === 'delegated';
+
+    return (
+        <>
+            <section className={card} aria-labelledby="open-title">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                        <h2 id="open-title" className="text-lg font-semibold text-surface-900 dark:text-surface-100">{open.name}</h2>
+                        <p className={sub}>{open.startDate} ~ {open.endDate} · {MODE_LABEL[open.mode]}</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Link to={`/admin/surveys/${open.id}`} className="btn-secondary btn-sm min-h-[44px] px-3">중간 보고서</Link>
+                        <Link to="/employee/scan" className="btn-primary btn-sm min-h-[44px] px-4">직접 스캔</Link>
+                    </div>
+                </div>
+
+                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    <Stat label="남은 기간" value={left > 0 ? `D-${left}` : left === 0 ? 'D-DAY' : `${-left}일 지남`} warn={left < 0} />
+                    <Stat label="확인" value={`${s.totals.found.toLocaleString('ko-KR')} / ${s.totals.target.toLocaleString('ko-KR')}`} />
+                    <Stat label="진행률" value={`${pct}%`} />
+                    <Stat label="미등록" value={`${s.totals.unregistered}건`} warn={s.totals.unregistered > 0} />
+                </dl>
+                <div className="mt-3 h-2 rounded-full bg-surface-100 dark:bg-surface-800 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={s.totals.target} aria-valuenow={s.totals.found} aria-label="전체 진행률">
+                    <div className="h-full bg-primary-500" style={{ width: `${pct}%` }} />
+                </div>
+
+                <div className="overflow-x-auto mt-4">
+                    <table className="w-full text-sm">
+                        <thead className="text-left text-surface-500 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
+                            <tr>
+                                <th className="py-2 pr-3 font-medium">공간</th>
+                                <th className="py-2 pr-3 font-medium">확인</th>
+                                <th className="py-2 pr-3 font-medium" title="대상 중 다른 공간에서 찾음">다른 곳</th>
+                                <th className="py-2 pr-3 font-medium" title="이 공간에서 나온 다른 공간·미등록·범위 밖">예외</th>
+                                <th className="py-2 pr-3 font-medium">상태 이상</th>
+                                {delegated && <th className="py-2 pr-3 font-medium">제출</th>}
+                                {delegated && <th className="py-2 font-medium"><span className="sr-only">처리</span></th>}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
+                            {rows.map((r) => {
+                                const p = s.progress.get(r.key);
+                                const x = s.submissionOf.get(r.key) ?? null;
+                                const isNone = r.key === NO_SPACE_KEY;
+                                return (
+                                    <tr key={r.key}>
+                                        <td className="py-2 pr-3 text-surface-900 dark:text-surface-100">{r.name}</td>
+                                        <td className="py-2 pr-3 whitespace-nowrap">{p?.found ?? 0} / {p?.target ?? 0}</td>
+                                        <td className="py-2 pr-3">{p?.elsewhere ?? 0}</td>
+                                        <td className="py-2 pr-3">{p?.foreign ?? 0}</td>
+                                        <td className="py-2 pr-3">{p?.issues ?? 0}</td>
+                                        {delegated && <td className="py-2 pr-3">{isNone ? <span className={sub}>관리자 확인</span> : <SubmissionBadge sub={x} names={s.names} />}</td>}
+                                        {delegated && (
+                                            <td className="py-2 whitespace-nowrap">
+                                                {!isNone && x?.state === 'submitted' && (
+                                                    <span className="flex gap-1">
+                                                        <button type="button" className="btn-primary btn-sm min-h-[40px] px-3" onClick={() => void onReview(r.key, r.name, 'approved', x)}>승인</button>
+                                                        <button type="button" className="btn-secondary btn-sm min-h-[40px] px-3" onClick={() => void onReview(r.key, r.name, 'rejected', x)}>반려</button>
+                                                    </span>
+                                                )}
+                                                {!isNone && !x && (
+                                                    <button type="button" className="btn-secondary btn-sm min-h-[40px] px-3" onClick={() => void onReview(r.key, r.name, 'approved', null)}>대신 승인</button>
+                                                )}
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-surface-100 dark:border-surface-700">
+                    {s.blockers.length > 0 ? (
+                        <p className="text-sm text-surface-700 dark:text-surface-300 mb-2">
+                            마감하려면 모든 공간이 승인돼야 합니다. 남은 공간: <strong>{s.blockers.map(nameOf).join(', ')}</strong>
+                            <span className={`${sub} block`}>담당자가 제출하지 못하는 공간은 '대신 승인'(사유 필수)으로 처리할 수 있습니다.</span>
+                        </p>
+                    ) : (
+                        <p className="text-sm text-surface-700 dark:text-surface-300 mb-2">마감하면 더는 찍거나 고칠 수 없고, 결과 보고서와 희망이음 반영 목록이 만들어집니다.</p>
+                    )}
+                    <button type="button" className="btn-primary min-h-[48px] px-5" onClick={onClose} disabled={s.blockers.length > 0 || s.closing}>
+                        {s.closing ? '마감하는 중…' : '조사 마감'}
+                    </button>
+                </div>
+            </section>
+
+            <section className={card} aria-labelledby="recent-title">
+                <h2 id="recent-title" className="font-semibold text-surface-900 dark:text-surface-100 mb-2">최근 스캔</h2>
+                {s.recent.length === 0 ? (
+                    <p className={sub}>아직 찍은 것이 없습니다.</p>
+                ) : (
+                    <ul className="divide-y divide-surface-100 dark:divide-surface-700 text-sm">
+                        {s.recent.map((x) => (
+                            <li key={x.id} className="py-2 flex flex-wrap items-center gap-x-2">
+                                <span className="font-mono text-surface-900 dark:text-surface-100">{x.code}</span>
+                                <span className="text-surface-600 dark:text-surface-300">{x.name ?? ''}</span>
+                                <span className={sub}>· {nameOf(x.spaceId)} · {SCAN_RESULT_LABEL[x.result]}{x.method === 'manual' ? ' · 직접 입력' : ''}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+        </>
+    );
+}
+
+function Stat({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
+    return (
+        <div className="rounded-xl bg-surface-50 dark:bg-surface-800 p-3">
+            <dt className={sub}>{label}</dt>
+            <dd className={`text-lg font-bold ${warn ? 'text-red-600 dark:text-red-400' : 'text-surface-900 dark:text-surface-100'}`}>{value}</dd>
         </div>
     );
 }
@@ -135,10 +310,10 @@ function StartFormView({ form, setForm, spaces, preview, error, mode, starting, 
 
             {mode === 'delegated' && noManager.length > 0 && (
                 <p className="mt-3 text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
-                    담당자가 없는 공간이 있습니다({noManager.map((x) => x.name).join(', ')}). 그 공간은 관리자만 찍을 수 있습니다.
+                    담당자가 없는 공간이 있습니다({noManager.map((x) => x.name).join(', ')}). 그 공간은 관리자가 찍고 승인합니다.
                 </p>
             )}
-            {mode === 'solo' && <p className={`${sub} mt-3`}>조사 방식이 '혼자 조사'라 관리자만 찍습니다.</p>}
+            {mode === 'solo' && <p className={`${sub} mt-3`}>조사 방식이 '혼자 조사'라 관리자만 찍고, 제출·승인 없이 바로 마감합니다.</p>}
             {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
 
             <div className="flex flex-col sm:flex-row gap-2 justify-end mt-4">
@@ -147,70 +322,6 @@ function StartFormView({ form, setForm, spaces, preview, error, mode, starting, 
                     {starting ? '시작하는 중…' : `대상 ${(preview?.total ?? 0).toLocaleString('ko-KR')}건으로 시작`}
                 </button>
             </div>
-        </section>
-    );
-}
-
-interface OpenSurveyProps {
-    name: string; start: string; end: string; mode: 'delegated' | 'solo';
-    spaces: Space[]; spaceIds: string[]; includesUnassigned: boolean;
-    progress: Map<string, SpaceProgress>;
-    totals: { target: number; found: number; unregistered: number };
-    onRefresh: () => void;
-}
-
-function OpenSurvey({ name, start, end, mode, spaces, spaceIds, includesUnassigned, progress, totals, onRefresh }: OpenSurveyProps) {
-    const rows = [
-        ...spaces.filter((x) => spaceIds.includes(x.id)).sort((a, b) => a.order - b.order).map((x) => ({ key: x.id, name: x.name })),
-        ...(includesUnassigned ? [{ key: NO_SPACE_KEY, name: '공간 미지정' }] : []),
-    ];
-    const pct = totals.target > 0 ? Math.round((totals.found / totals.target) * 100) : 0;
-    return (
-        <section className={card} aria-labelledby="open-title">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                    <h2 id="open-title" className="text-lg font-semibold text-surface-900 dark:text-surface-100">{name}</h2>
-                    <p className={sub}>{start} ~ {end} · {MODE_LABEL[mode]}</p>
-                </div>
-                <div className="flex gap-2">
-                    <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3" onClick={onRefresh}>새로고침</button>
-                    <Link to="/employee/scan" className="btn-primary btn-sm min-h-[44px] px-4">직접 스캔</Link>
-                </div>
-            </div>
-            <p className="mt-3 text-sm text-surface-800 dark:text-surface-200">
-                전체 <strong>{totals.found.toLocaleString('ko-KR')}</strong> / {totals.target.toLocaleString('ko-KR')}건 확인 ({pct}%)
-                {totals.unregistered > 0 && <span className="text-red-700 dark:text-red-300"> · 미등록 {totals.unregistered}건</span>}
-            </p>
-            <div className="overflow-x-auto mt-3">
-                <table className="w-full text-sm">
-                    <thead className="text-left text-surface-500 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
-                        <tr>
-                            <th className="py-2 pr-3 font-medium">공간</th>
-                            <th className="py-2 pr-3 font-medium">확인</th>
-                            <th className="py-2 pr-3 font-medium">다른 곳에서 찾음</th>
-                            <th className="py-2 pr-3 font-medium">여기서 나온 예외</th>
-                            <th className="py-2 pr-3 font-medium">직접 입력</th>
-                            <th className="py-2 font-medium">상태 이상</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
-                        {rows.map((r) => {
-                            const p = progress.get(r.key);
-                            return (
-                                <tr key={r.key}>
-                                    <td className="py-2 pr-3 text-surface-900 dark:text-surface-100">{r.name}</td>
-                                    <td className="py-2 pr-3 whitespace-nowrap">{p?.found ?? 0} / {p?.target ?? 0}</td>
-                                    <td className="py-2 pr-3">{p?.elsewhere ?? 0}</td>
-                                    <td className="py-2 pr-3">{p?.foreign ?? 0}</td>
-                                    <td className="py-2 pr-3">{p?.manual ?? 0}</td>
-                                    <td className="py-2">{p?.issues ?? 0}</td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-            <p className={`${sub} mt-3`}>마감·결과 보고서는 다음 단계에서 열립니다.</p>
         </section>
     );
 }

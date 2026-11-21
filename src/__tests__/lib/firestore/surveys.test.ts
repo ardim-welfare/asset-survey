@@ -22,6 +22,7 @@ vi.mock('firebase/firestore', () => ({
     onSnapshot: vi.fn(() => () => { }),
     writeBatch: vi.fn(() => ({
         set: (ref: { path: string }, data: Record<string, unknown>) => ops.push({ kind: 'set', path: ref.path, data }),
+        update: (ref: { path: string }, data: Record<string, unknown>) => ops.push({ kind: 'update', path: ref.path, data }),
         commit: vi.fn().mockResolvedValue(undefined),
     })),
     setDoc: vi.fn(), updateDoc: vi.fn(), deleteDoc: vi.fn(),
@@ -31,7 +32,9 @@ vi.mock('../../../lib/firebase', () => ({ db: {}, auth: { currentUser: { uid: 'u
 vi.mock('../../../lib/sentry', () => ({ captureError: vi.fn() }));
 
 import * as fs from 'firebase/firestore';
-import { groupTargets, startSurvey, saveScan, peekScan, subscribeSpaceScans } from '../../../lib/firestore/surveys';
+import {
+    groupTargets, startSurvey, saveScan, peekScan, subscribeSpaceScans, submitSpace, reviewSpace, closeSurvey, setSyncTaskDone,
+} from '../../../lib/firestore/surveys';
 import type { Asset } from '../../../types/asset';
 
 const asset = (id: string, over: Partial<Asset> = {}): Asset => ({
@@ -62,9 +65,10 @@ describe('startSurvey', () => {
             spaceIds: ['sp-1', 'sp-2'], includesUnassigned: false, mode: 'delegated', assets: ASSETS,
         });
         expect(id).toBe('auto');
-        expect(ops.map((o) => o.path)).toEqual(['surveys/auto', 'surveyTargets/auto__sp-1', 'surveyTargets/auto__sp-2']);
+        expect(ops.map((o) => o.path)).toEqual(['surveys/auto', 'surveyEvents/auto', 'surveyTargets/auto__sp-1', 'surveyTargets/auto__sp-2']);
+        expect(ops[1].data).toMatchObject({ type: 'start', surveyId: 'auto', byUid: 'u1', reason: '대상 2건' });
         expect(ops[0].data).toMatchObject({ name: '2026 조사', status: 'open', targetCount: 2, mode: 'delegated', lastEditedByUid: 'u1' });
-        expect(ops[1].data).toMatchObject({ surveyId: 'auto', spaceId: 'sp-1', organizationId: 'org-A' });
+        expect(ops[2].data).toMatchObject({ surveyId: 'auto', spaceId: 'sp-1', organizationId: 'org-A' });
     });
 });
 
@@ -103,5 +107,56 @@ describe('조회', () => {
         expect(fs.where).toHaveBeenCalledWith('spaceId', '==', 'sp-1');
         expect(fs.where).toHaveBeenCalledWith('expectedSpaceId', '==', 'sp-1');
         stop();
+    });
+});
+
+describe('제출·검토 (기획서 F13)', () => {
+    it('제출은 회차__공간 문서를 처음 상태로 쓰고 이력을 남긴다', async () => {
+        await submitSpace('org-A', 'sv1', 'sp-1');
+        expect(ops.map((o) => `${o.kind} ${o.path}`)).toEqual(['set surveySubmissions/sv1__sp-1', 'set surveyEvents/auto']);
+        expect(ops[0].data).toMatchObject({
+            state: 'submitted', submittedByUid: 'u1', submittedAt: '__ts__', reviewedByUid: null, reviewedAt: null,
+            reason: '', selfApproved: false, proxyApproved: false,
+        });
+        expect(ops[1].data).toMatchObject({ type: 'submit', spaceId: 'sp-1' });
+    });
+
+    it('제출 없는 공간은 대신 승인(사유 포함), 자기 제출 승인은 본인 승인으로 표시', async () => {
+        await reviewSpace({ orgId: 'org-A', surveyId: 'sv1', spaceId: 'sp-1', decision: 'approved', reason: ' 담당자 휴가 ', current: null });
+        expect(ops[0]).toMatchObject({ kind: 'set', data: { state: 'approved', proxyApproved: true, selfApproved: false, reason: '담당자 휴가', submittedByUid: null, reviewedByUid: 'u1' } });
+        ops.length = 0;
+        await reviewSpace({ orgId: 'org-A', surveyId: 'sv1', spaceId: 'sp-2', decision: 'approved', reason: '혼자 담당', current: { submittedByUid: 'u1' } as never });
+        expect(ops[0]).toMatchObject({ kind: 'update', data: { state: 'approved', selfApproved: true, proxyApproved: false } });
+        expect(ops[1].data).toMatchObject({ type: 'approve', reason: '혼자 담당' });
+        ops.length = 0;
+        await reviewSpace({ orgId: 'org-A', surveyId: 'sv1', spaceId: 'sp-2', decision: 'rejected', reason: '다시', current: { submittedByUid: 'u9' } as never });
+        expect(ops[0].data).toMatchObject({ state: 'rejected', selfApproved: false });
+        expect(ops[1].data).toMatchObject({ type: 'reject' });
+    });
+});
+
+describe('마감·반영 목록 (기획서 F15·F16)', () => {
+    const summary = { target: 2, found: 1, missing: 1, otherSpace: 0, unregistered: 0, outOfScope: 0, damaged: 0, labelDamaged: 0, manual: 0 };
+    it('반영 목록을 먼저 쓰고, 마지막 배치에서 회차를 닫고 이력을 남긴다', async () => {
+        const tasks = Array.from({ length: 401 }, (_, i) => ({
+            id: `sv1__missing__a${i}`, kind: 'missing' as const, assetId: `a${i}`, code: `a${i}`, name: null, fromSpaceId: 'sp-1', toSpaceId: null, memo: '',
+        }));
+        await closeSurvey({ orgId: 'org-A', surveyId: 'sv1', tasks, spaceNames: { 'sp-1': '101호' }, summary });
+        expect(fs.writeBatch).toHaveBeenCalledTimes(3); // 400 + 1 + 마감
+        const last = ops.slice(-2);
+        expect(last[0]).toMatchObject({ kind: 'update', path: 'surveys/sv1', data: { status: 'closed', closedByUid: 'u1', spaceNames: { 'sp-1': '101호' }, summary } });
+        expect(last[1].data).toMatchObject({ type: 'close' });
+        expect(ops[0]).toMatchObject({ path: 'syncTasks/sv1__missing__a0', data: { organizationId: 'org-A', surveyId: 'sv1', done: false, doneByUid: null, doneAt: null } });
+        expect(ops[0].data).not.toHaveProperty('id');
+    });
+
+    it('반영 완료 체크·해제와 이력', async () => {
+        const task = { id: 't1', organizationId: 'org-A', surveyId: 'sv1' } as never;
+        await setSyncTaskDone(task, true);
+        expect(ops[0]).toMatchObject({ kind: 'update', path: 'syncTasks/t1', data: { done: true, doneByUid: 'u1', doneAt: '__ts__' } });
+        expect(ops[1].data).toMatchObject({ type: 'sync-done', targetId: 't1' });
+        ops.length = 0;
+        await setSyncTaskDone(task, false);
+        expect(ops[0].data).toEqual({ done: false, doneByUid: null, doneAt: null });
     });
 });

@@ -14,10 +14,15 @@ let role = 'employee';
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ user: { uid: 'emp1' }, userData: { organizationId: 'org-A', role } }) }));
 const showToast = vi.fn();
 vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ showToast }) }));
+const confirm = vi.fn();
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm }) }));
+let pushSubmission: (s: unknown) => void = () => { };
 vi.mock('../../lib/firestore', () => ({
     getOpenSurvey: vi.fn(), getSurveyTargets: vi.fn(), getSpaces: vi.fn(), findAssetByTag: vi.fn(), findAssetByCode: vi.fn(),
     peekScan: vi.fn(), saveScan: vi.fn(), updateScanCondition: vi.fn(), deleteScan: vi.fn(),
     subscribeSpaceScans: vi.fn(() => () => { }),
+    subscribeSubmission: vi.fn((_s: string, _p: string, cb: (s: unknown) => void) => { pushSubmission = cb; return () => { }; }),
+    submitSpace: vi.fn(),
 }));
 
 import * as fs from '../../lib/firestore';
@@ -119,5 +124,32 @@ describe('찍기', () => {
         expect(vi.mocked(fs.saveScan).mock.calls[0][0].draft.result).toBe('ok');
         vi.mocked(fs.saveScan).mock.calls[0][0].onRejected?.(new Error('denied'));
         expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/저장되지 않았습니다/), 'error');
+    });
+});
+
+describe('공간 제출 (기획서 F13)', () => {
+    it('확인하면 제출하고, 제출·승인된 공간은 스캔을 받지 않으며 반려되면 다시 받는다', async () => {
+        const h = await ready();
+        confirm.mockResolvedValueOnce(true);
+        await act(async () => { await h.result.current.submit(1); });
+        expect(fs.submitSpace).toHaveBeenCalledWith('org-A', 'sv1', 'sp-1');
+        expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/1건/) }));
+
+        act(() => pushSubmission({ state: 'submitted', spaceId: 'sp-1' }));
+        expect(h.result.current.locked).toBe(true);
+        await scan(h, '1', 'manual');
+        expect(fs.saveScan).not.toHaveBeenCalled();
+
+        act(() => pushSubmission({ state: 'rejected', reason: '다시 확인', spaceId: 'sp-1' }));
+        expect(h.result.current.locked).toBe(false);
+        await scan(h, '1', 'manual');
+        expect(fs.saveScan).toHaveBeenCalled();
+    });
+
+    it('취소하면 제출하지 않는다', async () => {
+        const h = await ready();
+        confirm.mockResolvedValueOnce(false);
+        await act(async () => { await h.result.current.submit(0); });
+        expect(fs.submitSpace).not.toHaveBeenCalled();
     });
 });

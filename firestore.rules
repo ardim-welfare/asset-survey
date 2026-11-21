@@ -312,6 +312,11 @@ service cloud.firestore {
     function surveyOf(surveyId) {
       return get(/databases/$(database)/documents/surveys/$(surveyId)).data;
     }
+    // 제출·승인된 공간은 스캔이 막힌다(반려되면 다시 열림) — 기획서 F13
+    function spaceLocked(surveyId, spaceId) {
+      let path = /databases/$(database)/documents/surveySubmissions/$(surveyId + '__' + spaceId);
+      return exists(path) && get(path).data.state != 'rejected';
+    }
     function isSpaceManager(spaceId, orgId) {
       let space = get(/databases/$(database)/documents/spaces/$(spaceId));
       return space != null
@@ -338,7 +343,19 @@ service cloud.firestore {
                     && request.resource.data.targetCount is int
                     && request.resource.data.lastEditedByUid == request.auth.uid
                     && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
+      // 마감 (기획서 F15) — 열린 회차를 닫기만 한다. '모든 공간 승인 뒤에만'은 화면이 확인한다
+      // (공간 수만큼 문서를 읽어야 해서 Rules로는 확인하지 않는다).
+      allow update: if isOrgAdmin(resource.data.organizationId)
+                    && resource.data.status == 'open'
+                    && request.resource.data.status == 'closed'
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'closedAt', 'closedByUid', 'spaceNames', 'summary', 'lastEditedByUid'])
+                    && request.resource.data.closedAt == request.time
+                    && request.resource.data.closedByUid == request.auth.uid
+                    && request.resource.data.lastEditedByUid == request.auth.uid
+                    && request.resource.data.spaceNames is map
+                    && request.resource.data.summary is map;
+      allow delete: if false;
     }
 
     // 조사 대상 — 회차를 시작할 때 같은 배치로 만들고 바꾸지 않는다
@@ -380,22 +397,145 @@ service cloud.firestore {
                && (isOrgAdmin(orgId) || (survey.mode == 'delegated' && isSpaceManager(spaceId, orgId)));
       }
 
-      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      // 없는 문서도 '없음'을 확인할 수 있어야 한다 — 다른 공간에서 이미 찍혔는지 미리 확인(peekScan)할 때
+      // 없는 문서를 읽으면 resource가 null이라 기관 확인이 거부로 끝난다. ID가 무작위(회차 ID 포함)라
+      // 없다는 사실로 알 수 있는 것은 없다.
+      allow read: if isSuperAdmin() || (isSignedIn() && resource == null) || isOrgMember(resource.data.organizationId);
       allow create: if isOrgMember(request.resource.data.organizationId)
                     && scanId.matches(request.resource.data.surveyId + '__.+')
                     && canScanIn(surveyOf(request.resource.data.surveyId), request.resource.data.organizationId, request.resource.data.spaceId)
+                    && !spaceLocked(request.resource.data.surveyId, request.resource.data.spaceId)
                     && scanValid(request.resource.data)
                     && request.resource.data.scannedByUid == request.auth.uid
                     && request.resource.data.scannedAt == request.time;
       // 나중에 고칠 수 있는 것은 물건 상태·메모뿐 (기획서 F12)
       allow update: if isOrgMember(resource.data.organizationId)
                     && canScanIn(surveyOf(resource.data.surveyId), resource.data.organizationId, resource.data.spaceId)
+                    && !spaceLocked(resource.data.surveyId, resource.data.spaceId)
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['condition', 'memo', 'updatedAt', 'lastEditedByUid'])
                     && scanValid(request.resource.data);
       // 잘못 찍은 것 지우기 — 열린 회차에서 관리자 또는 찍은 사람 본인
       allow delete: if isOrgMember(resource.data.organizationId)
                     && surveyOf(resource.data.surveyId).status == 'open'
+                    && !spaceLocked(resource.data.surveyId, resource.data.spaceId)
                     && (isOrgAdmin(resource.data.organizationId) || resource.data.scannedByUid == request.auth.uid);
+    }
+
+    // 공간 제출·승인 (기획서 F13) — '나눠서 조사' 회차만. 문서 ID = 회차__공간
+    match /surveySubmissions/{subId} {
+      function subValid(d) {
+        return d.keys().hasOnly(['organizationId', 'surveyId', 'spaceId', 'state', 'submittedByUid', 'submittedAt',
+                                 'reviewedByUid', 'reviewedAt', 'reason', 'selfApproved', 'proxyApproved',
+                                 'lastEditedByUid', 'updatedAt'])
+               && subId == d.surveyId + '__' + d.spaceId
+               && d.state in ['submitted', 'approved', 'rejected']
+               && d.reason is string && d.reason.size() <= 200
+               && d.selfApproved is bool && d.proxyApproved is bool
+               && d.lastEditedByUid == request.auth.uid
+               && d.updatedAt == request.time;
+      }
+      function delegatedOpen(d) {
+        let survey = surveyOf(d.surveyId);
+        return survey.organizationId == d.organizationId
+               && survey.status == 'open'
+               && survey.mode == 'delegated'
+               && survey.spaceIds.hasAny([d.spaceId]);
+      }
+      // 제출(처음·다시) — 그 공간 담당자 또는 관리자 본인 이름으로
+      function isSubmit(d) {
+        return d.state == 'submitted'
+               && (isOrgAdmin(d.organizationId) || isSpaceManager(d.spaceId, d.organizationId))
+               && d.submittedByUid == request.auth.uid
+               && d.submittedAt == request.time
+               && d.reviewedByUid == null && d.reviewedAt == null
+               && d.reason == '' && d.selfApproved == false && d.proxyApproved == false;
+      }
+
+      // 직원 화면은 제출 문서가 생기기 전부터 구독한다 — 없는 문서를 읽으면 resource가 null이라
+      // 기관 확인이 거부로 끝나 구독이 끊긴다(제출해도 화면이 잠기지 않던 문제, 2026-11-21 5단계 브라우저 확인에서 발견).
+      allow read: if isSuperAdmin() || (isSignedIn() && resource == null) || isOrgMember(resource.data.organizationId);
+      allow create: if isOrgMember(request.resource.data.organizationId)
+                    && subValid(request.resource.data)
+                    && delegatedOpen(request.resource.data)
+                    && (isSubmit(request.resource.data)
+                        // 대신 승인 — 제출 없이 관리자가 승인, 사유 필수
+                        || (isOrgAdmin(request.resource.data.organizationId)
+                            && request.resource.data.state == 'approved'
+                            && request.resource.data.proxyApproved == true
+                            && request.resource.data.selfApproved == false
+                            && request.resource.data.submittedByUid == null
+                            && request.resource.data.reviewedByUid == request.auth.uid
+                            && request.resource.data.reviewedAt == request.time
+                            && request.resource.data.reason.size() > 0));
+      allow update: if isOrgMember(resource.data.organizationId)
+                    && subValid(request.resource.data)
+                    && delegatedOpen(request.resource.data)
+                    && request.resource.data.organizationId == resource.data.organizationId
+                    && request.resource.data.surveyId == resource.data.surveyId
+                    && request.resource.data.spaceId == resource.data.spaceId
+                    && (
+                      // 반려된 공간 다시 제출
+                      (resource.data.state == 'rejected' && isSubmit(request.resource.data))
+                      // 검토 — 제출된 것만, 관리자가
+                      || (isOrgAdmin(resource.data.organizationId)
+                          && resource.data.state == 'submitted'
+                          && request.resource.data.submittedByUid == resource.data.submittedByUid
+                          && request.resource.data.submittedAt == resource.data.submittedAt
+                          && request.resource.data.reviewedByUid == request.auth.uid
+                          && request.resource.data.reviewedAt == request.time
+                          && request.resource.data.proxyApproved == false
+                          && (
+                            // 반려 — 사유 필수
+                            (request.resource.data.state == 'rejected'
+                              && request.resource.data.selfApproved == false
+                              && request.resource.data.reason.size() > 0)
+                            // 승인 — 자기 제출을 승인하면 본인 승인(사유 필수)
+                            || (request.resource.data.state == 'approved'
+                              && request.resource.data.selfApproved == (resource.data.submittedByUid == request.auth.uid)
+                              && (request.resource.data.selfApproved == false || request.resource.data.reason.size() > 0))
+                          ))
+                    );
+      allow delete: if false;
+    }
+
+    // 조사 이력 (기획서 F17) — 생성만. 직원은 제출 기록만 남긴다
+    match /surveyEvents/{eventId} {
+      allow read: if isSuperAdmin() || isOrgAdmin(resource.data.organizationId);
+      allow create: if isOrgMember(request.resource.data.organizationId)
+                    && request.resource.data.keys().hasOnly(['organizationId', 'surveyId', 'spaceId', 'type', 'reason',
+                                                             'targetId', 'byUid', 'at'])
+                    && getAfter(/databases/$(database)/documents/surveys/$(request.resource.data.surveyId)).data.organizationId
+                       == request.resource.data.organizationId
+                    && request.resource.data.type in ['start', 'submit', 'approve', 'reject', 'close', 'sync-done', 'sync-undone']
+                    && (request.resource.data.type == 'submit' || isOrgAdmin(request.resource.data.organizationId))
+                    && request.resource.data.reason is string && request.resource.data.reason.size() <= 200
+                    && request.resource.data.byUid == request.auth.uid
+                    && request.resource.data.at == request.time;
+      allow update, delete: if false;
+    }
+
+    // 희망이음 반영 목록 (기획서 F16) — 마감할 때 관리자가 만들고, 처리 완료만 체크한다
+    match /syncTasks/{taskId} {
+      function doneValid(d) {
+        return d.done is bool
+               && ((d.done == true && d.doneByUid == request.auth.uid && d.doneAt == request.time)
+                   || (d.done == false && d.doneByUid == null && d.doneAt == null));
+      }
+      allow read: if isSuperAdmin() || isOrgAdmin(resource.data.organizationId);
+      allow create: if isOrgAdmin(request.resource.data.organizationId)
+                    && request.resource.data.keys().hasOnly(['organizationId', 'surveyId', 'kind', 'assetId', 'code', 'name',
+                                                             'fromSpaceId', 'toSpaceId', 'memo', 'done', 'doneByUid', 'doneAt'])
+                    && taskId.matches(request.resource.data.surveyId + '__.+')
+                    && surveyOf(request.resource.data.surveyId).organizationId == request.resource.data.organizationId
+                    && surveyOf(request.resource.data.surveyId).status == 'open'
+                    && request.resource.data.kind in ['move', 'dispose', 'missing', 'register', 'relabel']
+                    && request.resource.data.done == false
+                    && request.resource.data.doneByUid == null && request.resource.data.doneAt == null;
+      // 처리 완료 체크만 바꾼다(같은 내용을 다시 쓰는 마감 재시도도 여기로 통과한다)
+      allow update: if isOrgAdmin(resource.data.organizationId)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['done', 'doneByUid', 'doneAt'])
+                    && doneValid(request.resource.data);
+      allow delete: if false;
     }
 
     // === 알림 ===

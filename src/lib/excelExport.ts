@@ -8,6 +8,7 @@
 import { formatTimestampFull } from './dateUtils';
 import { recordExport } from './audit/recordExport';
 import type { AuditLog } from '../types/auditLog';
+import { buildReportTables, reportHeader, type ReportContext } from './survey/reportTables';
 import {
     ACTOR_SOURCE_NOTE, describeChangedFields, describeEvent, describeExportTarget,
 } from './auditLogLabels';
@@ -71,5 +72,30 @@ export async function downloadAuditLogsExcel(
 
     // 접속기록 — 반출 사실만 남긴다(형식·대상·건수). 데이터 내용은 담지 않는다.
     recordExport('excel', 'auditLogs', logs.length);
+    return true;
+}
+
+/** 엑셀 시트 이름 — 31자, 금지 문자 제거 */
+const sheetName = (title: string) => title.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
+
+/**
+ * 재물조사 결과 보고서 엑셀 (기획서 F15) — PDF와 같은 표를 시트마다 담는다.
+ * 첫 시트 '종합' 위에 회차 정보를 적는다.
+ */
+export async function downloadSurveyReportExcel(ctx: ReportContext, orgName: string, filename: string): Promise<boolean> {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    const tables = buildReportTables(ctx);
+    tables.forEach((t, i) => {
+        const head: Array<Array<string | number>> = i === 0
+            ? [['기관명', orgName], ...reportHeader(ctx), []]
+            : [];
+        const aoa = [...head, t.columns, ...(t.rows.length > 0 ? t.rows : [[t.empty]])];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = t.columns.map((c) => ({ wch: Math.max(10, c.length * 2 + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, sheetName(t.title));
+    });
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+    recordExport('excel', 'surveyReport', ctx.report.summary.target);
     return true;
 }

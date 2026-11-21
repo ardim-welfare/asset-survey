@@ -1,20 +1,26 @@
 /**
- * useSurveyAdmin — 관리자 조사 회차 (기획서 F10)
+ * useSurveyAdmin — 관리자 재물조사 (기획서 F10·F13·F14·F15)
  *
- * 회차 목록, 새 회차 시작(이름·기간·대상 공간), 진행 중 회차의 공간별 진행.
- * 진행 숫자는 이 화면을 열 때·[새로고침]할 때 한 번 읽는다(실시간 현황판은 5단계 F14).
+ * - 새 회차 시작(이름·기간·대상 공간 → 대상 고정)
+ * - 진행 중 회차의 현황판: 스캔·제출 상태를 실시간으로 받아 화면에서 계산한다(사용자 결정 2026-11-21 —
+ *   현황판을 연 동안만 스캔 수만큼 읽는다. 기관이 늘면 서버 집계로 바꾼다).
+ * - 공간 제출 승인·반려, 제출 없는 공간 대신 승인(사유 필수)
+ * - 마감: '나눠서 조사'는 대상 공간이 모두 승인돼야 한다(사용자 결정 2026-11-21). 마감하면 희망이음 반영
+ *   목록을 만들고 공간 이름·요약을 회차에 남긴다.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './useAuth';
 import { useConfirm } from './useConfirm';
 import { useToast } from './useToast';
 import {
-    getSurveys, getSurveyTargets, getScans, getSpaces, getAssets, getOrganization, startSurvey, groupTargets,
+    getSurveys, getSurveyTargets, getSpaces, getAssets, getOrganization, startSurvey, groupTargets,
+    subscribeSurveyScans, subscribeSubmissions, reviewSpace, closeSurvey, getOrganizationMembers,
 } from '../lib/firestore';
 import { progressBySpace, type SpaceProgress } from '../lib/survey/judge';
+import { buildReport, buildSyncTasks, closeBlockers } from '../lib/survey/report';
 import { DEFAULT_SURVEY_MODE, SURVEY_NAME_MAX, NO_SPACE_KEY } from '../schemas';
 import { toLocalDateStr } from '../lib/dateUtils';
-import type { Survey, SurveyTarget, Scan } from '../types/survey';
+import type { Survey, SurveyTarget, Scan, SurveySubmission } from '../types/survey';
 import type { Asset } from '../types/asset';
 import type { Space } from '../types/space';
 import type { SurveyMode } from '../types';
@@ -49,30 +55,42 @@ export function validateStartForm(f: StartForm): string | null {
     return null;
 }
 
+/** 공간 이름 표 — 마감 때 회차에 남긴다(보고서가 나중에도 마감 시점 이름으로 나오게) */
+export function spaceNamesFor(survey: Pick<Survey, 'spaceIds' | 'includesUnassigned'>, spaces: Space[]): Record<string, string> {
+    const names: Record<string, string> = {};
+    for (const id of survey.spaceIds) names[id] = spaces.find((s) => s.id === id)?.name ?? '(지운 공간)';
+    if (survey.includesUnassigned) names[NO_SPACE_KEY] = '공간 미지정';
+    return names;
+}
+
+/** 검토 요청 — 승인·반려·대신 승인 */
+export interface ReviewRequest {
+    spaceId: string;
+    decision: 'approved' | 'rejected';
+    reason: string;
+}
+
 export default function useSurveyAdmin() {
-    const { userData } = useAuth();
+    const { user, userData } = useAuth();
     const { confirm } = useConfirm();
     const { showToast } = useToast();
     const orgId = userData?.organizationId ?? null;
+    const uid = user?.uid ?? null;
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [assets, setAssets] = useState<Asset[]>([]);
     const [mode, setMode] = useState<SurveyMode>(DEFAULT_SURVEY_MODE);
     const [targets, setTargets] = useState<SurveyTarget[]>([]);
     const [scans, setScans] = useState<Scan[]>([]);
+    const [submissions, setSubmissions] = useState<SurveySubmission[]>([]);
+    const [names, setNames] = useState<Map<string, string>>(new Map());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [form, setForm] = useState<StartForm | null>(null);
     const [starting, setStarting] = useState(false);
+    const [closing, setClosing] = useState(false);
 
     const open = surveys.find((s) => s.status === 'open') ?? null;
-
-    const loadProgress = useCallback(async (survey: Survey | null) => {
-        if (!orgId || !survey) { setTargets([]); setScans([]); return; }
-        const [t, s] = await Promise.all([getSurveyTargets(orgId, survey.id), getScans(orgId, survey.id)]);
-        setTargets(t);
-        setScans(s);
-    }, [orgId]);
 
     const load = useCallback(async () => {
         if (!orgId) return;
@@ -83,15 +101,29 @@ export default function useSurveyAdmin() {
             setSurveys(list);
             setSpaces(sp);
             setMode(org?.surveyMode ?? DEFAULT_SURVEY_MODE);
-            await loadProgress(list.find((s) => s.status === 'open') ?? null);
+            const current = list.find((s) => s.status === 'open');
+            setTargets(current ? await getSurveyTargets(orgId, current.id) : []);
+            // 이름은 제출·승인한 사람 표시용 — 못 읽어도 화면은 그린다
+            getOrganizationMembers(orgId)
+                .then((members) => setNames(new Map(members.map((m) => [m.id, m.name || m.email || '(이름 없음)']))))
+                .catch(() => { });
         } catch {
             setError(true);
         } finally {
             setLoading(false);
         }
-    }, [orgId, loadProgress]);
+    }, [orgId]);
 
     useEffect(() => { void load(); }, [load]);
+
+    // 현황판 — 진행 중 회차의 스캔·제출을 실시간으로
+    const openId = open?.id ?? null;
+    useEffect(() => {
+        if (!orgId || !openId) { setScans([]); setSubmissions([]); return; }
+        const a = subscribeSurveyScans(orgId, openId, setScans, () => setError(true));
+        const b = subscribeSubmissions(orgId, openId, setSubmissions, () => setError(true));
+        return () => { a(); b(); };
+    }, [orgId, openId]);
 
     /** 새 회차 양식 열기 — 대상 수를 보여 주려고 재물을 이때 읽는다 */
     const openForm = useCallback(async () => {
@@ -138,18 +170,74 @@ export default function useSurveyAdmin() {
         }
     }, [orgId, form, formError, starting, preview, open, confirm, mode, assets, showToast, load]);
 
-    const progress = useMemo(() => progressBySpace(targets, scans), [targets, scans]);
+    const progress = useMemo<Map<string, SpaceProgress>>(() => progressBySpace(targets, scans), [targets, scans]);
     const totals = useMemo(() => {
         let target = 0; let found = 0;
         for (const p of progress.values()) { target += p.target; found += p.found; }
         return { target, found, unregistered: scans.filter((s) => s.result === 'unregistered').length };
     }, [progress, scans]);
+    const submissionOf = useMemo(() => new Map(submissions.map((s) => [s.spaceId, s])), [submissions]);
+
+    /** 최근 스캔(현황판) — 아직 전송 전 기록은 맨 위 */
+    const recent = useMemo(() => {
+        const time = (s: Scan) => {
+            const ts = s.scannedAt as { toMillis?: () => number } | undefined;
+            return typeof ts?.toMillis === 'function' ? ts.toMillis() : Number.MAX_SAFE_INTEGER;
+        };
+        return [...scans].sort((a, b) => time(b) - time(a)).slice(0, 8);
+    }, [scans]);
+
+    /** 승인·반려·대신 승인. 사유가 필요한 경우(반려·본인 승인·대신 승인)는 화면이 받아 넘긴다 */
+    const review = useCallback(async ({ spaceId, decision, reason }: ReviewRequest): Promise<boolean> => {
+        if (!orgId || !open) return false;
+        const current = submissionOf.get(spaceId) ?? null;
+        const needsReason = decision === 'rejected' || !current || current.submittedByUid === uid;
+        if (needsReason && !reason.trim()) { showToast('사유를 적어 주세요.', 'error'); return false; }
+        try {
+            await reviewSpace({ orgId, surveyId: open.id, spaceId, decision, reason, current });
+            showToast(decision === 'approved' ? '승인했습니다.' : '반려했습니다. 공간 담당자 화면에 사유가 보입니다.', 'success');
+            return true;
+        } catch {
+            showToast('처리하지 못했습니다. 화면을 새로 열어 상태를 확인해 주세요.', 'error');
+            return false;
+        }
+    }, [orgId, open, submissionOf, uid, showToast]);
+
+    const blockers = useMemo(() => (open ? closeBlockers(open.mode, open.spaceIds, submissions) : []), [open, submissions]);
+
+    /** 마감 — 보고서·반영 목록을 만들고 회차를 닫는다. @returns 마감한 회차 ID */
+    const close = useCallback(async (): Promise<string | null> => {
+        if (!orgId || !open || closing) return null;
+        if (blockers.length > 0) { showToast('승인되지 않은 공간이 있어 마감할 수 없습니다.', 'error'); return null; }
+        const spaceNames = spaceNamesFor(open, spaces);
+        const report = buildReport(targets, scans, submissions, Object.keys(spaceNames));
+        const tasks = buildSyncTasks(open.id, report);
+        const ok = await confirm({
+            title: '조사를 마감할까요?',
+            message: `확인 ${report.summary.found}/${report.summary.target}건, 미발견 ${report.summary.missing}건. 마감하면 더는 찍거나 고칠 수 없고, 희망이음 반영 목록 ${tasks.length}건이 만들어집니다.`,
+            confirmText: '마감',
+            confirmColor: 'danger',
+        });
+        if (!ok) return null;
+        setClosing(true);
+        try {
+            await closeSurvey({ orgId, surveyId: open.id, tasks, spaceNames, summary: report.summary });
+            showToast('마감했습니다. 결과 보고서를 확인하세요.', 'success');
+            const id = open.id;
+            await load();
+            return id;
+        } catch {
+            showToast('마감하지 못했습니다. 다시 마감하면 이어서 처리됩니다.', 'error');
+            return null;
+        } finally {
+            setClosing(false);
+        }
+    }, [orgId, open, closing, blockers, spaces, targets, scans, submissions, confirm, showToast, load]);
 
     return {
-        orgId, surveys, spaces, mode, open, loading, error, reload: load,
-        refreshProgress: () => loadProgress(open),
+        orgId, uid, surveys, spaces, mode, open, loading, error, reload: load,
         form, setForm, openForm, closeForm: () => setForm(null), preview, formError, start, starting,
-        progress, totals, scans,
+        progress, totals, scans, recent, submissions, submissionOf, names, review, blockers, close, closing,
     };
 }
 

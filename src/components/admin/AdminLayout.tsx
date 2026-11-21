@@ -21,6 +21,7 @@ const AssetImport = lazyWithRetry(() => import('./AssetImport'));
 const AssetList = lazyWithRetry(() => import('./AssetList'));
 const AssetDetail = lazyWithRetry(() => import('./AssetDetail'));
 const SurveyManager = lazyWithRetry(() => import('./SurveyManager'));
+const SurveyReport = lazyWithRetry(() => import('./SurveyReport'));
 const Settings = lazyWithRetry(() => import('./Settings'));
 const AuditLogViewer = lazyWithRetry(() => import('./AuditLogViewer'));
 
@@ -268,6 +269,7 @@ export default function AdminLayout() {
                                 <Route path="dashboard" element={<AdminDashboard />} />
                                 <Route path="spaces" element={<SpaceManager />} />
                                 <Route path="surveys" element={<SurveyManager />} />
+                                <Route path="surveys/:surveyId" element={<SurveyReport />} />
                                 <Route path="assets" element={<AssetList />} />
                                 <Route path="assets/:assetId" element={<AssetDetail />} />
                                 <Route path="import" element={<AssetImport />} />

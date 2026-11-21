@@ -118,6 +118,7 @@ export type { CommitImportInput } from './assets';
 // 조사 회차·대상·스캔 — 기획서 F10~F12
 export {
     getSurveys,
+    getSurvey,
     getOpenSurvey,
     getSurveyTargets,
     groupTargets,
@@ -128,5 +129,16 @@ export {
     deleteScan,
     getScans,
     subscribeSpaceScans,
+    subscribeSurveyScans,
+    submissionId,
+    subscribeSubmissions,
+    subscribeSubmission,
+    getSubmissions,
+    submitSpace,
+    reviewSpace,
+    closeSurvey,
+    getSyncTasks,
+    setSyncTaskDone,
+    getSurveyEvents,
 } from './surveys';
 export type { StartSurveyInput, SaveScanInput } from './surveys';

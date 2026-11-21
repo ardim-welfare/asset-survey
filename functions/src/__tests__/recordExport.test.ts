@@ -170,6 +170,11 @@ describe('recordExport — 기록 형식', () => {
         expect(lastEntry()).toMatchObject({ exportFormat: 'pdf', exportDataset: 'auditLogs', recordCount: 7 });
     });
 
+    it('재물조사 결과 보고서 반출도 받는다(기획서 F15)', async () => {
+        await call({ format: 'excel', dataset: 'surveyReport', recordCount: 527 });
+        expect(lastEntry()).toMatchObject({ exportFormat: 'excel', exportDataset: 'surveyReport', recordCount: 527 });
+    });
+
     it('기관이 없는 계정은 __system__으로 남긴다', async () => {
         mockUserGet.mockResolvedValue({ data: () => ({}) });
         await call();

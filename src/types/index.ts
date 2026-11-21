@@ -17,4 +17,5 @@ export type {
 } from './asset';
 export type {
     Survey, SurveyStatus, SurveyTarget, SurveyTargetItem, Scan, ScanResult, ScanMethod, ScanCondition,
+    SurveySubmission, SubmissionState, SurveyEvent, SurveyEventType, SyncTask, SyncTaskKind, SurveySummary,
 } from './survey';

@@ -9,6 +9,9 @@ export const SCAN_MEMO_MAX = 200;
 /** 공간이 정해지지 않은 재물 묶음의 키(조사 대상 문서 ID 끝). 관리자만 조사한다 */
 export const NO_SPACE_KEY = '_none';
 
+/** 사유 길이 상한(반려·대신 승인·본인 승인) — firestore.rules와 같은 값 */
+export const REASON_MAX = 200;
+
 /**
  * 조사 회차 (surveys/{id}) — 기획서 F10
  *
@@ -16,7 +19,8 @@ export const NO_SPACE_KEY = '_none';
  * - `mode`: 시작 시점의 조사 방식. 회차 도중 설정을 바꿔도 이 회차는 시작한 방식대로 간다.
  *   '혼자 조사'면 관리자만 스캔한다(Rules).
  * - `spaceIds`: 대상 공간. 공간 미지정 재물을 넣었으면 `includesUnassigned`.
- * - 마감(`closed`)은 5단계에서 연다. 지금은 만들기만 된다.
+ * - 마감(`closed`)은 관리자가 한다(5단계). '나눠서 조사'는 모든 공간이 승인된 뒤에만(화면이 막음).
+ *   마감하면 스캔·제출이 모두 막힌다(Rules).
  */
 export const surveyStatusSchema = z.enum(['open', 'closed']);
 export const surveySchema = z.object({
@@ -33,6 +37,22 @@ export const surveySchema = z.object({
     targetCount: z.number().catch(0),
     lastEditedByUid: z.string().catch(''),
     createdAt: timestampSchema.optional().catch(undefined),
+    /** 마감 (기획서 F15) — 마감한 사람·시각과, 보고서가 나중에도 마감 시점 그대로 나오도록 남긴 공간 이름 */
+    closedAt: timestampSchema.optional().catch(undefined),
+    closedByUid: z.string().optional().catch(undefined),
+    spaceNames: z.record(z.string(), z.string()).optional().catch(undefined),
+    /** 마감 시점 요약 숫자(목록 화면용) */
+    summary: z.object({
+        target: z.number().catch(0),
+        found: z.number().catch(0),
+        missing: z.number().catch(0),
+        otherSpace: z.number().catch(0),
+        unregistered: z.number().catch(0),
+        outOfScope: z.number().catch(0),
+        damaged: z.number().catch(0),
+        labelDamaged: z.number().catch(0),
+        manual: z.number().catch(0),
+    }).optional().catch(undefined),
 });
 
 /** 조사 대상 한 건 — 시작 시점의 재물 값 */
@@ -92,6 +112,70 @@ export const scanSchema = z.object({
     scannedAt: timestampSchema.optional().catch(undefined),
     lastEditedByUid: z.string().catch(''),
     updatedAt: timestampSchema.optional().catch(undefined),
+});
+
+/**
+ * 공간 제출·승인 (surveySubmissions/{surveyId}__{spaceId}) — 기획서 F13, '나눠서 조사' 회차만
+ *
+ * 흐름: 공간 담당 제출(submitted) → 관리자 승인(approved)·반려(rejected, 사유 필수) → 반려면 다시 제출.
+ * 제출·승인된 공간은 스캔이 막힌다(Rules). 반려되면 다시 열린다.
+ * - `selfApproved`: 제출한 사람이 승인 — 사유 필수, 보고서에 '본인 승인'.
+ * - `proxyApproved`: 제출 없이 관리자가 대신 승인(담당자 부재 등) — 사유 필수, 보고서에 '대신 승인'.
+ */
+export const submissionStateSchema = z.enum(['submitted', 'approved', 'rejected']);
+export const surveySubmissionSchema = z.object({
+    organizationId: z.string().catch(''),
+    surveyId: z.string().catch(''),
+    spaceId: z.string().catch(''),
+    state: submissionStateSchema.catch('submitted'),
+    submittedByUid: z.string().nullable().catch(null),
+    submittedAt: timestampSchema.nullable().optional().catch(null),
+    reviewedByUid: z.string().nullable().catch(null),
+    reviewedAt: timestampSchema.nullable().optional().catch(null),
+    /** 반려 사유 또는 본인·대신 승인 사유 */
+    reason: z.string().catch(''),
+    selfApproved: z.boolean().catch(false),
+    proxyApproved: z.boolean().catch(false),
+    lastEditedByUid: z.string().catch(''),
+    updatedAt: timestampSchema.optional().catch(undefined),
+});
+
+/**
+ * 조사 이력 (surveyEvents/{id}) — 기획서 F17. 생성만 한다.
+ * 누가 언제 조사를 시작·제출·승인·반려·마감하고 반영 목록을 처리했는지(사유 포함).
+ */
+export const surveyEventTypeSchema = z.enum(['start', 'submit', 'approve', 'reject', 'close', 'sync-done', 'sync-undone']);
+export const surveyEventSchema = z.object({
+    organizationId: z.string().catch(''),
+    surveyId: z.string().catch(''),
+    spaceId: z.string().nullable().catch(null),
+    type: surveyEventTypeSchema.catch('start'),
+    reason: z.string().catch(''),
+    /** 반영 목록 항목 등 대상 ID */
+    targetId: z.string().nullable().catch(null),
+    byUid: z.string().catch(''),
+    at: timestampSchema.optional().catch(undefined),
+});
+
+/**
+ * 희망이음 반영 목록 (syncTasks/{surveyId}__{kind}__{재물 또는 코드}) — 기획서 F16
+ * 마감할 때 조사 결과에서 만든다. "희망이음에 옮겨 적을 일"과 라벨 다시 붙이기. 처리 완료만 체크한다.
+ */
+export const syncTaskKindSchema = z.enum(['move', 'dispose', 'missing', 'register', 'relabel']);
+export const syncTaskSchema = z.object({
+    organizationId: z.string().catch(''),
+    surveyId: z.string().catch(''),
+    kind: syncTaskKindSchema.catch('move'),
+    assetId: z.string().nullable().catch(null),
+    code: z.string().catch(''),
+    name: z.string().nullable().catch(null),
+    /** 위치 변경: 목록상 공간 → 찾은 공간 (공간 ID, 미지정은 null) */
+    fromSpaceId: z.string().nullable().catch(null),
+    toSpaceId: z.string().nullable().catch(null),
+    memo: z.string().catch(''),
+    done: z.boolean().catch(false),
+    doneByUid: z.string().nullable().catch(null),
+    doneAt: timestampSchema.nullable().optional().catch(null),
 });
 
 export type SurveySchemaType = z.infer<typeof surveySchema>;

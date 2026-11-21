@@ -35,6 +35,8 @@ const DATASETS = new Set([
     // 이 반출도 개인정보 반출이다 — 반출 사실이 다시 접속기록에 남는 자기 참조가 되는데,
     // 점검 관점에서는 오히려 필요하다("점검 기록을 누가 가져갔는가"도 추적 대상이다).
     "auditLogs",
+    // 재물조사 결과 보고서(기획서 F15) — 제출·승인한 사람 이름을 담는다. 금액은 없다.
+    "surveyReport",
 ]);
 
 interface RecordExportPayload {

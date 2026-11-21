@@ -12,17 +12,35 @@ import {
     type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { createZodConverter, surveySchema, surveyTargetSchema, scanSchema, NO_SPACE_KEY } from '../../schemas';
+import {
+    createZodConverter, surveySchema, surveyTargetSchema, scanSchema, surveySubmissionSchema, surveyEventSchema, syncTaskSchema,
+    NO_SPACE_KEY,
+} from '../../schemas';
 import { captureError } from '../sentry';
 import { actorStamp } from './actorStamp';
 import type { Asset } from '../../types/asset';
-import type { Survey, SurveyTarget, SurveyTargetItem, Scan, ScanCondition, ScanMethod } from '../../types/survey';
+import type {
+    Survey, SurveyTarget, SurveyTargetItem, Scan, ScanCondition, ScanMethod, SurveySubmission, SurveyEvent,
+    SurveyEventType, SyncTask, SurveySummary,
+} from '../../types/survey';
+import type { SyncTaskDraft } from '../survey/report';
 import type { SurveyMode } from '../../types';
 import type { ScanDraft } from '../survey/judge';
 
 const surveyConverter = createZodConverter(surveySchema);
 const targetConverter = createZodConverter(surveyTargetSchema);
 const scanConverter = createZodConverter(scanSchema);
+const submissionConverter = createZodConverter(surveySubmissionSchema);
+const eventConverter = createZodConverter(surveyEventSchema);
+const syncConverter = createZodConverter(syncTaskSchema);
+
+/** 조사 이력 한 건(배치에 넣을 내용) — 기획서 F17 */
+function eventData(orgId: string, surveyId: string, type: SurveyEventType, extra: { spaceId?: string | null; reason?: string; targetId?: string | null } = {}) {
+    return {
+        organizationId: orgId, surveyId, spaceId: extra.spaceId ?? null, type, reason: extra.reason ?? '',
+        targetId: extra.targetId ?? null, byUid: actorStamp().lastEditedByUid ?? '', at: serverTimestamp(),
+    };
+}
 
 /** 기관의 회차(최근 순) */
 export const getSurveys = async (orgId: string, max = 20): Promise<Survey[]> => {
@@ -36,6 +54,17 @@ export const getSurveys = async (orgId: string, max = 20): Promise<Survey[]> => 
         return snap.docs.map((d) => d.data() as Survey);
     } catch (error) {
         captureError(error, { context: 'getSurveys', orgId });
+        throw error;
+    }
+};
+
+/** 회차 한 건 — 없으면 null */
+export const getSurvey = async (surveyId: string): Promise<Survey | null> => {
+    try {
+        const snap = await getDoc(doc(db, 'surveys', surveyId).withConverter(surveyConverter));
+        return snap.exists() ? (snap.data() as Survey) : null;
+    } catch (error) {
+        captureError(error, { context: 'getSurvey', surveyId });
         throw error;
     }
 };
@@ -108,6 +137,7 @@ export const startSurvey = async (input: StartSurveyInput): Promise<string> => {
         spaceIds: input.spaceIds, includesUnassigned: input.includesUnassigned, mode: input.mode, status: 'open',
         targetCount, lastEditedByUid: stamp.lastEditedByUid ?? '', createdAt: now,
     });
+    batch.set(doc(collection(db, 'surveyEvents')), eventData(input.orgId, ref.id, 'start', { reason: `대상 ${targetCount}건` }));
     for (const [key, items] of groups) {
         batch.set(doc(db, 'surveyTargets', `${ref.id}__${key}`), {
             organizationId: input.orgId, surveyId: ref.id, spaceId: key === NO_SPACE_KEY ? null : key, items,
@@ -225,3 +255,181 @@ export function subscribeSpaceScans(
     const b = sub('expectedSpaceId', mine);
     return () => { a(); b(); };
 }
+
+/** 회차의 스캔 전부를 실시간으로(관리자 현황판, 기획서 F14) */
+export function subscribeSurveyScans(orgId: string, surveyId: string, onChange: (scans: Scan[]) => void, onError?: (e: unknown) => void): Unsubscribe {
+    return onSnapshot(
+        query(collection(db, 'scans').withConverter(scanConverter), where('organizationId', '==', orgId), where('surveyId', '==', surveyId)),
+        (snap) => onChange(snap.docs.map((d) => d.data() as Scan)),
+        (error) => { captureError(error, { context: 'subscribeSurveyScans' }); onError?.(error); },
+    );
+}
+
+// ── 공간 제출·승인 (기획서 F13) ──
+
+export const submissionId = (surveyId: string, spaceId: string) => `${surveyId}__${spaceId}`;
+
+/** 회차의 제출 상태 전부를 실시간으로 */
+export function subscribeSubmissions(orgId: string, surveyId: string, onChange: (list: SurveySubmission[]) => void, onError?: (e: unknown) => void): Unsubscribe {
+    return onSnapshot(
+        query(collection(db, 'surveySubmissions').withConverter(submissionConverter), where('organizationId', '==', orgId), where('surveyId', '==', surveyId)),
+        (snap) => onChange(snap.docs.map((d) => d.data() as SurveySubmission)),
+        (error) => { captureError(error, { context: 'subscribeSubmissions' }); onError?.(error); },
+    );
+}
+
+export const getSubmissions = async (orgId: string, surveyId: string): Promise<SurveySubmission[]> => {
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'surveySubmissions').withConverter(submissionConverter),
+            where('organizationId', '==', orgId), where('surveyId', '==', surveyId),
+        ));
+        return snap.docs.map((d) => d.data() as SurveySubmission);
+    } catch (error) {
+        captureError(error, { context: 'getSubmissions', orgId, surveyId });
+        throw error;
+    }
+};
+
+/** 공간 제출(처음·반려 뒤 다시) — 공간 담당자 또는 관리자 */
+export const submitSpace = async (orgId: string, surveyId: string, spaceId: string): Promise<void> => {
+    const uid = actorStamp().lastEditedByUid ?? '';
+    const now = serverTimestamp();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'surveySubmissions', submissionId(surveyId, spaceId)), {
+        organizationId: orgId, surveyId, spaceId, state: 'submitted',
+        submittedByUid: uid, submittedAt: now, reviewedByUid: null, reviewedAt: null,
+        reason: '', selfApproved: false, proxyApproved: false, lastEditedByUid: uid, updatedAt: now,
+    });
+    batch.set(doc(collection(db, 'surveyEvents')), eventData(orgId, surveyId, 'submit', { spaceId }));
+    try {
+        await batch.commit();
+    } catch (error) {
+        captureError(error, { context: 'submitSpace', orgId, surveyId });
+        throw error;
+    }
+};
+
+/**
+ * 제출 검토 — 승인 또는 반려(사유 필수). 자기가 제출한 것을 승인하면 본인 승인(사유 필수).
+ * 제출이 없는 공간(`current`가 null)은 관리자가 대신 승인한다(사유 필수).
+ */
+export const reviewSpace = async (input: {
+    orgId: string; surveyId: string; spaceId: string; decision: 'approved' | 'rejected'; reason: string;
+    current: SurveySubmission | null;
+}): Promise<void> => {
+    const { orgId, surveyId, spaceId, decision, current } = input;
+    const reason = input.reason.trim().slice(0, 200);
+    const uid = actorStamp().lastEditedByUid ?? '';
+    const now = serverTimestamp();
+    const ref = doc(db, 'surveySubmissions', submissionId(surveyId, spaceId));
+    const batch = writeBatch(db);
+    if (!current) {
+        batch.set(ref, {
+            organizationId: orgId, surveyId, spaceId, state: 'approved', submittedByUid: null, submittedAt: null,
+            reviewedByUid: uid, reviewedAt: now, reason, selfApproved: false, proxyApproved: true,
+            lastEditedByUid: uid, updatedAt: now,
+        });
+    } else {
+        batch.update(ref, {
+            state: decision, reviewedByUid: uid, reviewedAt: now, reason,
+            selfApproved: decision === 'approved' && current.submittedByUid === uid, proxyApproved: false,
+            lastEditedByUid: uid, updatedAt: now,
+        });
+    }
+    batch.set(doc(collection(db, 'surveyEvents')), eventData(orgId, surveyId, decision === 'approved' ? 'approve' : 'reject', { spaceId, reason }));
+    try {
+        await batch.commit();
+    } catch (error) {
+        captureError(error, { context: 'reviewSpace', orgId, surveyId, decision });
+        throw error;
+    }
+};
+
+/** 한 공간의 제출 상태를 실시간으로(직원 스캔 화면) */
+export function subscribeSubmission(surveyId: string, spaceId: string, onChange: (s: SurveySubmission | null) => void): Unsubscribe {
+    return onSnapshot(
+        doc(db, 'surveySubmissions', submissionId(surveyId, spaceId)).withConverter(submissionConverter),
+        (snap) => onChange(snap.exists() ? (snap.data() as SurveySubmission) : null),
+        (error) => captureError(error, { context: 'subscribeSubmission' }),
+    );
+}
+
+// ── 마감·반영 목록·이력 (기획서 F15~F17) ──
+
+/**
+ * 마감 — 반영 목록을 먼저 쓰고(400건씩), 마지막 배치에서 회차를 닫고 이력을 남긴다.
+ * 중간에 실패해도 다시 마감하면 같은 ID라 반영 목록이 겹치지 않는다(이미 있는 항목은 같은 값으로 덮인다).
+ */
+export const closeSurvey = async (input: {
+    orgId: string; surveyId: string; tasks: SyncTaskDraft[]; spaceNames: Record<string, string>; summary: SurveySummary;
+}): Promise<void> => {
+    const { orgId, surveyId, tasks } = input;
+    const uid = actorStamp().lastEditedByUid ?? '';
+    const BATCH = 400;
+    try {
+        for (let i = 0; i < tasks.length; i += BATCH) {
+            const batch = writeBatch(db);
+            for (const t of tasks.slice(i, i + BATCH)) {
+                const { id, ...rest } = t;
+                batch.set(doc(db, 'syncTasks', id), { organizationId: orgId, surveyId, ...rest, done: false, doneByUid: null, doneAt: null });
+            }
+            await batch.commit();
+        }
+        const batch = writeBatch(db);
+        batch.update(doc(db, 'surveys', surveyId), {
+            status: 'closed', closedAt: serverTimestamp(), closedByUid: uid, spaceNames: input.spaceNames, summary: input.summary,
+            lastEditedByUid: uid,
+        });
+        batch.set(doc(collection(db, 'surveyEvents')), eventData(orgId, surveyId, 'close', {
+            reason: `확인 ${input.summary.found}/${input.summary.target}, 미발견 ${input.summary.missing}`,
+        }));
+        await batch.commit();
+    } catch (error) {
+        captureError(error, { context: 'closeSurvey', orgId, surveyId, tasks: tasks.length });
+        throw error;
+    }
+};
+
+export const getSyncTasks = async (orgId: string, surveyId: string): Promise<SyncTask[]> => {
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'syncTasks').withConverter(syncConverter),
+            where('organizationId', '==', orgId), where('surveyId', '==', surveyId),
+        ));
+        return snap.docs.map((d) => d.data() as SyncTask);
+    } catch (error) {
+        captureError(error, { context: 'getSyncTasks', orgId, surveyId });
+        throw error;
+    }
+};
+
+/** 반영 완료 체크·해제 — 이력도 남긴다 */
+export const setSyncTaskDone = async (task: SyncTask, done: boolean): Promise<void> => {
+    const uid = actorStamp().lastEditedByUid ?? '';
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'syncTasks', task.id), done
+        ? { done: true, doneByUid: uid, doneAt: serverTimestamp() }
+        : { done: false, doneByUid: null, doneAt: null });
+    batch.set(doc(collection(db, 'surveyEvents')), eventData(task.organizationId, task.surveyId, done ? 'sync-done' : 'sync-undone', { targetId: task.id }));
+    try {
+        await batch.commit();
+    } catch (error) {
+        captureError(error, { context: 'setSyncTaskDone' });
+        throw error;
+    }
+};
+
+/** 회차 이력(최근 순) */
+export const getSurveyEvents = async (orgId: string, surveyId: string, max = 200): Promise<SurveyEvent[]> => {
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'surveyEvents').withConverter(eventConverter),
+            where('organizationId', '==', orgId), where('surveyId', '==', surveyId), orderBy('at', 'desc'), limit(max),
+        ));
+        return snap.docs.map((d) => d.data() as SurveyEvent);
+    } catch (error) {
+        captureError(error, { context: 'getSurveyEvents', orgId, surveyId });
+        throw error;
+    }
+};
