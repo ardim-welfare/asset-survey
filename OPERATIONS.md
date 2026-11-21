@@ -66,6 +66,7 @@
    - 서비스 에이전트 역할(배포 로그가 `gcloud projects add-iam-policy-binding …` 세 줄로 알려 준다): Pub/Sub 에이전트 → 서비스 계정 토큰 생성자, 기본 컴퓨트 계정 → Cloud Run 호출자·Eventarc 이벤트 수신자.
    - Secret Manager 비밀마다 기본 컴퓨트 계정(`<프로젝트 번호>-compute@developer.gserviceaccount.com`)에 **보안 비밀 접근자**.
    - 처음 함수 배포 때 Eventarc 권한이 퍼지는 몇 분 동안 트리거 함수가 실패할 수 있다 — 배포 워크플로가 재시도한다.
+   - **첫 배포 뒤 호출형(onCall) 함수의 공개 호출 권한을 확인한다.** 첫 배포가 여러 번 실패·재시도하는 동안 22개 중 19개가 `allUsers` → Cloud Run 호출자 권한 없이 만들어졌고, 이후 배포는 이미 있는 함수의 권한을 다시 걸지 않는다. 증상은 앱에서 서버 함수를 부를 때 **CORS 오류**(사전 요청 403)다. 확인: `gcloud run services get-iam-policy <함수 이름 소문자> --region asia-northeast3`. 고침: 호출형 함수마다 `gcloud run services add-iam-policy-binding <이름> --region asia-northeast3 --member=allUsers --role=roles/run.invoker`. 이벤트·스케줄 함수에는 붙이지 않는다.
 2. 그 계정의 **키(JSON)**를 만든다.
 3. GitHub 저장소 → Settings → Secrets and variables → Actions:
    - **Secrets**: `FIREBASE_SERVICE_ACCOUNT`(키 JSON 전체), `ENV_FILE`(완성한 `.env` 전체), `FUNCTIONS_ENV_FILE`(완성한 `functions/.env` 전체), `SENTRY_AUTH_TOKEN`(Sentry를 쓰면)
