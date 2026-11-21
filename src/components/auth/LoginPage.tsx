@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { signInWithGoogle, handleRedirectResult } from '../../lib/auth';
 import useForceLightMode from '../../hooks/useForceLightMode';
 import SEOHead from '../common/SEOHead';
+import AppIcon from '../common/AppIcon';
 
 /** Firebase 로그인 오류 코드를 화면 문구로 바꾼다. */
 function loginErrorMessage(code: string | undefined): string {
@@ -75,9 +76,7 @@ export default function LoginPage() {
                 {/* 로고 / 아이콘 영역 */}
                 <div className="text-center mb-8">
                     <div className="w-20 h-20 mx-auto mb-4 bg-white/10 dark:bg-surface-800/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
-                        <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-                        </svg>
+                        <AppIcon className="w-10 h-10 text-white" />
                     </div>
                     <h1 className="text-3xl font-bold text-white mb-2">재물조사</h1>
                     <p className="text-primary-200 text-sm">기관 재물조사를 휴대폰 QR로 간편하게</p>

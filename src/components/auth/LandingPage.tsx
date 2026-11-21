@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import useForceLightMode from '../../hooks/useForceLightMode';
 import SEOHead from '../common/SEOHead';
 import PublicNav from '../common/PublicNav';
+import AppIcon from '../common/AppIcon';
 /**
  * 문의 모달은 **열기 전까지 필요 없다.** 정적으로 두면 이 모달이 끌어오는 `lib/firebase`
  * 때문에 Firestore SDK(전송 164KB)가 랜딩 첫 화면의 임계 경로에 얹힌다 —
@@ -116,9 +117,7 @@ export default function LandingPage() {
             {/* ─── 히어로 ─── */}
             <header className="relative flex-1 flex flex-col items-center justify-center text-center px-4 py-16 sm:py-24">
                 <div className="w-20 h-20 mx-auto mb-6 bg-white/10 dark:bg-surface-800/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 animate-scale-in" aria-hidden="true">
-                    <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
-                    </svg>
+                    <AppIcon className="w-10 h-10 text-white" />
                 </div>
 
                 <h1 className="text-3xl sm:text-4xl font-bold mb-3 animate-fade-in">재물조사</h1>
