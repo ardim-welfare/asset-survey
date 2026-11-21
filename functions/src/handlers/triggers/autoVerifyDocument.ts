@@ -4,7 +4,10 @@
 import { onDocumentWritten } from "firebase-functions/firestore";
 import { generateAiContent } from "../../core/gemini";
 import { getFirestore } from "firebase-admin/firestore";
-import { sendApprovalAlimtalk } from "../../services/alimtalk/sendAlimtalk";
+import {
+    sendApprovalAlimtalk, sendRejectionAlimtalk, sendDuplicateAlimtalk, sendReceivedAlimtalk,
+} from "../../services/alimtalk/sendAlimtalk";
+import { getKSTDateString } from "../../utils/kstDate";
 import { sanitizePromptValue } from "../../utils/helpers";
 import { generateInviteCode } from "../../utils/inviteCode";
 import { GEMINI_API_KEY, GMAIL_APP_PASSWORD, ALIMTALK_PROXY_TOKEN } from "../../core/params";
@@ -75,6 +78,10 @@ export const autoVerifyDocument = onDocumentWritten(
         const applicantEmail = after.applicantEmail as string | undefined;
         const applicantName = after.applicantName as string | undefined;
         const applicantPhone = after.applicantPhone as string | undefined;
+        // 알림톡 수신자 표시 이름과 신청 일자(KST) — 템플릿 변수 #{이름}·#{신청일자}
+        const recipientName = applicantName || orgName;
+        const createdAt = (after.createdAt as { toDate?: () => Date } | undefined)?.toDate?.();
+        const applicationDate = getKSTDateString(createdAt ?? new Date());
 
         // ── 화이트리스트 예외 처리 (테스트용) ──
         const whitelistMatch = process.env.ALLOW_TEST_WHITELIST === "true"
@@ -108,7 +115,7 @@ export const autoVerifyDocument = onDocumentWritten(
                 await sendApprovalEmailServer(applicantEmail, orgName, inviteCode, applicantName);
             }
             if (applicantPhone) {
-                await sendApprovalAlimtalk(applicantPhone, applicantName || orgName, orgName, inviteCode);
+                await sendApprovalAlimtalk(applicantPhone, recipientName, orgName, inviteCode);
             }
             return;
         }
@@ -130,6 +137,9 @@ export const autoVerifyDocument = onDocumentWritten(
 
             if (applicantEmail) {
                 await sendRejectionEmail(applicantEmail, orgName, reason);
+            }
+            if (applicantPhone) {
+                await sendRejectionAlimtalk(applicantPhone, recipientName, orgName, applicationDate, reason);
             }
             return;
         }
@@ -193,11 +203,12 @@ export const autoVerifyDocument = onDocumentWritten(
                 (updateData.aiVerifyDetail as Record<string, unknown>).reason =
                     "영리 목적의 사업자등록증이 제출되었습니다. 본 서비스는 비영리단체 전용입니다.";
 
+                const reason = (updateData.aiVerifyDetail as Record<string, unknown>).reason as string;
                 if (applicantEmail) {
-                    await sendRejectionEmail(
-                        applicantEmail, orgName,
-                        (updateData.aiVerifyDetail as Record<string, unknown>).reason as string
-                    );
+                    await sendRejectionEmail(applicantEmail, orgName, reason);
+                }
+                if (applicantPhone) {
+                    await sendRejectionAlimtalk(applicantPhone, recipientName, orgName, applicationDate, reason);
                 }
             }
 
@@ -231,6 +242,11 @@ export const autoVerifyDocument = onDocumentWritten(
                             (updateData.aiVerifyDetail as Record<string, unknown>).reason as string
                         );
                     }
+                    // 알림톡은 반려가 아니라 '중복 신청' 안내로 보낸다 — 고쳐서 다시 낼 일이 아니라
+                    // 기존 기관에 초대 코드로 참여하면 된다. 기존 신청자 정보는 싣지 않는다.
+                    if (applicantPhone) {
+                        await sendDuplicateAlimtalk(applicantPhone, recipientName, orgName, applicationDate);
+                    }
                 }
             }
 
@@ -249,11 +265,17 @@ export const autoVerifyDocument = onDocumentWritten(
                     console.warn(`[AutoVerify] 신청자 이메일 없음, 이메일 발송 스킵`);
                 }
                 if (applicantPhone) {
-                    await sendApprovalAlimtalk(applicantPhone, applicantName || orgName, orgName, inviteCode);
+                    await sendApprovalAlimtalk(applicantPhone, recipientName, orgName, inviteCode);
                 }
             }
 
             await db.doc(`organizations/${orgId}`).update(updateData);
+
+            // 자동으로 결정하지 못해 운영자 심사로 남는 신청(판독불가·기타 서류 등)만 접수 안내를 보낸다.
+            // 자동 승인·반려된 신청은 결과 알림톡이 이미 갔다.
+            if (!updateData.status && applicantPhone) {
+                await sendReceivedAlimtalk(applicantPhone, recipientName, orgName, applicationDate);
+            }
 
             console.log(
                 `[AutoVerify] 기관 ${orgName} (${orgId}) AI 분석 완료:`,
@@ -261,6 +283,10 @@ export const autoVerifyDocument = onDocumentWritten(
             );
         } catch (error: unknown) {
             console.error(`[AutoVerify] 기관 ${orgName} (${orgId}) AI 분석 실패:`, error);
+            // AI 분석이 실패하면 신청은 대기 상태로 남아 운영자가 심사한다 → 접수 안내
+            if (applicantPhone) {
+                await sendReceivedAlimtalk(applicantPhone, recipientName, orgName, applicationDate);
+            }
         }
     }
 );

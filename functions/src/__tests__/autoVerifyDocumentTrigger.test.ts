@@ -10,6 +10,7 @@
  * - 서류는 **그 기관 경로에서만** 내려받는다(교차 테넌트 OCR 차단, 감사 #3)
  * - 비영리 증빙 + 고유번호 → 자동 승인(초대 코드·메일·알림톡), 영리·중복 고유번호 → 거절, 그 밖은 수동 심사
  * - 판독 실패는 트리거를 실패시키지 않는다(재시도 폭주 방지)
+ * - 알림톡: 자동 승인 → 승인, 자동 반려(업종·영리) → 반려, 중복 → 중복 신청, 운영자 심사로 남으면 → 접수 안내
  */
 
 const mockOrgUpdate = jest.fn().mockResolvedValue(undefined);
@@ -21,13 +22,21 @@ const mockDownload = jest.fn().mockResolvedValue({ base64: 'aW1n', mimeType: 'im
 const mockApprovalEmail = jest.fn().mockResolvedValue(true);
 const mockRejectionEmail = jest.fn().mockResolvedValue(true);
 const mockApprovalAlimtalk = jest.fn().mockResolvedValue({ success: true });
+const mockRejectionAlimtalk = jest.fn().mockResolvedValue({ success: true });
+const mockDuplicateAlimtalk = jest.fn().mockResolvedValue({ success: true });
+const mockReceivedAlimtalk = jest.fn().mockResolvedValue({ success: true });
 
 jest.mock('firebase-admin/firestore', () => ({
     getFirestore: () => ({ doc: mockDocPath, collection: () => ({ where: mockWhere }) }),
 }));
 jest.mock('../core/gemini', () => ({ generateAiContent: (...a: unknown[]) => mockGenerateAiContent(...a) }));
 jest.mock('../core/params', () => ({ GEMINI_API_KEY: {}, GMAIL_APP_PASSWORD: {}, ALIMTALK_PROXY_TOKEN: {} }));
-jest.mock('../services/alimtalk/sendAlimtalk', () => ({ sendApprovalAlimtalk: (...a: unknown[]) => mockApprovalAlimtalk(...a) }));
+jest.mock('../services/alimtalk/sendAlimtalk', () => ({
+    sendApprovalAlimtalk: (...a: unknown[]) => mockApprovalAlimtalk(...a),
+    sendRejectionAlimtalk: (...a: unknown[]) => mockRejectionAlimtalk(...a),
+    sendDuplicateAlimtalk: (...a: unknown[]) => mockDuplicateAlimtalk(...a),
+    sendReceivedAlimtalk: (...a: unknown[]) => mockReceivedAlimtalk(...a),
+}));
 jest.mock('../services/orgDocument/verifyHelpers', () => ({
     ...jest.requireActual('../utils/mask'),
     downloadFileAsBase64: (...a: unknown[]) => mockDownload(...a),
@@ -47,7 +56,9 @@ const run = (before: Doc, after: Doc) => (autoVerifyDocument as unknown as (e: u
 });
 const applied = (overrides: Record<string, unknown> = {}) => ({
     name: '행복복지관', applicantEmail: 'head@welfare.or.kr', applicantName: '홍길동', applicantPhone: '01012345678',
-    status: 'pending', uniqueNumberImagePath: 'organizations/org1/unique.png', ...overrides,
+    status: 'pending', uniqueNumberImagePath: 'organizations/org1/unique.png',
+    // 신청 일자(KST) — 2026-11-20 15:30 UTC = 2026-11-21 00:30 KST
+    createdAt: { toDate: () => new Date('2026-11-20T15:30:00Z') }, ...overrides,
 });
 const gemini = (json: Record<string, unknown>) => mockGenerateAiContent.mockResolvedValueOnce(JSON.stringify(json));
 const lastUpdate = () => mockOrgUpdate.mock.calls.at(-1)?.[0] as Record<string, unknown>;
@@ -109,6 +120,8 @@ describe('화이트리스트·차단 업종', () => {
         expect(mockGenerateAiContent).not.toHaveBeenCalled();
         expect(lastUpdate()).toMatchObject({ status: 'rejected', aiVerified: false, aiVerifyDetail: { rejected: true } });
         expect(mockRejectionEmail).toHaveBeenCalledWith('head@welfare.or.kr', name, expect.stringContaining('서비스 대상이 아닙니다'));
+        expect(mockRejectionAlimtalk).toHaveBeenCalledWith('01012345678', '홍길동', name, '2026-11-21', expect.stringContaining('서비스 대상이 아닙니다'));
+        expect(mockReceivedAlimtalk).not.toHaveBeenCalled();
     });
 });
 
@@ -153,6 +166,8 @@ describe('판독', () => {
         expect(mockRejectionEmail).toHaveBeenCalledWith('head@welfare.or.kr', '행복복지관', expect.stringContaining('비영리단체 전용'));
         expect(mockDuplicateGet).not.toHaveBeenCalled();
         expect(mockApprovalEmail).not.toHaveBeenCalled();
+        expect(mockRejectionAlimtalk).toHaveBeenCalledWith('01012345678', '홍길동', '행복복지관', '2026-11-21', expect.stringContaining('비영리단체 전용'));
+        expect(mockReceivedAlimtalk).not.toHaveBeenCalled();
     });
 
     it('같은 고유번호로 대기·승인된 다른 기관이 있으면 거절한다(기존 신청자는 가려서 적는다)', async () => {
@@ -171,6 +186,10 @@ describe('판독', () => {
         expect(reason).not.toContain('kim@old.or.kr');
         expect(update.inviteCode).toBeUndefined();
         expect(mockApprovalEmail).not.toHaveBeenCalled();
+        // 알림톡은 반려가 아니라 중복 신청 안내 — 기존 신청자 정보는 넘기지 않는다
+        expect(mockDuplicateAlimtalk).toHaveBeenCalledWith('01012345678', '홍길동', '행복복지관', '2026-11-21');
+        expect(mockRejectionAlimtalk).not.toHaveBeenCalled();
+        expect(mockReceivedAlimtalk).not.toHaveBeenCalled();
     });
 
     it.each([['판독불가'], ['기타']])('%s면 승인도 거절도 하지 않고 수동 심사로 남긴다', async (documentType) => {
@@ -180,6 +199,8 @@ describe('판독', () => {
         expect(lastUpdate().status).toBeUndefined();
         expect(mockApprovalEmail).not.toHaveBeenCalled();
         expect(mockRejectionEmail).not.toHaveBeenCalled();
+        // 운영자 심사로 남는 신청에만 접수 안내가 간다
+        expect(mockReceivedAlimtalk).toHaveBeenCalledWith('01012345678', '홍길동', '행복복지관', '2026-11-21');
     });
 
     it('비영리 증빙이라도 고유번호를 못 읽으면 자동 승인하지 않는다', async () => {
@@ -193,5 +214,19 @@ describe('판독', () => {
         mockDownload.mockRejectedValueOnce(new Error('경로가 기관 폴더 밖입니다'));
         await expect(run(null, applied())).resolves.toBeUndefined();
         expect(mockOrgUpdate).not.toHaveBeenCalled();
+        expect(mockReceivedAlimtalk).toHaveBeenCalledWith('01012345678', '홍길동', '행복복지관', '2026-11-21');
+    });
+
+    it('자동 승인되면 접수 안내는 보내지 않는다(결과 알림톡만)', async () => {
+        gemini({ documentType: '고유번호증', uniqueNumber: '123-82-00001' });
+        await run(null, applied());
+        expect(mockApprovalAlimtalk).toHaveBeenCalledTimes(1);
+        expect(mockReceivedAlimtalk).not.toHaveBeenCalled();
+    });
+
+    it('전화번호가 없으면 알림톡을 보내지 않는다', async () => {
+        gemini({ documentType: '기타' });
+        await run(null, applied({ applicantPhone: undefined }));
+        expect(mockReceivedAlimtalk).not.toHaveBeenCalled();
     });
 });

@@ -15,10 +15,10 @@ const EFFECTIVE_DATE = formatLegalVersion(PRIVACY_VERSION);
  * - Gemini: functions/src/handlers/callable/ocrDocument.ts, functions/src/handlers/https/submitOrgApplication.ts,
  *           functions/src/handlers/triggers/{autoVerifyDocument,notifyNewFeedback}.ts
  * - Gmail: functions/src/core/mailer.ts 사용처
+ * - 알리고·Cafe24(카카오 알림톡 — 신청 접수·승인·반려·중복 안내): functions/src/services/alimtalk/
  *
  * ⛔ 코드는 있지만 쓰지 않기로 한 연동(2026-11-21 결정) — 목록에서 뺐다. **설정값을 넣으면 개인정보가
  *    나가는데 처리방침에 없게 된다.** 켜려면 먼저 여기에 수탁자를 되살리고 시행일을 옮긴다.
- *    - 알리고·Cafe24(카카오 알림톡): functions/src/services/alimtalk/ — `ALIMTALK_PROXY_URL`을 비워 둔다
  *    - Discord(운영자 알림): functions/src/core/discord.ts — `DISCORD_WEBHOOK_URL`을 비워 둔다
  *    - Sentry(오류 수집): src/lib/sentry.ts, functions/src/core/sentry.ts — `VITE_SENTRY_DSN`·`SENTRY_DSN_FUNCTIONS`를 비워 둔다
  *
@@ -59,6 +59,20 @@ const PROCESSORS: {
         task: '기관 신청 승인·반려 안내, 문의 답변, 운영자 알림 메일 발송',
         items: '이메일 주소, 이름, 전화번호, 기관명, 초대 코드, 문의·답변 내용, 반려 사유',
         contact: 'https://support.google.com/policies/troubleshooter/7575787',
+    },
+    {
+        name: '(주)알리고',
+        country: '대한민국',
+        task: '기관 신청 접수·승인·반려·중복 신청 안내 카카오 알림톡 발송',
+        items: '휴대전화번호, 이름, 기관명, 신청 일자, 초대 코드, 반려 사유',
+        contact: 'https://smartsms.aligo.in',
+    },
+    {
+        name: '카페24 주식회사 (Cafe24)',
+        country: '대한민국',
+        task: '알림톡 발송 요청의 중계(프록시) 서버 운영',
+        items: '휴대전화번호, 이름, 기관명, 신청 일자, 초대 코드, 반려 사유',
+        contact: 'https://www.cafe24.com',
     },
 ];
 
@@ -132,7 +146,7 @@ export default function PrivacyPage() {
                                 <ul className="list-disc list-inside space-y-1 ml-2">
                                     <li>이메일 주소 (Google 로그인을 통해 자동 수집)</li>
                                     <li>이름 (Google 계정 표시 이름. 기관관리자가 직원 이름을 미리 등록한 경우 그 이름)</li>
-                                    <li>전화번호 (기관 신청 시 신청자의 휴대전화번호 — 신청 내용 확인이 필요할 때 연락하는 데 사용)</li>
+                                    <li>전화번호 (기관 신청 시 신청자의 휴대전화번호 — 신청 접수·승인·반려 결과를 카카오 알림톡으로 안내하는 데 사용)</li>
                                 </ul>
                                 <p className="text-xs text-surface-500 dark:text-surface-400">
                                     Google 계정의 프로필 사진은 가입 화면 표시에만 사용하며 저장하지 않습니다.
@@ -335,6 +349,10 @@ export default function PrivacyPage() {
                             </div>
 
                             <ul className="list-disc list-inside space-y-1 ml-2 text-xs">
+                                <li>
+                                    카카오 알림톡은 카페24 주식회사가 제공하는 호스팅 환경의 중계 서버를 거쳐 (주)알리고로 전달되며,
+                                    최종 발송은 카카오톡을 통해 이루어집니다. 중계 서버는 발송 요청을 전달할 뿐 별도로 개인정보를 저장하지 않습니다.
+                                </li>
                                 <li>
                                     위탁 업무의 내용이나 수탁자가 변경될 경우 본 개인정보 처리방침을 통해 지체 없이 공개합니다.
                                 </li>
