@@ -18,6 +18,8 @@ import { notifyUser } from '../notify';
 const COLLECTION_LABEL: Record<string, string> = {
     driveLogs: '운행일지',
     reservations: '예약',
+    scans: '재물 스캔',
+    surveySubmissions: '공간 제출',
 };
 
 function labelOf(collection: string): string {
@@ -83,6 +85,11 @@ export function describeRecord(record: FailedRecord): string {
         return t && !t.startsWith('__syncQueue.') ? t : undefined;
     };
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+    // 재물 스캔 — 다시 찍으려면 자산코드·품명이 있어야 한다(현장 라벨을 다시 찾는 단서)
+    if (record.collection === 'scans') {
+        return [str(data.code), str(data.name)].filter(Boolean).join(' ');
+    }
 
     const parts: string[] = [];
     const when = str(data.startDate) ?? str(data.date) ?? formatQueuedDate(data.timestamp);

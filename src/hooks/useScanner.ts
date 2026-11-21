@@ -52,6 +52,7 @@ export default function useScanner(initialSpaceId: string | null) {
     const busy = useRef(false);
     const [checking, setChecking] = useState(false);
     const [submission, setSubmission] = useState<SurveySubmission | null>(null);
+    const [submissionPending, setSubmissionPending] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -102,8 +103,9 @@ export default function useScanner(initialSpaceId: string | null) {
     // 이 공간의 제출 상태 실시간('나눠서 조사'만)
     useEffect(() => {
         setSubmission(null);
+        setSubmissionPending(false);
         if (!survey || !spaceId || survey.mode !== 'delegated') return;
-        return subscribeSubmission(survey.id, spaceId, setSubmission);
+        return subscribeSubmission(survey.id, spaceId, (s, pending) => { setSubmission(s); setSubmissionPending(pending); });
     }, [survey, spaceId]);
 
     /** 제출·승인돼 스캔이 잠긴 공간 */
@@ -213,7 +215,7 @@ export default function useScanner(initialSpaceId: string | null) {
     }, [orgId, survey, spaceId, submitting, confirm, showToast]);
 
     return {
-        submission, locked, submit, submitting,
+        submission, submissionPending, locked, submit, submitting,
         loading, error, survey, isAdmin, mySpaces, spaceId, setSpaceId, spaceName,
         handle, checking, last, clearLast: () => setLast(null), scanMap, setCondition, undo, ...view,
     };

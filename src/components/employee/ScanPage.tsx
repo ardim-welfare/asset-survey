@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import useScanner, { type LastScan } from '../../hooks/useScanner';
+import usePendingSyncCount from '../../hooks/usePendingSyncCount';
+import { hasDurableLocalCache } from '../../lib/firebase';
 import QrCamera, { type CameraState } from './QrCamera';
 import { SCAN_RESULT_LABEL, CONDITION_LABEL } from '../../lib/survey/judge';
 import { SCAN_MEMO_MAX } from '../../schemas';
@@ -39,6 +41,7 @@ export default function ScanPage() {
     const [tab, setTab] = useState<'remaining' | 'done'>('remaining');
     const [editing, setEditing] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const pendingCount = usePendingSyncCount();
 
     // 공간을 바꾸면 주소에도 남긴다(새로고침·뒤로 가기에도 같은 공간)
     useEffect(() => {
@@ -109,7 +112,7 @@ export default function ScanPage() {
             </section>
 
             {sc.survey.mode === 'delegated' && (
-                <SubmissionPanel submission={sc.submission} remaining={sc.remaining.length} submitting={sc.submitting}
+                <SubmissionPanel submission={sc.submission} pending={sc.submissionPending} remaining={sc.remaining.length} submitting={sc.submitting}
                     onSubmit={() => void sc.submit(sc.remaining.length)} />
             )}
 
@@ -188,19 +191,35 @@ export default function ScanPage() {
                     ))}
                 </ul>
             )}
-            <p className={`${sub} text-center pb-4`}>인터넷이 끊겨도 찍은 기록은 이 기기에 남았다가 연결되면 저장됩니다.</p>
+            {pendingCount > 0 && (
+                <p className="rounded-xl bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200" role="status">
+                    아직 보내지 못한 기록 <strong>{pendingCount}건</strong> — 인터넷에 연결되면 자동으로 보냅니다. 다 보내기 전에는 로그아웃하지 마세요.
+                </p>
+            )}
+            {hasDurableLocalCache() ? (
+                <p className={`${sub} text-center pb-4`}>인터넷이 끊겨도 찍은 기록은 이 기기에 남았다가 연결되면 저장됩니다.</p>
+            ) : (
+                <p className="rounded-xl bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200 mb-4">
+                    ⚠️ 이 브라우저는 기록을 기기에 보관하지 못합니다(사생활 보호 모드 등). 인터넷이 약한 곳에서는 앱을 닫지 말고,
+                    연결된 곳에서 '보내지 못한 기록'이 없어진 것을 확인하세요.
+                </p>
+            )}
         </div>
     );
 }
 
-function SubmissionPanel({ submission, remaining, submitting, onSubmit }: {
-    submission: SurveySubmission | null; remaining: number; submitting: boolean; onSubmit: () => void;
+function SubmissionPanel({ submission, pending, remaining, submitting, onSubmit }: {
+    submission: SurveySubmission | null; pending: boolean; remaining: number; submitting: boolean; onSubmit: () => void;
 }) {
     if (submission?.state === 'submitted') {
         return (
             <section className="rounded-2xl border-2 p-4 bg-sky-50 border-sky-300 text-sky-900 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-200" role="status">
-                <p className="font-bold">제출했습니다</p>
-                <p className="text-sm">재물 담당자가 확인하는 동안 이 공간은 스캔이 잠깁니다. 반려되면 다시 열립니다.</p>
+                <p className="font-bold">{pending ? '제출 전송 대기 중' : '제출했습니다'}</p>
+                <p className="text-sm">
+                    {pending
+                        ? '인터넷에 연결되면 제출이 전송됩니다. 그동안 이 공간은 스캔이 잠깁니다.'
+                        : '재물 담당자가 확인하는 동안 이 공간은 스캔이 잠깁니다. 반려되면 다시 열립니다.'}
+                </p>
             </section>
         );
     }

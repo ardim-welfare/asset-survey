@@ -5,6 +5,9 @@
  * - 스캔은 담당 공간에서만 쓴다(firestore.rules). 문서 ID가 회차+재물이라 같은 물건은 문서 하나.
  * - 스캔 저장은 기다리지 않는다 — 지하·창고처럼 전파가 약한 곳에서는 오프라인 캐시에 남았다가
  *   연결되면 전송된다. 서버가 거절하면(이미 다른 곳에서 찍힘 등) `onRejected`로 알린다.
+ * - 현장 쓰기(스캔·상태·제출)는 쓰기 장부(`trackWrite`)에 적는다 — "미전송 N건" 배너, 로그아웃 전
+ *   경고(미전송이 있으면 확인), 앱이 닫힌 뒤 반영되지 않은 쓰기의 유실 안내가 여기서 나온다
+ *   (6단계 리허설에서 빠진 것을 발견: 오프라인으로 찍고 로그아웃하면 경고 없이 사라질 수 있었다).
  */
 import {
     collection, doc, query, where, getDoc, getDocs, writeBatch, setDoc, updateDoc, deleteDoc,
@@ -18,6 +21,7 @@ import {
 } from '../../schemas';
 import { captureError } from '../sentry';
 import { actorStamp } from './actorStamp';
+import { trackWrite } from '../offline/syncQueue';
 import type { Asset } from '../../types/asset';
 import type {
     Survey, SurveyTarget, SurveyTargetItem, Scan, ScanCondition, ScanMethod, SurveySubmission, SurveyEvent,
@@ -177,12 +181,15 @@ export interface SaveScanInput {
 export function saveScan({ orgId, surveyId, spaceId, method, draft, onRejected }: SaveScanInput): void {
     const stamp = actorStamp();
     const now = serverTimestamp();
-    setDoc(doc(db, 'scans', draft.scanId), {
+    const data = {
         organizationId: orgId, surveyId, assetId: draft.assetId, code: draft.code, name: draft.name,
         spaceId, expectedSpaceId: draft.expectedSpaceId, result: draft.result, method,
         condition: 'normal', memo: '', scannedByUid: stamp.lastEditedByUid ?? '', scannedAt: now,
         updatedAt: now, ...stamp,
-    }).catch((error) => {
+    };
+    const write = setDoc(doc(db, 'scans', draft.scanId), data);
+    void trackWrite('CREATE', 'scans', draft.scanId, data, write, { callerAwaits: false });
+    write.catch((error) => {
         captureError(error, { context: 'saveScan', orgId, surveyId, result: draft.result });
         onRejected?.(error);
     });
@@ -190,9 +197,10 @@ export function saveScan({ orgId, surveyId, spaceId, method, draft, onRejected }
 
 /** 물건 상태·메모 고치기 (기획서 F12) */
 export function updateScanCondition(scanId: string, condition: ScanCondition, memo: string, onRejected?: (e: unknown) => void): void {
-    updateDoc(doc(db, 'scans', scanId), {
-        condition, memo: memo.slice(0, 200), updatedAt: serverTimestamp(), ...actorStamp(),
-    }).catch((error) => {
+    const data = { condition, memo: memo.slice(0, 200), updatedAt: serverTimestamp(), ...actorStamp() };
+    const write = updateDoc(doc(db, 'scans', scanId), data);
+    void trackWrite('UPDATE', 'scans', scanId, data, write, { callerAwaits: false });
+    write.catch((error) => {
         captureError(error, { context: 'updateScanCondition' });
         onRejected?.(error);
     });
@@ -302,8 +310,10 @@ export const submitSpace = async (orgId: string, surveyId: string, spaceId: stri
         reason: '', selfApproved: false, proxyApproved: false, lastEditedByUid: uid, updatedAt: now,
     });
     batch.set(doc(collection(db, 'surveyEvents')), eventData(orgId, surveyId, 'submit', { spaceId }));
+    const commit = batch.commit();
+    void trackWrite('CREATE', 'surveySubmissions', submissionId(surveyId, spaceId), { spaceId }, commit, { callerAwaits: true });
     try {
-        await batch.commit();
+        await commit;
     } catch (error) {
         captureError(error, { context: 'submitSpace', orgId, surveyId });
         throw error;
@@ -346,11 +356,15 @@ export const reviewSpace = async (input: {
     }
 };
 
-/** 한 공간의 제출 상태를 실시간으로(직원 스캔 화면) */
-export function subscribeSubmission(surveyId: string, spaceId: string, onChange: (s: SurveySubmission | null) => void): Unsubscribe {
+/**
+ * 한 공간의 제출 상태를 실시간으로(직원 스캔 화면).
+ * `pending`: 이 기기에서 제출했지만 아직 서버에 닿지 않음(인터넷이 끊긴 곳에서 제출).
+ */
+export function subscribeSubmission(surveyId: string, spaceId: string, onChange: (s: SurveySubmission | null, pending: boolean) => void): Unsubscribe {
     return onSnapshot(
         doc(db, 'surveySubmissions', submissionId(surveyId, spaceId)).withConverter(submissionConverter),
-        (snap) => onChange(snap.exists() ? (snap.data() as SurveySubmission) : null),
+        { includeMetadataChanges: true },
+        (snap) => onChange(snap.exists() ? (snap.data() as SurveySubmission) : null, snap.metadata.hasPendingWrites),
         (error) => captureError(error, { context: 'subscribeSubmission' }),
     );
 }

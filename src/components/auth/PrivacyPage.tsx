@@ -12,20 +12,16 @@ const EFFECTIVE_DATE = formatLegalVersion(PRIVACY_VERSION);
  * 실제 코드에서 개인정보가 나가는 경로와 1:1로 대응한다.
  * 외부 연동을 추가·제거하면 이 배열도 반드시 함께 갱신해야 한다.
  * - Firebase/Analytics: src/lib/firebase.ts, functions/src/core/firebase.ts
- * - Gemini: functions/src/handlers/callable/{ocrDashboard,askAI}.ts,
- *           functions/src/handlers/triggers/{autoVerifyDocument,generateFeedbackDraft}.ts,
- *           functions/src/services/assistant/
+ * - Gemini: functions/src/handlers/callable/ocrDocument.ts, functions/src/handlers/https/submitOrgApplication.ts,
+ *           functions/src/handlers/triggers/{autoVerifyDocument,notifyNewFeedback}.ts
  * - Gmail: functions/src/core/mailer.ts 사용처
- * - EmailJS: functions/src/services/driveLog/verifyHelpers.ts (승인 메일 트리거 경로)
- * - Calendar: functions/src/services/calendar/calendarSync.ts
- * - 알리고·Cafe24: functions/src/services/alimtalk/sendAlimtalk.ts
+ * - EmailJS: functions/src/services/orgDocument/verifyHelpers.ts (승인 메일 트리거 경로)
+ * - 알리고·Cafe24: functions/src/services/alimtalk/
  * - Discord: functions/src/core/discord.ts 의 sendDiscordAlert 호출부 전부
- * - Slack: functions/src/services/slack
  * - Sentry: src/lib/sentry.ts, functions/src/core/sentry.ts
  *
- * 의도적 제외(개인 식별정보가 전달되지 않아 수탁자로 보지 않음):
- * Tmap 경로 API(목적지 문자열·좌표만, 프록시 경유로 이용자 IP 미전달),
- * 공공데이터포털 공휴일 API(개인정보 없음).
+ * 차량운행일지에서 쓰던 Calendar·Slack·Tmap·계기판 OCR·챗봇 연동은 이 서비스에 없다(0단계에서 걷어냄).
+ * 재물 정보(품명·자산코드·금액)는 개인정보가 아니지만, 누가 찍고 제출·승인했는지는 계정에 묶여 남는다.
  */
 const PROCESSORS: {
     /** 수탁자(법인명) */
@@ -45,14 +41,14 @@ const PROCESSORS: {
         name: 'Google LLC (Firebase)',
         country: '미국',
         task: '이용자 인증, 데이터베이스·파일 저장, 웹 호스팅, 푸시 알림 발송, 서비스 이용 통계 분석',
-        items: '이메일 주소, 이름, 전화번호, 운행일지·차량·예약 데이터, 증빙서류 사본, 푸시 알림 토큰, 접속 기기·이용 기록',
+        items: '이메일 주소, 이름, 전화번호, 재물조사 기록(스캔·제출·승인한 계정과 시각), 증빙서류 사본, 푸시 알림 토큰, 접속 기기·이용 기록',
         contact: 'https://support.google.com/policies/troubleshooter/7575787',
     },
     {
         name: 'Google LLC (Gemini API)',
         country: '미국',
-        task: '계기판 사진의 주행거리·배터리 잔량 판독, 비영리 증빙서류 유형 자동 판별, 문의 답변 초안 생성, 챗봇 질문 응답',
-        items: '계기판 사진, 비영리 증빙서류 이미지, 문의·질문 내용 및 첨부 이미지, 예약자 이름·예약 일시·용도·목적지·차량명',
+        task: '비영리 증빙서류 유형 자동 판별, 문의 답변 초안 생성',
+        items: '비영리 증빙서류 이미지, 문의 내용 및 첨부 이미지',
         contact: 'https://support.google.com/policies/troubleshooter/7575787',
     },
     {
@@ -68,14 +64,6 @@ const PROCESSORS: {
         task: '기관 신청 자동 승인 안내 메일 발송',
         items: '이메일 주소, 이름, 기관명, 초대 코드',
         contact: 'https://www.emailjs.com/legal/privacy-policy/',
-    },
-    {
-        name: 'Google LLC (Google Calendar)',
-        country: '미국',
-        task: '차량 예약 일정의 캘린더 동기화',
-        items: '예약자 이름, 예약 일시·용도·목적지, 차량명',
-        contact: 'https://support.google.com/policies/troubleshooter/7575787',
-        optional: true,
     },
     {
         name: '(주)알리고',
@@ -97,14 +85,6 @@ const PROCESSORS: {
         task: '신규 기관 신청, 관리자 권한 변경, 이용자 의견 접수, 시스템 오류의 운영자 실시간 알림',
         items: '이름, 이메일 주소, 전화번호, 기관명, 문의·의견 내용',
         contact: 'privacy@discord.com',
-    },
-    {
-        name: 'Slack Technologies, LLC',
-        country: '미국',
-        task: '차량 예약 알림 발송 및 챗봇 문의 응답',
-        items: '예약자 이름, 예약 일시·용도·목적지, 이메일 주소(계정 매칭용), Slack 계정 식별자',
-        contact: 'privacy@slack.com',
-        optional: true,
     },
     {
         name: 'Functional Software, Inc. (Sentry)',
@@ -146,7 +126,7 @@ export default function PrivacyPage() {
                 <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-soft p-6 md:p-8 space-y-8">
                     <div className="text-center border-b border-surface-100 dark:border-surface-700 pb-6">
                         <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">개인정보 처리방침</h1>
-                        <p className="text-sm text-surface-500 dark:text-surface-400">시행일: {EFFECTIVE_DATE} (최초 시행: 2026년 2월 1일)</p>
+                        <p className="text-sm text-surface-500 dark:text-surface-400">시행일: {EFFECTIVE_DATE}</p>
                     </div>
 
                     {/*
@@ -196,7 +176,7 @@ export default function PrivacyPage() {
                             <div className="bg-surface-50 dark:bg-surface-800 rounded-xl p-4 space-y-2">
                                 <p className="font-medium text-surface-700 dark:text-surface-300">선택 수집 항목</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2">
-                                    <li>푸시 알림 토큰 (알림 수신을 허용한 경우에만, 예약 알림·공지·문의 답변 알림을 기기로 보내는 데 사용)</li>
+                                    <li>푸시 알림 토큰 (알림 수신을 허용한 경우에만, 공지·문의 답변 알림을 기기로 보내는 데 사용)</li>
                                 </ul>
                                 <p className="text-xs text-surface-500 dark:text-surface-400">
                                     알림을 허용하지 않아도 서비스 이용에는 제한이 없으며, 브라우저·기기 설정에서 언제든 알림을 끌 수 있습니다.
@@ -232,7 +212,8 @@ export default function PrivacyPage() {
                                 <p className="font-medium text-surface-700 dark:text-surface-300">접속기록 (법령상 의무 기록)</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2">
                                     <li>로그인 시 접속 계정·접속 일시·접속지 IP 주소·접속 환경(브라우저·운영체제 종류)</li>
-                                    <li>운행일지·직원 정보 등 개인정보에 해당하는 항목을 변경한 경우 그 계정·일시·변경한 항목명</li>
+                                    <li>직원 정보 등 개인정보에 해당하는 항목을 변경한 경우 그 계정·일시·변경한 항목명</li>
+                                    <li>개인정보가 담긴 자료(접속기록, 제출·승인한 사람 이름이 담긴 재물조사 결과 보고서)를 내려받은 경우 그 계정·일시·형식·건수</li>
                                 </ul>
                                 <p className="text-xs text-surface-500 dark:text-surface-400">
                                     「개인정보의 안전성 확보조치 기준」 제16조에 따라 <strong>법령상 반드시 보관해야 하는 기록</strong>으로,
@@ -260,10 +241,9 @@ export default function PrivacyPage() {
                             <ul className="list-disc list-inside space-y-1 ml-2">
                                 <li>서비스 이용자 식별 및 인증</li>
                                 <li>기관 사용 신청 처리 및 승인 연락</li>
-                                <li>운행일지 작성자 기록</li>
-                                <li>차량 예약 관리</li>
+                                <li>재물조사 기록 관리 — 누가 언제 어느 공간에서 재물을 확인하고 조사 결과를 제출·승인했는지</li>
                                 <li>서비스 운영 관련 공지 전달</li>
-                                <li>예약·공지·문의 답변 푸시 알림 발송 (알림 수신을 허용한 경우)</li>
+                                <li>공지·문의 답변 푸시 알림 발송 (알림 수신을 허용한 경우)</li>
                                 <li>서비스 이용 통계 분석 및 개선</li>
                                 <li>법령상 의무인 접속기록의 보관 및 비정상 접근 점검</li>
                             </ul>
@@ -275,15 +255,6 @@ export default function PrivacyPage() {
                         <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-200">제3조 (AI 처리 및 이미지 데이터)</h2>
                         <div className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed space-y-3">
                             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 dark:bg-amber-900/20 dark:border-amber-800">
-                                <p className="font-medium text-amber-800 dark:text-amber-300 mb-2">📷 계기판 사진 처리</p>
-                                <ul className="list-disc list-inside space-y-1 ml-2 text-amber-700 dark:text-amber-400 text-xs">
-                                    <li>계기판 사진은 <strong>Google Gemini API</strong>를 통해 서버사이드에서 분석됩니다.</li>
-                                    <li>분석 목적: 누적 주행거리(Km), 배터리 잔량(%) 숫자 추출</li>
-                                    <li>사진은 분석 완료 후 <strong>즉시 폐기</strong>되며, 서버나 스토리지에 저장되지 않습니다.</li>
-                                </ul>
-                            </div>
-
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 dark:bg-amber-900/20 dark:border-amber-800">
                                 <p className="font-medium text-amber-800 dark:text-amber-300 mb-2">📄 비영리 증빙서류 처리</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-amber-700 dark:text-amber-400 text-xs">
                                     <li>비영리 증빙서류(고유번호증 또는 사업자등록증)는 기관 신청 심사 목적으로 업로드됩니다.</li>
@@ -293,11 +264,10 @@ export default function PrivacyPage() {
                             </div>
 
                             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 dark:bg-amber-900/20 dark:border-amber-800">
-                                <p className="font-medium text-amber-800 dark:text-amber-300 mb-2">💬 문의 답변 및 챗봇 응답</p>
+                                <p className="font-medium text-amber-800 dark:text-amber-300 mb-2">💬 문의 답변</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-amber-700 dark:text-amber-400 text-xs">
                                     <li>서비스 내 문의·의견의 답변 초안 작성에 AI(Google Gemini API)가 사용되며, 문의 내용과 첨부 이미지가 전달됩니다.</li>
-                                    <li>챗봇에 예약 관련 질문을 하는 경우, 소속 기관의 예약 목록(예약자 이름·일시·용도·목적지)이 답변 근거로 함께 전달됩니다.</li>
-                                    <li>전달 범위는 <strong>질문자가 속한 기관의 데이터로 한정</strong>되며, 다른 기관의 데이터는 포함되지 않습니다.</li>
+                                    <li>재물 대장·재물조사 기록은 AI에 전달하지 않습니다. 엑셀 대장은 이용자의 브라우저에서 읽으며 원본 파일은 서버로 보내지 않습니다.</li>
                                 </ul>
                             </div>
 
@@ -315,7 +285,7 @@ export default function PrivacyPage() {
                             <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 dark:bg-green-900/20 dark:border-green-800">
                                 <p className="font-medium text-green-800 dark:text-green-300 mb-2">🏢 데이터 소유</p>
                                 <p className="text-green-700 dark:text-green-400 text-xs">
-                                    서비스 내 모든 운행일지, 차량 정보, 예약 데이터는 <strong>해당 기관의 소유</strong>입니다.
+                                    서비스 내 모든 재물·공간 정보와 재물조사 기록은 <strong>해당 기관의 소유</strong>입니다.
                                     기관을 삭제하면 해당 기관의 데이터는 <strong>제9조(개인정보의 파기)</strong>에 따라 파기됩니다.
                                 </p>
                             </div>
@@ -323,13 +293,10 @@ export default function PrivacyPage() {
                             <div className="space-y-2">
                                 <p className="font-medium text-surface-700 dark:text-surface-300">보존 기간</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2">
-                                    <li>
-                                        운행일지 데이터: 지자체 감사 대응을 위해 <strong>최소 3년~5년</strong> 보존을 권장합니다.
-                                    </li>
                                     <li>기관 삭제를 요청하지 않는 한 데이터는 유지됩니다.</li>
                                     <li>
-                                        작성 후 3년이 지난 운행일지는 서비스 화면에서 빠지고 압축 보관본으로 옮겨지며,
-                                        <strong>작성일로부터 5년이 되면 자동으로 파기</strong>됩니다.
+                                        재물조사 결과는 회계·감사 대응을 위해 마감 후 <strong>결과 보고서(PDF·엑셀)를 내려받아 기관 문서로 보관</strong>하기를 권장합니다.
+                                        서비스는 기관의 공식 재물 원장(희망이음 등)을 대신하지 않습니다.
                                     </li>
                                 </ul>
                             </div>
@@ -338,13 +305,15 @@ export default function PrivacyPage() {
 
                     {/* 제5조 */}
                     <section className="space-y-3">
-                        <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-200">제5조 (탑승자 정보 정책)</h2>
+                        <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-200">제5조 (재물조사 기록과 개인정보)</h2>
                         <div className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed">
                             <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 dark:bg-purple-900/20 dark:border-purple-800">
-                                <p className="font-medium text-purple-800 dark:text-purple-300 mb-2">👥 탑승자 이름 기록 원칙</p>
+                                <p className="font-medium text-purple-800 dark:text-purple-300 mb-2">👥 사람에 관한 정보는 최소로</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-purple-700 dark:text-purple-400 text-xs">
-                                    <li>운행일지의 탑승자란에는 <strong>소속 직원의 이름만</strong> 기록합니다.</li>
-                                    <li>서비스 이용자(클라이언트)의 이름은 개인정보 보호를 위해 <strong>기록하지 않습니다</strong>.</li>
+                                    <li>재물 대장을 가져올 때 <strong>사람 이름이 든 열(현 사용자·운영담당자 등)은 가져오지 않습니다</strong>.</li>
+                                    <li>스캔·제출·승인 기록에는 그 일을 한 계정과 시각이 남습니다(조사 결과의 책임 추적용).</li>
+                                    <li>결과 보고서에는 <strong>제출·승인한 사람의 이름만</strong> 담고, 누가 찍었는지는 담지 않습니다.</li>
+                                    <li>재물 금액은 기관 관리자만 볼 수 있습니다.</li>
                                 </ul>
                             </div>
                         </div>
@@ -464,12 +433,12 @@ export default function PrivacyPage() {
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-xs">
                                     <li>해당 기능을 이용하는 시점에 정보통신망을 통해 암호화(HTTPS/TLS) 전송됩니다.</li>
                                     <li>
-                                        운행일지·예약 등 데이터베이스(Firestore)는 Google Cloud의 <strong>서울(asia-northeast3) 리전</strong>에 보관되나,
+                                        재물·조사 기록 등 데이터베이스(Firestore)는 Google Cloud의 <strong>서울(asia-northeast3) 리전</strong>에 보관되나,
                                         운영 주체가 미국 법인이므로 국외 이전에 해당합니다.
                                     </li>
+                                    {/* 버킷 리전은 Firebase 프로젝트를 만들 때 정한다 — 다르게 만들면 여기를 고친다(OPERATIONS.md) */}
                                     <li>
-                                        비영리 증빙서류 사본과 작성 후 3년이 지난 운행일지 보관본은 Google Cloud Storage의
-                                        <strong>미국(us-east1) 리전</strong>에 보관됩니다.
+                                        비영리 증빙서류 사본은 Google Cloud Storage의 <strong>미국(us-east1) 리전</strong>에 보관됩니다.
                                     </li>
                                 </ul>
                             </div>
@@ -478,7 +447,7 @@ export default function PrivacyPage() {
                                 <p className="font-medium text-surface-700 dark:text-surface-300">보유 및 이용 기간</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-xs">
                                     <li>위탁 목적 달성 시까지 보유하며, 회원 탈퇴 또는 기관 삭제 시 제9조에 따라 파기합니다.</li>
-                                    <li>계기판 사진은 분석 직후, 증빙서류 사본은 승인 후 30일 경과 시 파기됩니다.</li>
+                                    <li>증빙서류 사본은 승인 후 30일 경과 시 파기됩니다.</li>
                                 </ul>
                             </div>
 
@@ -487,8 +456,7 @@ export default function PrivacyPage() {
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-blue-700 dark:text-blue-400 text-xs">
                                     <li>제12조의 개인정보 보호책임자 또는 서비스 내 피드백 기능으로 국외 이전 거부를 요청할 수 있습니다.</li>
                                     <li>
-                                        <strong>이용하지 않으면 이전되지 않는 항목</strong> — Google Calendar·Slack 연동(기관관리자가 설정하지 않으면 발생하지 않음),
-                                        AI 판독·챗봇 기능(해당 기능을 사용하지 않으면 발생하지 않음).
+                                        <strong>이용하지 않으면 이전되지 않는 항목</strong> — 문의 답변 초안(문의를 남기지 않으면 발생하지 않음).
                                     </li>
                                     <li>
                                         <strong>개별 거부가 불가한 항목</strong> — 인증·데이터 저장(Firebase), 운영자 알림(Discord),
@@ -506,16 +474,15 @@ export default function PrivacyPage() {
                         <div className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed">
                             <ul className="list-disc list-inside space-y-1 ml-2">
                                 <li>
-                                    기관을 삭제하면(해지 후 30일의 복구 기간이 지나거나 운영자가 영구 삭제하면) 운행일지·예약·차량·주유·정비·하이패스 기록,
-                                    소속 사용자 정보, 연동 정보, 증빙서류 사본 등 <strong>해당 기관의 데이터를 파기</strong>합니다.
+                                    기관을 삭제하면(해지 후 30일의 복구 기간이 지나거나 운영자가 영구 삭제하면) 재물·금액·공간 정보,
+                                    가져오기 기록·변경 이력, 재물조사 회차·대상·스캔·제출·승인 기록과 희망이음 반영 목록,
+                                    소속 사용자 정보, 증빙서류 사본 등 <strong>해당 기관의 데이터를 파기</strong>합니다.
                                     다만 다음 기록은 아래 기간이 지나면 자동으로 파기됩니다.
                                     <ul className="list-disc list-inside space-y-1 ml-5 mt-1">
                                         <li><strong>접속기록</strong>: 법령상 의무 기록이라 기관 삭제와 관계없이 <strong>기록일로부터 1년</strong> 보관 후 파기 (제1조)</li>
                                         <li><strong>장애 복구용 전체 백업</strong>: 매일 만들어 <strong>최대 90일</strong> 보관 후 파기하며, 장애 복구 외의 목적으로 이용하지 않습니다</li>
-                                        <li><strong>3년이 지난 운행일지 보관본</strong>: 여러 기관의 기록이 함께 담긴 압축 파일이라 기관 단위로 분리해 지우지 못하며, <strong>작성일로부터 5년</strong>이 되면 파기 (제4조)</li>
                                     </ul>
                                 </li>
-                                <li>계기판 사진은 AI 분석 직후 즉시 파기됩니다.</li>
                                 <li>비영리 증빙서류(고유번호증/사업자등록증) 사본은 <strong>승인 후 30일 경과 시 자동 파기</strong>됩니다.</li>
                             </ul>
                         </div>
@@ -579,13 +546,8 @@ export default function PrivacyPage() {
                     <div className="border-t border-surface-100 dark:border-surface-700 pt-4 space-y-2 text-center">
                         <p className="text-xs text-surface-500 dark:text-surface-400">본 개인정보 처리방침은 {EFFECTIVE_DATE}부터 시행됩니다.</p>
                         <p className="text-xs text-surface-500 dark:text-surface-400">
-                            {/* 지난 개정의 날짜는 고정한다 — EFFECTIVE_DATE로 쓰면 다음 개정 때 과거 내용이 새 날짜로 바뀐다 */}
-                            개정 이력 · 2026년 2월 1일 최초 시행 / 2026년 8월 10일 위탁·국외 이전·보호책임자 조항 신설,
-                            개인정보처리자와 수탁자의 지위 명시, 법령상 의무 기록인 접속기록 항목 명시 /
-                            2026년 10월 12일 수집 항목 정정(기관 신청 전화번호 필수, 푸시 알림 토큰·이용 통계 자동 수집 정보 신설,
-                            직원 동의 기록 명시), 오류 모니터링 전달 항목 정정 /
-                            {' '}{EFFECTIVE_DATE} 파기 조항 구체화(기관 삭제 시 파기 범위와 접속기록·백업·운행일지 보관본의 보관 기간),
-                            증빙서류 사본·운행일지 보관본의 저장 위치 명시
+                            {/* 다음 개정부터는 지난 개정의 날짜를 고정해 적는다 — EFFECTIVE_DATE로 쓰면 과거 내용이 새 날짜로 바뀐다 */}
+                            개정 이력 · {EFFECTIVE_DATE} 최초 시행
                         </p>
                     </div>
                 </div>

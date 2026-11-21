@@ -33,7 +33,7 @@ export default function TermsPage() {
                 <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-soft p-6 md:p-8 space-y-8">
                     <div className="text-center border-b border-surface-100 dark:border-surface-700 pb-6">
                         <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">이용약관</h1>
-                        <p className="text-sm text-surface-500 dark:text-surface-400">시행일: {EFFECTIVE_DATE} (최초 시행: 2026년 2월 1일)</p>
+                        <p className="text-sm text-surface-500 dark:text-surface-400">시행일: {EFFECTIVE_DATE}</p>
                     </div>
 
                     {/* 제1조 */}
@@ -67,13 +67,13 @@ export default function TermsPage() {
                         <div className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed space-y-2">
                             <p>서비스는 다음의 기능을 제공합니다.</p>
                             <ul className="list-disc list-inside space-y-1 ml-2">
-                                <li>차량 운행일지 작성, 조회, 수정, 출력(PDF/Excel)</li>
-                                <li>차량 예약 관리 (달력 기반)</li>
-                                <li>AI 기반 계기판 OCR 인식 (주행거리 자동 추출)</li>
+                                <li>재물 대장(희망이음 고정자산대장·기관 자체 대장) 엑셀 가져오기와 대사</li>
+                                <li>공간·공간 담당자 관리, 재물 목록·상세 조회</li>
+                                <li>QR 라벨 인쇄</li>
+                                <li>재물조사 회차 운영과 현장 QR 스캔</li>
+                                <li>공간별 조사 결과 제출·승인, 진행 현황</li>
+                                <li>조사 결과 보고서 출력(PDF/Excel)과 희망이음 반영 목록</li>
                                 <li>AI 기반 비영리 증빙서류 검증</li>
-                                <li>티맵 딥링크 연동 (내비게이션)</li>
-                                <li>차량 정비/수리 기록 관리</li>
-                                <li>운행 통계 보고서</li>
                             </ul>
                         </div>
                     </section>
@@ -109,8 +109,12 @@ export default function TermsPage() {
                         <div className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed space-y-2">
                             <ul className="list-disc list-inside space-y-1 ml-2">
                                 <li>
-                                    서비스 제공자는 AI OCR 인식 결과의 정확성을 보장하지 않으며,
-                                    이용자는 인식 결과를 반드시 확인해야 합니다.
+                                    서비스 제공자는 AI 증빙서류 판별 결과의 정확성을 보장하지 않으며,
+                                    최종 승인은 서비스 운영자가 확인해 결정합니다.
+                                </li>
+                                <li>
+                                    서비스는 희망이음 등 기관의 공식 재물 원장을 대신하지 않습니다.
+                                    엑셀에서 가져온 값은 원본 대장에 따르며, 조사 결과를 원장에 반영하는 일은 기관이 직접 합니다.
                                 </li>
                                 <li>
                                     천재지변, 시스템 장애 등 불가항력으로 인한 서비스 중단에 대해
@@ -130,7 +134,7 @@ export default function TermsPage() {
                             <ul className="list-disc list-inside space-y-1 ml-2">
                                 <li>
                                     기관 관리자는 서비스 관리자에게 기관 삭제를 요청할 수 있으며,
-                                    삭제 시 해당 기관의 모든 데이터(운행일지, 차량, 예약 등)가 삭제됩니다.
+                                    삭제 시 해당 기관의 모든 데이터(재물·공간·조사 기록 등)가 삭제됩니다.
                                 </li>
                                 <li>
                                     기관 삭제 시 소속 직원의 계정도 함께 삭제되며, 즉시 접근이 차단됩니다.
@@ -163,7 +167,7 @@ export default function TermsPage() {
                                 <p className="text-blue-700 dark:text-blue-400 text-xs">
                                     서비스를 이용하는 <strong>기관이 소속 직원 개인정보의 개인정보처리자(위탁자)</strong>이며,
                                     서비스 제공자는 기관의 위탁을 받아 개인정보를 처리하는 <strong>수탁자</strong>입니다.
-                                    기관은 서비스 이용을 신청할 때 또는 본 조 신설 이후 별도로 안내되는 재동의 절차를 통해
+                                    기관은 서비스 이용을 신청할 때(약관이 바뀌면 안내되는 재동의 절차를 통해)
                                     본 조에 따라 개인정보 처리업무를 서비스 제공자에게 위탁합니다.
                                 </p>
                             </div>
@@ -171,7 +175,7 @@ export default function TermsPage() {
                             <div className="space-y-2">
                                 <p className="font-medium text-surface-700 dark:text-surface-300">① 위탁업무의 목적 및 범위</p>
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-xs">
-                                    <li>제3조의 서비스 기능 제공 (운행일지·차량·예약·정비 기록의 저장·조회·출력, 통계 산출, 알림 발송)</li>
+                                    <li>제3조의 서비스 기능 제공 (재물·공간·조사 기록의 저장·조회·출력, 조사 결과 산출, 알림 발송)</li>
                                     <li>이용자 인증 및 역할 기반 접근 권한 관리</li>
                                     <li>서비스의 운영·유지보수, 장애 대응 및 문의 처리</li>
                                     <li>서비스 개선을 위한 이용 현황 분석</li>
@@ -244,7 +248,7 @@ export default function TermsPage() {
                                         개인정보 유출이 확인된 경우 정보주체 통지 및 관계 기관 신고는 기관이 수행하며,
                                         서비스 제공자는 유출 사실을 인지한 즉시 기관에 통지하고 필요한 자료를 제공합니다.
                                     </li>
-                                    <li>운행일지의 탑승자란에 서비스 이용자(클라이언트)의 이름을 기록하지 않아야 합니다.</li>
+                                    <li>재물 대장·메모에 업무에 필요하지 않은 개인정보(서비스 이용자·직원의 이름·연락처 등)를 넣지 않아야 합니다.</li>
                                 </ul>
                             </div>
                         </div>
@@ -254,8 +258,7 @@ export default function TermsPage() {
                         <p className="text-xs text-surface-500 dark:text-surface-400">본 약관은 {EFFECTIVE_DATE}부터 시행됩니다.</p>
                         <p className="text-xs text-surface-500 dark:text-surface-400">
                             {/* 지난 개정의 날짜는 고정한다 — EFFECTIVE_DATE로 쓰면 다음 개정 때 과거 내용이 새 날짜로 바뀐다 */}
-                            개정 이력 · 2026년 2월 1일 최초 시행 / 2026년 8월 10일 개인정보 처리의 위탁 조항 신설 /
-                            {' '}{EFFECTIVE_DATE} 개인정보 처리방침 개정에 맞춰 시행일 변경(본문 변경 없음)
+                            개정 이력 · {EFFECTIVE_DATE} 최초 시행
                         </p>
                     </div>
                 </div>

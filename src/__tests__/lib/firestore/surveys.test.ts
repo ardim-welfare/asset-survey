@@ -30,6 +30,8 @@ vi.mock('firebase/firestore', () => ({
 }));
 vi.mock('../../../lib/firebase', () => ({ db: {}, auth: { currentUser: { uid: 'u1' } } }));
 vi.mock('../../../lib/sentry', () => ({ captureError: vi.fn() }));
+const trackWrite = vi.fn(async () => undefined);
+vi.mock('../../../lib/offline/syncQueue', () => ({ trackWrite: (...a: unknown[]) => trackWrite(...(a as [])) }));
 
 import * as fs from 'firebase/firestore';
 import {
@@ -83,6 +85,8 @@ describe('saveScan', () => {
         });
         const [ref, data] = vi.mocked(fs.setDoc).mock.calls[0] as unknown as [{ path: string }, Record<string, unknown>];
         expect(ref.path).toBe('scans/sv1__a1');
+        // 쓰기 장부에 적는다 — 미전송 배너·로그아웃 경고·유실 안내 (6단계)
+        expect(trackWrite).toHaveBeenCalledWith('CREATE', 'scans', 'sv1__a1', data, expect.any(Promise), { callerAwaits: false });
         expect(data).toMatchObject({
             organizationId: 'org-A', surveyId: 'sv1', spaceId: 'sp-1', method: 'manual', result: 'ok', condition: 'normal', memo: '',
             scannedByUid: 'u1', lastEditedByUid: 'u1', scannedAt: '__ts__', updatedAt: '__ts__',
@@ -119,6 +123,7 @@ describe('제출·검토 (기획서 F13)', () => {
             reason: '', selfApproved: false, proxyApproved: false,
         });
         expect(ops[1].data).toMatchObject({ type: 'submit', spaceId: 'sp-1' });
+        expect(trackWrite).toHaveBeenCalledWith('CREATE', 'surveySubmissions', 'sv1__sp-1', { spaceId: 'sp-1' }, expect.any(Promise), { callerAwaits: true });
     });
 
     it('제출 없는 공간은 대신 승인(사유 포함), 자기 제출 승인은 본인 승인으로 표시', async () => {

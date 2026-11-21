@@ -191,6 +191,12 @@ describe('describeRecord — 다시 입력할 수 있게 무엇을 잃었는지 
         expect(line).toBe('2026-09-05 · 서울역 · 50,000→50,050km');
     });
 
+    it('재물 스캔은 자산코드·품명으로 적고, 이름은 재물 스캔으로 센다(6단계)', () => {
+        const r = record({ collection: 'scans', type: 'CREATE', data: { code: '2021-001', name: '냉장고', result: 'ok' } });
+        expect(describeRecord(r)).toBe('2021-001 냉장고');
+        expect(buildFailureMessage([r])).toContain('재물 스캔 1건 (2021-001 냉장고)');
+    });
+
     it('이틀 걸린 운행은 출발일을 쓴다', () => {
         expect(describeRecord(record({ data: { startDate: '2026-09-01', date: '2026-09-02' } })))
             .toBe('2026-09-01');
