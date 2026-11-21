@@ -1,0 +1,185 @@
+/**
+ * AuditLogViewer — 접속기록 점검 화면
+ *
+ * 고정하는 계약:
+ *  (1) 유형별로 남아 있는 항목만 사람이 읽는 말로 보여준다 (IP·반출 형식·바뀐 항목)
+ *  (2) 행위자 uid는 이름으로 바꿔 보여준다
+ *  (3) 기록의 신뢰 수준(행위자 미확인)을 숨기지 않는다
+ *  (4) 기간·유형 버튼이 훅의 필터를 바꾼다
+ *  (5) 운행일지·예약 기록에는 원본에서 읽은 요약을 제목 자리에 붙이고, 삭제된 것은 그렇다고 알린다
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import type { AuditLog } from '../../types/auditLog';
+import type { UseAuditLogsResult } from '../../hooks/useAuditLogs';
+
+const hookState = vi.hoisted(() => ({
+    value: null as unknown as UseAuditLogsResult,
+}));
+
+vi.mock('../../hooks/useAuditLogs', async () => {
+    const actual = await vi.importActual<typeof import('../../hooks/useAuditLogs')>('../../hooks/useAuditLogs');
+    return {
+        ...actual,
+        default: () => hookState.value,
+    };
+});
+
+import AuditLogViewer from '../../components/admin/AuditLogViewer';
+
+const at = { toDate: () => new Date('2026-08-02T14:05:00') } as unknown as AuditLog['at'];
+
+const log = (over: Partial<AuditLog>): AuditLog => ({
+    id: 'l1',
+    organizationId: 'org-1',
+    action: 'update',
+    targetType: 'user',
+    targetId: 'u-2',
+    actorUid: 'u1',
+    actorSource: 'stamp',
+    subjectUids: [],
+    at,
+    expiresAt: at,
+    ...over,
+});
+
+const setHook = (over: Partial<UseAuditLogsResult> = {}) => {
+    hookState.value = {
+        logs: [],
+        loading: false,
+        loadingMore: false,
+        error: '',
+        hasMore: false,
+        kind: 'all',
+        setKind: vi.fn(),
+        days: 30,
+        setDays: vi.fn(),
+        range: { start: '', end: '' },
+        setRange: vi.fn(),
+        rangeActive: false,
+        memberUid: '',
+        setMemberUid: vi.fn(),
+        members: [],
+        exportExcel: vi.fn(),
+        exporting: false,
+        loadMore: vi.fn(),
+        nameOf: (uid) => (uid === 'u1' ? '김간사' : uid === 'u2' ? '이팀장' : '알 수 없음'),
+        ...over,
+    };
+    return hookState.value;
+};
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    setHook();
+});
+
+describe('AuditLogViewer', () => {
+    it('기록이 없으면 기간을 넓히도록 안내한다', () => {
+        render(<AuditLogViewer />);
+        expect(screen.getByText('선택한 기간에 기록이 없습니다.')).toBeInTheDocument();
+    });
+
+    it('접속 기록은 IP와 접속 환경을 보여준다', () => {
+        setHook({
+            logs: [log({
+                action: 'login', targetType: 'session', actorSource: 'auth',
+                ip: '203.0.113.7', userAgent: 'Chrome / Android',
+            })],
+        });
+        render(<AuditLogViewer />);
+
+        expect(screen.getByText('로그인 접속')).toBeInTheDocument();
+        expect(screen.getByText('203.0.113.7')).toBeInTheDocument();
+        expect(screen.getByText('Chrome / Android')).toBeInTheDocument();
+        expect(screen.getByText('김간사')).toBeInTheDocument();
+    });
+
+    // "기록은 남았는데 어떤 차를 어디로인지 모르겠다"(운영자) — 예약도 원본에서 요약을 붙인다
+
+    it('직원을 고르면 훅의 직원 필터를 바꾼다', () => {
+        const state = setHook({ members: [{ uid: 'u1', name: '김간사' }, { uid: 'u2', name: '이팀장' }] });
+        render(<AuditLogViewer />);
+
+        fireEvent.change(screen.getByLabelText('직원'), { target: { value: 'u2' } });
+        expect(state.setMemberUid).toHaveBeenCalledWith('u2');
+        expect(screen.getByRole('option', { name: '전체 직원' })).toBeInTheDocument();
+    });
+
+    it('기간·유형 버튼이 훅의 필터를 바꾼다', () => {
+        const state = setHook();
+        render(<AuditLogViewer />);
+
+        fireEvent.click(screen.getByRole('button', { name: '최근 90일' }));
+        expect(state.setDays).toHaveBeenCalledWith(90);
+
+        fireEvent.click(screen.getByRole('button', { name: '반출·열람' }));
+        expect(state.setKind).toHaveBeenCalledWith('export');
+    });
+
+    it('보관기간과 같은 1년까지 조회할 수 있다', () => {
+        // 보관은 1년인데 선택지가 90일까지면 91일~1년 기록은 보관돼 있으나 볼 수 없다.
+        const state = setHook();
+        render(<AuditLogViewer />);
+
+        fireEvent.click(screen.getByRole('button', { name: '최근 1년' }));
+        expect(state.setDays).toHaveBeenCalledWith(365);
+    });
+
+    it('더 볼 기록이 있으면 더 보기 버튼을 노출한다', () => {
+        const state = setHook({ logs: [log({})], hasMore: true });
+        render(<AuditLogViewer />);
+
+        fireEvent.click(screen.getByRole('button', { name: '이전 기록 더 보기' }));
+        expect(state.loadMore).toHaveBeenCalled();
+    });
+
+    it('내보내기 버튼이 기간 전체 내보내기를 호출하고, IP 포함 경고를 함께 보여준다', () => {
+        const state = setHook({ logs: [log({})] });
+        render(<AuditLogViewer />);
+
+        fireEvent.click(screen.getByRole('button', { name: '엑셀로 내보내기' }));
+        expect(state.exportExcel).toHaveBeenCalled();
+        expect(screen.getByText(/접속지 IP가 포함되므로/)).toBeInTheDocument();
+    });
+
+    it('내보내는 중에는 버튼을 잠근다', () => {
+        setHook({ exporting: true });
+        render(<AuditLogViewer />);
+        expect(screen.getByRole('button', { name: '내보내는 중...' })).toBeDisabled();
+    });
+
+    it('시작일·종료일을 직접 지정할 수 있다', () => {
+        const state = setHook();
+        render(<AuditLogViewer />);
+
+        fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-07-01' } });
+        expect(state.setRange).toHaveBeenCalledWith({ start: '2026-07-01' });
+
+        fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-07-31' } });
+        expect(state.setRange).toHaveBeenCalledWith({ end: '2026-07-31' });
+    });
+
+    it('직접 지정이 적용 중이면 프리셋 선택 표시를 끈다', () => {
+        // 둘 다 켜져 보이면 지금 어느 기간으로 보고 있는지 알 수 없다
+        setHook({ rangeActive: true, range: { start: '2026-07-01', end: '2026-07-31' }, days: 30 });
+        render(<AuditLogViewer />);
+
+        expect(screen.getByRole('button', { name: '최근 30일' })).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByRole('button', { name: '초기화' })).toBeInTheDocument();
+    });
+
+    it('조회 실패 문구를 그대로 노출한다', () => {
+        setHook({ error: '접속기록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.' });
+        render(<AuditLogViewer />);
+        expect(screen.getByText('접속기록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.')).toBeInTheDocument();
+    });
+
+    it("조회 실패를 '기록 없음'으로 오해시키지 않는다 — 빈 상태 안내를 함께 띄우지 않는다", () => {
+        // 인덱스 미생성(failed-precondition)으로 실패한 실제 화면에서 오류 문구와
+        // "선택한 기간에 기록이 없습니다"가 동시에 떠 실패가 '기록 없음'처럼 보였다.
+        setHook({ error: '접속기록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.' });
+        render(<AuditLogViewer />);
+        expect(screen.queryByText('선택한 기간에 기록이 없습니다.')).not.toBeInTheDocument();
+    });
+});

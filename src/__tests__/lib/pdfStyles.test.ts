@@ -1,0 +1,74 @@
+/**
+ * pdfStyles.test.js — PDF 스타일 유틸리티 함수 테스트
+ */
+import { describe, it, expect } from 'vitest';
+import { getPdfStyles, formatDate, formatNumber } from '../../lib/pdf/pdfStyles';
+
+describe('getPdfStyles', () => {
+    it('CSS 문자열을 반환', () => {
+        const css = getPdfStyles();
+        expect(typeof css).toBe('string');
+        expect(css.length).toBeGreaterThan(100);
+    });
+
+    it('A4 landscape 설정 포함', () => {
+        expect(getPdfStyles()).toContain('A4 landscape');
+    });
+
+    it('log-table 클래스 포함', () => {
+        expect(getPdfStyles()).toContain('.log-table');
+    });
+});
+
+describe('formatDate', () => {
+    it('YYYY-MM-DD 형식 유지', () => {
+        expect(formatDate('2026-02-27')).toBe('2026-02-27');
+    });
+
+    it('빈 값은 - 반환', () => {
+        expect(formatDate('')).toBe('-');
+        expect(formatDate(null as unknown as string)).toBe('-');
+        expect(formatDate(undefined as unknown as string)).toBe('-');
+    });
+
+    it('- 문자는 그대로 반환', () => {
+        expect(formatDate('-')).toBe('-');
+    });
+
+    it('비표준 형식은 그대로 반환', () => {
+        expect(formatDate('2026/02/27')).toBe('2026/02/27');
+    });
+
+    // 결과는 곧바로 document.write로 나가는 HTML이다 — 이 함수가 막지 않으면 막는 곳이 없다.
+    // 하이픈 유무로 갈리는 두 갈래 모두 덮는다(둘 다 입력을 그대로 돌려주던 자리다).
+    it('마크업을 이스케이프한다 — 하이픈이 없는 입력', () => {
+        expect(formatDate('<img src=x onerror=alert(1)>'))
+            .toBe('&lt;img src=x onerror=alert(1)&gt;');
+    });
+
+    it('마크업을 이스케이프한다 — 하이픈 2개로 3분할되는 입력', () => {
+        expect(formatDate('<b>-"x"-</b>'))
+            .toBe('&lt;b&gt;-&quot;x&quot;-&lt;/b&gt;');
+    });
+});
+
+describe('formatNumber', () => {
+    it('숫자를 로케일 문자열로 변환', () => {
+        expect(formatNumber(1000)).toBe('1,000');
+        expect(formatNumber(12345.6)).toBe('12,345.6');
+    });
+
+    it('문자열 숫자도 변환', () => {
+        expect(formatNumber('5000')).toBe('5,000');
+    });
+
+    it('빈 값은 빈 문자열 반환', () => {
+        expect(formatNumber(null)).toBe('');
+        expect(formatNumber(undefined)).toBe('');
+        expect(formatNumber('')).toBe('');
+    });
+
+    it('0도 정상 변환', () => {
+        expect(formatNumber(0)).toBe('0');
+    });
+});

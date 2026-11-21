@@ -1,0 +1,52 @@
+/**
+ * firestore.indexes.json 회귀 가드
+ *
+ * 이 파일의 인덱스가 빠지면 화면은 "The query requires an index"로 실패하는데,
+ * 인덱스 배포는 `--force` 없이는 프로덕션에서 삭제하지 않아 **파일에서 사라져도 한동안
+ * 증상이 없다.** 그래서 조용히 유실됐다가 나중에 새 프로젝트·재배포 시점에 터진다
+ * (#176 유실 → #193 복원, Sentry JAVASCRIPT-REACT-5F).
+ *
+ * 여기서는 "동등 필터 + 범위 필터" 조합이라 반드시 복합 인덱스가 필요한 쿼리만 고정한다.
+ * 동등 필터만 있는 쿼리는 단일 필드 인덱스 병합으로 처리되므로 대상이 아니다.
+ */
+import indexConfig from '../../../../firestore.indexes.json';
+
+interface IndexField { fieldPath: string; order?: string; arrayConfig?: string }
+interface CompositeIndex { collectionGroup: string; queryScope?: string; fields: IndexField[] }
+
+const indexes = indexConfig.indexes as CompositeIndex[];
+
+/** 해당 컬렉션에 이 필드 순서로 시작하는 인덱스가 있는가 (__name__ 등 뒤쪽 필드는 무시) */
+const hasIndex = (collectionGroup: string, fieldPaths: string[]): boolean =>
+    indexes.some((index) =>
+        index.collectionGroup === collectionGroup
+        && fieldPaths.every((path, i) => index.fields[i]?.fieldPath === path));
+
+describe('firestore.indexes.json — 복합 인덱스 필수 쿼리', () => {
+    // src/lib/firestore/maintenance.ts — cancelVehicleReservations
+    // 없으면 정비 차단·폐차에서 예약 일괄 취소가 통째로 실패한다(정비 기록만 남고 예약은 그대로).
+
+    // src/lib/firestore/reservations.ts — getReservations(기간 미지정 시 최근 1개월)
+
+    // src/lib/firestore/reservations.ts — getWeekReservations(= getReservationsByDateRange)
+    // 캘린더·오늘 대시보드가 여는 쿼리다. 취소 건을 서버에서 걸러내려고 date 범위에
+    // status 부등식을 더했고, 필드 순서는 Firestore가 요구한 그대로다(선택도 높은 기간이 앞).
+    // 이 인덱스가 없으면 캘린더가 "The query requires an index"로 통째로 실패한다.
+
+    // src/lib/firestore/reservations.ts — getMyRecentReservations
+
+    // src/lib/firestore/auditLogs.ts — 유형 필터가 요구한 조합 (#176에서 유실됐던 인덱스)
+    it('접속기록 유형 필터: auditLogs (action, organizationId, at)', () => {
+        expect(hasIndex('auditLogs', ['action', 'organizationId', 'at'])).toBe(true);
+    });
+
+    // src/lib/firestore/auditLogs.ts — 직원 필터는 OR의 갈래(행위자/대상)마다 인덱스가 따로 필요하다
+    it('접속기록 직원 필터: 행위자·대상 갈래별 인덱스 (유형 필터 포함)', () => {
+        expect(hasIndex('auditLogs', ['actorUid', 'organizationId', 'at'])).toBe(true);
+        expect(hasIndex('auditLogs', ['organizationId', 'subjectUids', 'at'])).toBe(true);
+        expect(hasIndex('auditLogs', ['action', 'actorUid', 'organizationId', 'at'])).toBe(true);
+        expect(hasIndex('auditLogs', ['action', 'organizationId', 'subjectUids', 'at'])).toBe(true);
+    });
+
+    // 차량 필터는 위 모든 조합에 vehicleId 동등 조건이 하나 더 붙는다
+});
