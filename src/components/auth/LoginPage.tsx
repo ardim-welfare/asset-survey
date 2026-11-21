@@ -1,0 +1,134 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { signInWithGoogle, handleRedirectResult } from '../../lib/auth';
+import useForceLightMode from '../../hooks/useForceLightMode';
+import SEOHead from '../common/SEOHead';
+
+/** Firebase 로그인 오류 코드를 화면 문구로 바꾼다. */
+function loginErrorMessage(code: string | undefined): string {
+    if (code === 'auth/user-disabled') {
+        return '계정이 비활성화되었습니다. 기관 관리자에게 다시 활성화를 요청하세요.';
+    }
+    return '로그인에 실패했습니다. 다시 시도해주세요.';
+}
+
+export default function LoginPage() {
+    useForceLightMode();
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    /*
+     * 리다이렉트 로그인의 실패는 여기서만 보인다.
+     * 프로덕션은 signInWithRedirect라 Google에서 돌아오면 이 화면이 새로 그려지고, 실패하면 user=null이라
+     * main.tsx가 경량 앱을 띄운다. 전체 앱(useAuth)은 이때 로드되지 않으므로 결과를 읽는 곳이 없었다 —
+     * 비활성 계정(auth/user-disabled)이 아무 안내 없이 로그인 화면으로 되돌아온 이유다(2026-11-18 기관 문의).
+     * 성공한 리다이렉트는 null이 아닌 결과로 끝나고 lightEntry의 onAuthStateChanged가 전체 앱으로 넘긴다.
+     */
+    useEffect(() => {
+        handleRedirectResult().catch((err: unknown) => {
+            setError(loginErrorMessage((err as { code?: string })?.code));
+        });
+    }, []);
+
+    const handleGoogleLogin = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            await signInWithGoogle();
+            // App.jsx에서 역할에 따라 자동 라우팅됨
+        } catch (err: unknown) {
+            const firebaseErr = err as { code?: string; message?: string };
+            setError(loginErrorMessage(firebaseErr.code));
+            console.error('Google 로그인 실패:', firebaseErr.code, firebaseErr.message, err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 px-4">
+            <SEOHead
+                title="로그인"
+                description="Google 계정으로 재물조사에 로그인하세요."
+                path="/login"
+            />
+            {/* 배경 장식 */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-400/20 rounded-full blur-3xl" />
+                <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-primary-300/10 rounded-full blur-3xl" />
+                <div className="absolute top-1/3 left-1/4 w-64 h-64 bg-accent-400/10 rounded-full blur-3xl" />
+            </div>
+
+            <div className="relative w-full max-w-sm animate-scale-in">
+                {/* 첫 페이지로 돌아가기 */}
+                <button
+                    onClick={() => navigate('/')}
+                    className="flex items-center gap-1.5 text-primary-200/80 hover:text-white text-sm mb-4 transition-colors group min-h-[48px] px-2 -ml-2"
+                >
+                    <svg className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                    </svg>
+                    첫 페이지로
+                </button>
+
+                {/* 로고 / 아이콘 영역 */}
+                <div className="text-center mb-8">
+                    <div className="w-20 h-20 mx-auto mb-4 bg-white/10 dark:bg-surface-800/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
+                        <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+                        </svg>
+                    </div>
+                    <h1 className="text-3xl font-bold text-white mb-2">재물조사</h1>
+                    <p className="text-primary-200 text-sm">기관 재물조사를 휴대폰 QR로 간편하게</p>
+                </div>
+
+                {/* 로그인 카드 */}
+                <div className="glass-card p-6 space-y-6">
+                    <div className="text-center">
+                                <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-200 mb-1">시작하기</h2>
+                                <p className="text-sm text-surface-500 dark:text-surface-400">Google 계정으로 로그인하세요</p>
+                            </div>
+
+                            {error && (
+                                <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-xl px-4 py-3 text-sm text-red-600 dark:text-red-400 animate-slide-down">
+                                    {error}
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleGoogleLogin}
+                                disabled={loading}
+                                className="w-full flex items-center justify-center gap-3 px-4 py-3 min-h-[48px] bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-600 rounded-xl font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/50 dark:bg-surface-800 hover:shadow-md transition-all duration-200 disabled:opacity-50 active:scale-[0.98]"
+                            >
+                                {loading ? (
+                                    <div className="w-5 h-5 spinner" />
+                                ) : (
+                                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                    </svg>
+                                )}
+                                {loading ? '로그인 중...' : 'Google로 로그인'}
+                            </button>
+                </div>
+
+                <p className="text-center text-primary-200/80 text-xs mt-6 flex flex-wrap justify-center gap-x-2 gap-y-2 items-center min-h-[48px]">
+                    <a href="/terms" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">이용약관</a>
+                    <span className="text-primary-300/40">|</span>
+                    <a href="/privacy" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">개인정보 처리방침</a>
+                    <span className="text-primary-300/40">|</span>
+                    <a href="/release-notes" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">업데이트 소식</a>
+                    <span className="text-primary-300/40">|</span>
+                    <a href="/faq" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">자주 하는 질문</a>
+                </p>
+
+                <p className="text-center text-primary-300/60 text-xs mt-2">
+                    © 2026 재물조사. All rights reserved.
+                </p>
+            </div>
+        </div>
+    );
+}
