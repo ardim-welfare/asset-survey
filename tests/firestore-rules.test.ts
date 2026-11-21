@@ -771,6 +771,110 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(db.collection('organizations').doc('org-A').update({ surveyMode: 'anyone' }));
       await assertFails(emp('A', 1).collection('organizations').doc('org-A').update({ surveyMode: 'solo' }));
     });
+
+    // ── 재물 (기획서 F04~F08) ──
+    const assetDoc = (org: 'A' | 'B', uid: string, extra: Record<string, unknown> = {}) => ({
+      organizationId: `org-${org}`, code: '1-1-1', name: 'TV', category: '비품', spec: null, acquiredAt: '2021-03-13',
+      acquiredQuantity: 1, quantity: 1, status: 'active', statusRaw: '운영', locationRaw: '101호', spaceId: null,
+      department: null, usage: null, missingFromSource: false, lastImportId: 'imp1',
+      createdAt: serverTs(), updatedAt: serverTs(), lastEditedByUid: uid, ...extra,
+    });
+    const seedAsset = async (id: string, org: 'A' | 'B') => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        await db.collection('assets').doc(id).set({ ...assetDoc(org, `admin_${org}`), createdAt: at, updatedAt: at });
+        await db.collection('assetAccounting').doc(id).set({
+          organizationId: `org-${org}`, amount: 450000, depreciation: 449000, residual: 1000, updatedAt: at, lastEditedByUid: `admin_${org}`,
+        });
+      });
+    };
+
+    it('#A1 재물은 같은 기관이 읽고, 금액은 그 기관 관리자만 읽는다', async () => {
+      await seedAsset('org-A__1-1-1', 'A');
+      await assertSucceeds(emp('A', 1).collection('assets').doc('org-A__1-1-1').get());
+      await assertSucceeds(emp('A', 1).collection('assets').where('organizationId', '==', 'org-A').get());
+      await assertFails(emp('B', 1).collection('assets').doc('org-A__1-1-1').get());
+      await assertFails(anon().collection('assets').doc('org-A__1-1-1').get());
+
+      await assertSucceeds(admin('A').collection('assetAccounting').doc('org-A__1-1-1').get());
+      await assertFails(emp('A', 1).collection('assetAccounting').doc('org-A__1-1-1').get());
+      await assertFails(emp('A', 1).collection('assetAccounting').where('organizationId', '==', 'org-A').get());
+      await assertFails(admin('B').collection('assetAccounting').doc('org-A__1-1-1').get());
+    });
+
+    it('#A2 재물 등록은 그 기관 관리자만, 문서 ID는 기관ID__코드 꼴이어야 한다', async () => {
+      await assertSucceeds(admin('A').collection('assets').doc('org-A__1-1-1').set(assetDoc('A', 'admin_A')));
+      await assertFails(admin('A').collection('assets').doc('org-B__1-1-1').set(assetDoc('A', 'admin_A')));
+      await assertFails(admin('A').collection('assets').doc('random-id').set(assetDoc('A', 'admin_A')));
+      await assertFails(emp('A', 1).collection('assets').doc('org-A__9').set(assetDoc('A', 'emp_A1')));
+      await assertFails(admin('B').collection('assets').doc('org-A__9').set(assetDoc('A', 'admin_B')));
+
+      const acc = { organizationId: 'org-A', amount: 1000, depreciation: null, residual: 0, updatedAt: serverTs(), lastEditedByUid: 'admin_A' };
+      await assertSucceeds(admin('A').collection('assetAccounting').doc('org-A__1-1-1').set(acc));
+      await assertFails(emp('A', 1).collection('assetAccounting').doc('org-A__2').set({ ...acc, lastEditedByUid: 'emp_A1' }));
+      await assertFails(admin('A').collection('assetAccounting').doc('org-A__3').set({ ...acc, amount: '천원' }));
+    });
+
+    it('#A3 재물·금액은 아무도 지울 수 없다', async () => {
+      await seedAsset('org-A__1-1-1', 'A');
+      for (const db of [admin('A'), superAdmin()]) {
+        await assertFails(db.collection('assets').doc('org-A__1-1-1').delete());
+        await assertFails(db.collection('assetAccounting').doc('org-A__1-1-1').delete());
+      }
+    });
+
+    it('#A4 재물 형식 — 모르는 상태·모르는 필드·빈 코드·스탬프 없음은 막힌다', async () => {
+      const db = admin('A');
+      await assertFails(db.collection('assets').doc('org-A__x1').set(assetDoc('A', 'admin_A', { status: 'lost' })));
+      await assertFails(db.collection('assets').doc('org-A__x2').set(assetDoc('A', 'admin_A', { owner: '홍길동' })));
+      await assertFails(db.collection('assets').doc('org-A__x3').set(assetDoc('A', 'admin_A', { code: '' })));
+      await assertFails(db.collection('assets').doc('org-A__x4').set(assetDoc('A', 'emp_A1')));
+      await assertFails(db.collection('assets').doc('org-A__x5').set(assetDoc('A', 'admin_A', { quantity: '한 개' })));
+    });
+
+    it('#A5 재물 수정은 코드·기관을 바꿀 수 없다', async () => {
+      await seedAsset('org-A__1-1-1', 'A');
+      const db = admin('A');
+      const upd = { updatedAt: serverTs(), lastEditedByUid: 'admin_A' };
+      await assertSucceeds(db.collection('assets').doc('org-A__1-1-1').update({ ...upd, missingFromSource: true }));
+      await assertFails(db.collection('assets').doc('org-A__1-1-1').update({ ...upd, code: '9-9-9' }));
+      await assertFails(db.collection('assets').doc('org-A__1-1-1').update({ ...upd, organizationId: 'org-B' }));
+      await assertFails(emp('A', 1).collection('assets').doc('org-A__1-1-1').update({ ...upd, lastEditedByUid: 'emp_A1', name: '바꿈' }));
+    });
+
+    it('#A6 가져오기 기록·변경 이력은 관리자가 만들고 아무도 고치거나 지우지 못한다', async () => {
+      const db = admin('A');
+      const imp = {
+        organizationId: 'org-A', fileName: '대장.xlsx', sheetName: '시트1', columnMap: { code: '자산코드' },
+        counts: { total: 1, active: 1, inactive: 0, disposed: 0 }, diff: { added: 1, changed: 0, missing: 0, unchanged: 0 },
+        amountTotal: 1000, reportedTotal: null, lastEditedByUid: 'admin_A', confirmedAt: serverTs(),
+      };
+      await assertSucceeds(db.collection('imports').doc('imp1').set(imp));
+      await assertFails(db.collection('imports').doc('imp1').update({ fileName: '바꿈' }));
+      await assertFails(db.collection('imports').doc('imp1').delete());
+      await assertFails(emp('A', 1).collection('imports').doc('imp2').set({ ...imp, lastEditedByUid: 'emp_A1' }));
+      await assertFails(emp('A', 1).collection('imports').doc('imp1').get());
+
+      const hist = {
+        organizationId: 'org-A', assetId: 'org-A__1-1-1', code: '1-1-1', type: 'import-change',
+        changes: { name: { before: 'TV', after: '모니터' } }, importId: 'imp1', lastEditedByUid: 'admin_A', at: serverTs(),
+      };
+      await assertSucceeds(db.collection('history').doc('h1').set(hist));
+      await assertFails(db.collection('history').doc('h1').update({ code: '바꿈' }));
+      await assertFails(db.collection('history').doc('h1').delete());
+      await assertFails(db.collection('history').doc('h2').set({ ...hist, assetId: 'org-B__1' }));
+      await assertFails(db.collection('history').doc('h3').set({ ...hist, type: 'free-text' }));
+      await assertFails(emp('A', 1).collection('history').doc('h1').get());
+    });
+
+    it('#A7 기관의 열·위치 연결은 맵으로만 저장된다', async () => {
+      const db = admin('A');
+      await assertSucceeds(db.collection('organizations').doc('org-A').update({
+        importColumnMap: { code: '자산코드' }, locationSpaceMap: { '101호': 'sp1' },
+      }));
+      await assertFails(db.collection('organizations').doc('org-A').update({ importColumnMap: '자산코드' }));
+      await assertFails(db.collection('organizations').doc('org-A').update({ locationSpaceMap: ['sp1'] }));
+    });
   });
 
   // 직원 화면 더보기 › 기관 나가기 — 문서 삭제는 superAdmin 전용이라 본인은 소속만 비우는 update 분기를 쓴다.

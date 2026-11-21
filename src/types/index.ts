@@ -12,3 +12,6 @@ export type { Broadcast, BroadcastStatus } from './broadcast';
 export type { Notification } from './notification';
 export type { Feedback, FeedbackStatus } from './feedback';
 export type { Space, SpacePatch } from './space';
+export type {
+    Asset, AssetStatus, AssetAccounting, ImportRecord, HistoryEntry, AssetFields, AccountingFields,
+} from './asset';

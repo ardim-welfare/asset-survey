@@ -38,6 +38,11 @@ const DELETE_PAGE = 400;
 const ORG_SCOPED: ReadonlyArray<readonly [collection: string, field: string]> = [
     ["notifications", "organizationId"],
     ["feedbacks", "organizationId"],
+    // 재물 쪽 — 이력·기록 → 금액 → 재물 → 공간 순(기록이 재물을, 재물이 공간을 가리킨다)
+    ["history", "organizationId"],
+    ["imports", "organizationId"],
+    ["assetAccounting", "organizationId"],
+    ["assets", "organizationId"],
     // 공간 — 재물·조사 컬렉션을 만들면 이보다 앞에 둔다(기록이 공간을 가리킨다)
     ["spaces", "organizationId"],
     // 해지 시점에 이미 지워졌지만, 그 뒤에 남은 문서가 있으면 함께 지운다.

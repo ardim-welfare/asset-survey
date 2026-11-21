@@ -145,6 +145,9 @@ service cloud.firestore {
                     // 조사 방식은 정해진 값만 (기획서 F02). 화면이 고르게 하지만 우회 쓰기를 여기서 끊는다
                     && (!('surveyMode' in request.resource.data)
                         || request.resource.data.surveyMode in ['delegated', 'solo'])
+                    // 엑셀 가져오기의 열·위치 연결 (기획서 F04·F06) — 맵이어야 한다
+                    && (!('importColumnMap' in request.resource.data) || request.resource.data.importColumnMap is map)
+                    && (!('locationSpaceMap' in request.resource.data) || request.resource.data.locationSpaceMap is map)
                     && (
                       isSuperAdmin()
                       || (isOrgAdmin(orgId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -201,6 +204,96 @@ service cloud.firestore {
                     && request.resource.data.createdAt == resource.data.createdAt
                     && request.resource.data.lastEditedByUid == request.auth.uid;
       allow delete: if false;
+    }
+
+    // === 재물 (기획서 F04~F08) ===
+    // 문서 ID는 `기관ID__자산코드`다(src/lib/import/diff.ts assetDocId). 접두사를 확인해
+    // 다른 기관 이름으로 문서를 선점하지 못하게 한다.
+    // 읽기는 같은 기관 구성원(4단계 조사에서 직원도 재물 목록을 본다), 쓰기는 기관 관리자.
+    // 금액은 이 문서에 없다 — assetAccounting(관리자만). 지우지 않는다(대장에서 빠지면 표시만).
+    function nullableString(v, max) {
+      return v == null || (v is string && v.size() <= max);
+    }
+    function nullableNumber(v) {
+      return v == null || v is number;
+    }
+    function assetDataValid(d) {
+      return d.keys().hasOnly(['organizationId', 'code', 'name', 'category', 'spec', 'acquiredAt',
+                               'acquiredQuantity', 'quantity', 'status', 'statusRaw', 'locationRaw',
+                               'spaceId', 'department', 'usage', 'missingFromSource', 'lastImportId',
+                               'lastEditedByUid', 'createdAt', 'updatedAt'])
+             && d.organizationId is string
+             && d.code is string && d.code.size() > 0 && d.code.size() <= 100
+             && nullableString(d.name, 200) && nullableString(d.category, 100) && nullableString(d.spec, 200)
+             && nullableString(d.acquiredAt, 10)
+             && nullableNumber(d.acquiredQuantity) && nullableNumber(d.quantity)
+             && d.status in ['active', 'inactive', 'disposed']
+             && nullableString(d.statusRaw, 50) && nullableString(d.locationRaw, 200)
+             && nullableString(d.spaceId, 100)
+             && nullableString(d.department, 100) && nullableString(d.usage, 500)
+             && d.missingFromSource is bool
+             && nullableString(d.lastImportId, 100)
+             && d.updatedAt == request.time
+             && d.lastEditedByUid == request.auth.uid;
+    }
+
+    match /assets/{assetId} {
+      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      allow create: if (isSuperAdmin() || isOrgAdmin(request.resource.data.organizationId))
+                    && assetId.matches(request.resource.data.organizationId + '__.+')
+                    && assetDataValid(request.resource.data)
+                    && request.resource.data.createdAt == request.time;
+      allow update: if (isSuperAdmin() || isOrgAdmin(resource.data.organizationId))
+                    && assetDataValid(request.resource.data)
+                    && request.resource.data.organizationId == resource.data.organizationId
+                    && request.resource.data.code == resource.data.code
+                    && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    // 재물 금액 — 관리자만 읽고 쓴다(사용자 결정 2026-11-21). 문서 ID는 재물 문서와 같다.
+    match /assetAccounting/{assetId} {
+      function accountingValid(d) {
+        return d.keys().hasOnly(['organizationId', 'amount', 'depreciation', 'residual', 'lastEditedByUid', 'updatedAt'])
+               && d.organizationId is string
+               && nullableNumber(d.amount) && nullableNumber(d.depreciation) && nullableNumber(d.residual)
+               && d.updatedAt == request.time
+               && d.lastEditedByUid == request.auth.uid;
+      }
+      allow read: if isSuperAdmin() || isOrgAdmin(resource.data.organizationId);
+      allow create: if (isSuperAdmin() || isOrgAdmin(request.resource.data.organizationId))
+                    && assetId.matches(request.resource.data.organizationId + '__.+')
+                    && accountingValid(request.resource.data);
+      allow update: if (isSuperAdmin() || isOrgAdmin(resource.data.organizationId))
+                    && accountingValid(request.resource.data)
+                    && request.resource.data.organizationId == resource.data.organizationId;
+      allow delete: if false;
+    }
+
+    // 가져오기 기록 — 관리자가 만들고 아무도 고치거나 지우지 않는다
+    match /imports/{importId} {
+      allow read: if isSuperAdmin() || isOrgAdmin(resource.data.organizationId);
+      allow create: if (isSuperAdmin() || isOrgAdmin(request.resource.data.organizationId))
+                    && request.resource.data.keys().hasOnly(['organizationId', 'fileName', 'sheetName', 'columnMap',
+                                                             'counts', 'diff', 'amountTotal', 'reportedTotal',
+                                                             'lastEditedByUid', 'confirmedAt'])
+                    && request.resource.data.lastEditedByUid == request.auth.uid
+                    && request.resource.data.confirmedAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 변경 이력 (기획서 F17) — 생성만. 재물 값의 전·후만 담고 개인정보는 담지 않는다
+    match /history/{historyId} {
+      allow read: if isSuperAdmin() || isOrgAdmin(resource.data.organizationId);
+      allow create: if (isSuperAdmin() || isOrgAdmin(request.resource.data.organizationId))
+                    && request.resource.data.keys().hasOnly(['organizationId', 'assetId', 'code', 'type', 'changes',
+                                                             'importId', 'lastEditedByUid', 'at'])
+                    && request.resource.data.assetId.matches(request.resource.data.organizationId + '__.+')
+                    && request.resource.data.type in ['import-change', 'import-missing']
+                    && request.resource.data.changes is map
+                    && request.resource.data.lastEditedByUid == request.auth.uid
+                    && request.resource.data.at == request.time;
+      allow update, delete: if false;
     }
 
     // === 알림 ===

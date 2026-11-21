@@ -97,3 +97,13 @@ export {
     normalizeSpaceName,
     validateSpaceName,
 } from './spaces';
+
+// 재물 (Assets) — 기획서 F04~F08
+export {
+    getAssets,
+    getAccountingMap,
+    getAssetCounts,
+    getRecentImports,
+    commitImport,
+} from './assets';
+export type { CommitImportInput } from './assets';

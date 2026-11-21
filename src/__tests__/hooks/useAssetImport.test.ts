@@ -1,0 +1,158 @@
+/**
+ * useAssetImport — 가져오기 화면의 흐름 (기획서 F04~F07)
+ *
+ * 엑셀 읽기는 모의로 시트 줄을 돌려주고, 그 뒤(머리글 찾기·열 연결·검사·비교)는 실제 코드로 돈다.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import type { Space } from '../../types/space';
+
+const mockShowToast = vi.fn();
+const mockConfirm = vi.fn();
+vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ userData: { organizationId: 'org-A' } }) }));
+vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ showToast: mockShowToast }) }));
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm: mockConfirm }) }));
+vi.mock('../../lib/sentry', () => ({ captureError: vi.fn() }));
+
+const mockReadWorkbook = vi.fn();
+vi.mock('../../lib/import/parseSheet', async () => {
+    const actual = await vi.importActual<typeof import('../../lib/import/parseSheet')>('../../lib/import/parseSheet');
+    return { ...actual, readWorkbook: (...a: unknown[]) => mockReadWorkbook(...a) };
+});
+
+vi.mock('../../lib/firestore', async () => {
+    const spaces = await vi.importActual<typeof import('../../lib/firestore/spaces')>('../../lib/firestore/spaces');
+    return {
+        getOrganization: vi.fn(), getSpaces: vi.fn(), createSpace: vi.fn(), getAssets: vi.fn(),
+        getAccountingMap: vi.fn(), commitImport: vi.fn(),
+        validateSpaceName: spaces.validateSpaceName, normalizeSpaceName: spaces.normalizeSpaceName,
+    };
+});
+
+import * as firestore from '../../lib/firestore';
+import useAssetImport, { suggestLocationMap, reportedTotalOf } from '../../hooks/useAssetImport';
+
+const space = (over: Partial<Space>): Space => ({
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, ...over,
+});
+
+const ROWS = [
+    ['고정자산대장'],
+    ['자산코드', '자산명', '자산금액', '자산위치'],
+    ['1-1-1', 'TV', 450000, '101호'],
+    ['1-5-1', '냉장고', 1200000, '창고'],
+    ['', '합계', 1650000, ''],
+];
+const fakeFile = (size = 1000) => ({ name: '대장.xlsx', size, arrayBuffer: async () => new ArrayBuffer(8) }) as unknown as File;
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadWorkbook.mockResolvedValue([{ name: '시트1', rows: ROWS }]);
+    vi.mocked(firestore.getOrganization).mockResolvedValue({ id: 'org-A', name: '기관', locationSpaceMap: { 창고: 'sp-store' } } as never);
+    vi.mocked(firestore.getSpaces).mockResolvedValue([
+        space({ id: 'sp-101', name: '101호' }), space({ id: 'sp-store', name: '물품창고', order: 1 }),
+    ]);
+    vi.mocked(firestore.getAssets).mockResolvedValue([]);
+    vi.mocked(firestore.getAccountingMap).mockResolvedValue(new Map());
+    vi.mocked(firestore.commitImport).mockResolvedValue('imp-1');
+});
+
+describe('도우미', () => {
+    it('reportedTotalOf는 합계 줄 중 가장 큰 금액(총합계)을 쓴다', () => {
+        expect(reportedTotalOf([{ amount: 100 }, { amount: 300 }, { amount: null }])).toBe(300);
+        expect(reportedTotalOf([])).toBeNull();
+    });
+
+    it('suggestLocationMap: 지난번 연결 → 같은 이름 공간 → 미지정, 숨긴 공간은 제외', () => {
+        const spaces = [space({ id: 'a', name: '101호' }), space({ id: 'b', name: '창고', archived: true })];
+        expect(suggestLocationMap(['101호', '창고', '복도'], spaces, { 복도: 'a', 창고: 'b' })).toEqual({ '101호': 'a', 복도: 'a' });
+    });
+});
+
+describe('useAssetImport', () => {
+    it('파일을 고르면 머리글을 찾고 열을 맞춰 검사 결과를 낸다', async () => {
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+
+        expect(result.current.step).toBe('map');
+        expect(result.current.table?.headerRowIndex).toBe(1);
+        expect(result.current.columnMap).toMatchObject({ code: '자산코드', name: '자산명', amount: '자산금액', location: '자산위치' });
+        expect(result.current.parsed?.counts.total).toBe(2);
+        expect(result.current.reportedTotal).toBe(1650000);
+        expect(result.current.blockers).toEqual([]);
+    });
+
+    it('20MB가 넘는 파일은 읽지 않고 안내한다', async () => {
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile(25 * 1024 * 1024)); });
+        expect(result.current.step).toBe('pick');
+        expect(result.current.error).toMatch(/너무 큽니다/);
+        expect(mockReadWorkbook).not.toHaveBeenCalled();
+    });
+
+    it('품명 열을 빼면 다음으로 넘어가지 못한다', async () => {
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+        act(() => result.current.setColumn('name', ''));
+        expect(result.current.blockers).toEqual(['품명 열을 골라 주세요.']);
+    });
+
+    it('한 머리글을 다른 필드에 고르면 원래 필드에서 빠진다', async () => {
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+        act(() => result.current.setColumn('usage', '자산위치'));
+        expect(result.current.columnMap.usage).toBe('자산위치');
+        expect(result.current.columnMap.location).toBeUndefined();
+    });
+
+    it('비교 단계: 위치를 공간에 미리 연결하고, 확정하면 저장을 부른다', async () => {
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+        await act(async () => { await result.current.goCompare(); });
+
+        expect(result.current.step).toBe('compare');
+        expect(result.current.locationMap).toEqual({ '101호': 'sp-101', 창고: 'sp-store' });
+        expect(result.current.diff?.added).toHaveLength(2);
+
+        mockConfirm.mockResolvedValueOnce(true);
+        await act(async () => { await result.current.confirmImport(); });
+        expect(firestore.commitImport).toHaveBeenCalledWith(expect.objectContaining({
+            orgId: 'org-A', fileName: '대장.xlsx', sheetName: '시트1', reportedTotal: 1650000,
+            locationMap: { '101호': 'sp-101', 창고: 'sp-store' },
+        }));
+        expect(result.current.step).toBe('done');
+        expect(result.current.importId).toBe('imp-1');
+        // 완료 화면은 비교 결과가 아니라 남겨 둔 요약으로 그린다(완료 단계에서는 비교를 다시 계산하지 않는다)
+        expect(result.current.diff).toBeNull();
+        expect(result.current.result).toEqual({ added: 2, changed: 0, missing: 0, unchanged: 0 });
+    });
+
+    it('확정을 취소하면 저장하지 않고, 저장이 실패하면 비교 단계로 돌아와 다시 하라고 안내한다', async () => {
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+        await act(async () => { await result.current.goCompare(); });
+
+        mockConfirm.mockResolvedValueOnce(false);
+        await act(async () => { await result.current.confirmImport(); });
+        expect(firestore.commitImport).not.toHaveBeenCalled();
+
+        mockConfirm.mockResolvedValueOnce(true);
+        vi.mocked(firestore.commitImport).mockRejectedValueOnce(new Error('denied'));
+        await act(async () => { await result.current.confirmImport(); });
+        expect(result.current.step).toBe('compare');
+        expect(result.current.error).toMatch(/다시 확정하면/);
+    });
+
+    it('위치 이름으로 공간을 만들어 바로 연결한다', async () => {
+        vi.mocked(firestore.getOrganization).mockResolvedValue({ id: 'org-A', name: '기관' } as never);
+        vi.mocked(firestore.createSpace).mockResolvedValue('sp-new');
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+        await act(async () => { await result.current.goCompare(); });
+        expect(result.current.locationMap['창고']).toBeUndefined();
+
+        await act(async () => { await result.current.createSpaceFor('창고', '창고'); });
+        expect(firestore.createSpace).toHaveBeenCalledWith('org-A', '창고', 2);
+        expect(result.current.locationMap['창고']).toBe('sp-new');
+    });
+});

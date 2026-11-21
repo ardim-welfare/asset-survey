@@ -27,6 +27,10 @@ export const organizationSchema = z.object({
     hideApprovalLine: z.boolean().optional().catch(undefined),
     /** 조사 방식. firestore.rules가 허용 값을 다시 확인한다 */
     surveyMode: surveyModeSchema.optional().catch(undefined),
+    /** 엑셀 가져오기에서 마지막으로 쓴 열 연결(필드 → 머리글 원문). 다음 가져오기 때 먼저 쓴다 */
+    importColumnMap: z.record(z.string(), z.string()).optional().catch(undefined),
+    /** 대장 위치 원문 → 공간 ID. 다시 가져오기 때 같은 위치를 같은 공간으로 맞춘다(기획서 F06) */
+    locationSpaceMap: z.record(z.string(), z.string()).optional().catch(undefined),
     status: orgStatusSchema.catch('pending'),
     inviteCode: z.string().optional().catch(undefined),
     uniqueNumber: z.string().optional().catch(undefined),
