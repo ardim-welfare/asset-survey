@@ -21,7 +21,7 @@
 | Storage 버킷 리전 | 사용자 | 처리방침 제8조는 증빙서류 사본을 **미국(us-east1)**에 둔다고 적었다. 다른 리전으로 만들면 처리방침을 고친다 |
 | 앱 아이콘 교체 | 사용자 + AI | `public/icons/`는 차량운행일지 아이콘이다 |
 | 백업 버킷 `{프로젝트 ID}-backups` (asia-northeast3) | **완료 (2026-11-21, AI)** | `asset-survey-sp-backups` 서울·공개 차단·90일 자동 삭제([storage-lifecycle-backups.json](storage-lifecycle-backups.json)). Firestore 서비스 에이전트에 버킷 `storage.admin`, 기본 컴퓨트 계정에 `datastore.importExportAdmin`. 수동 export 시험 통과 — [dailyNightlyBatch.ts](functions/src/handlers/scheduled/dailyNightlyBatch.ts) |
-| `auditLogs` TTL 정책 (`expiresAt`) | 사용자 | 접속기록 1년 보관 |
+| `auditLogs` TTL 정책 (`expiresAt`) | **배포가 자동으로 건다** | 접속기록 1년 보관(`RETENTION_DAYS = 365`). [firestore.indexes.json](firestore.indexes.json)의 `fieldOverrides`(`ttl: true`)라 인덱스 배포 때 함께 적용된다(`_rateLimits`도 같다). asset-survey-sp는 첫 배포(2026-11-21)에 ACTIVE 확인 — `gcloud firestore fields ttls list` |
 | GitHub 저장소·Actions Secrets | 사용자 | `ENV_FILE` · `FUNCTIONS_ENV_FILE` · `FIREBASE_SERVICE_ACCOUNT` · `SENTRY_AUTH_TOKEN` |
 
 ## 2. 처음 배포까지 — 단계별
@@ -82,7 +82,7 @@
 6. 협력 기관이 기관 신청 → 시스템 관리자 화면에서 승인 → [시범운영안내.md](시범운영안내.md)대로 진행.
 
 ### 2.6 배포 뒤 남은 운영 준비 (사용자)
-- `auditLogs` TTL 정책 — 위 1장 표 (백업 버킷은 2026-11-21 만들었다)
+- (백업 버킷·`auditLogs` TTL은 2026-11-21 끝났다 — 위 1장 표)
 - 전용 도메인을 정하면: Hosting 사용자 지정 도메인 연결 → Authentication 승인된 도메인 추가 → `VITE_APP_URL`·`SERVICE_URL`에 넣고 다시 배포. **QR 라벨은 주소를 정한 뒤 뽑는 것이 좋다**(기본 카메라로 찍었을 때 새 주소로 열리게).
 
 ## 3. 배포
