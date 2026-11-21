@@ -4,14 +4,14 @@ test.describe('반응형 레이아웃', () => {
     test('모바일 뷰포트에서 랜딩 페이지가 정상 렌더링된다', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 812 }); // iPhone 크기
         await page.goto('/');
-        await expect(page.getByRole('heading', { name: /재물조사/ })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('heading', { level: 1, name: '재물조사' })).toBeVisible({ timeout: 10000 });
         await expect(page.getByRole('button', { name: '서비스 도입 신청' }).first()).toBeVisible();
     });
 
     test('태블릿 뷰포트에서 랜딩 페이지가 정상 렌더링된다', async ({ page }) => {
         await page.setViewportSize({ width: 768, height: 1024 }); // iPad 크기
         await page.goto('/');
-        await expect(page.getByRole('heading', { name: /재물조사/ })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('heading', { level: 1, name: '재물조사' })).toBeVisible({ timeout: 10000 });
     });
 
     test('모바일에서 로그인 페이지가 정상 렌더링된다', async ({ page }) => {

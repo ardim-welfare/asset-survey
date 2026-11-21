@@ -21,6 +21,6 @@ test.describe('오류 복구 및 ErrorBoundary E2E 시나리오', () => {
         
         // App.tsx 의 RouteFallback 로직에 의해 비로그인 사용자는 '/' 경로로 리다이렉트됨을 확인
         await page.waitForURL((url) => url.pathname === '/', { timeout: 5000 });
-        await expect(page.getByRole('heading', { name: /재물조사/ })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('heading', { level: 1, name: '재물조사' })).toBeVisible({ timeout: 10000 });
     });
 });

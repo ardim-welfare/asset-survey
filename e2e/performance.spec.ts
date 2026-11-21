@@ -22,7 +22,7 @@ test.describe('성능·배포 산출물 검증', () => {
         // 예산 안에 **콘텐츠가 보이는지**로 바꿔 부팅 실패를 잡는다.
         const start = Date.now();
         await page.goto('/', { waitUntil: 'domcontentloaded' });
-        await expect(page.getByRole('heading', { name: /재물조사/ })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('heading', { level: 1, name: '재물조사' })).toBeVisible({ timeout: 15000 });
         const elapsed = Date.now() - start;
         console.log(`[perf] 랜딩 콘텐츠 표시까지 ${elapsed}ms`);
     });

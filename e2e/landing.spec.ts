@@ -7,7 +7,7 @@ test.describe('랜딩 페이지', () => {
 
     test('히어로 영역이 정상 렌더링된다', async ({ page }) => {
         // 메인 타이틀
-        await expect(page.getByRole('heading', { name: /재물조사/ })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('heading', { level: 1, name: '재물조사' })).toBeVisible({ timeout: 10000 });
         // 서브 타이틀
         await expect(page.getByText('사회복지기관·비영리단체 전용')).toBeVisible();
         // CTA 버튼 2개
@@ -20,7 +20,7 @@ test.describe('랜딩 페이지', () => {
     test('3단계 시작 섹션이 표시된다', async ({ page }) => {
         const heading = page.getByText('단 3단계면 시작할 수 있어요!');
         await expect(heading).toBeVisible({ timeout: 10000 });
-        const steps = ['기관 신청', '직원 초대', '바로 사용'];
+        const steps = ['기관 신청', '직원 초대', '대장 올리고 조사'];
         for (const step of steps) {
             await expect(page.getByRole('heading', { name: step })).toBeVisible({ timeout: 10000 });
         }

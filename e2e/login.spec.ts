@@ -14,7 +14,7 @@ test.describe('로그인 페이지', () => {
 
     test('앱 제목이 표시된다', async ({ page }) => {
         await page.goto('/login');
-        const title = page.getByRole('heading', { name: /재물조사/ });
+        const title = page.getByRole('heading', { level: 1, name: '재물조사' });
         await expect(title).toBeVisible({ timeout: 10000 });
     });
 
