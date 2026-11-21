@@ -2,7 +2,7 @@
  * emailService — 기관 승인 이메일 발송
  *
  * 보안을 위해 서버사이드(Cloud Function)에서 이메일을 발송한다.
- * 프론트엔드에서 EmailJS 키를 노출하지 않는다.
+ * 메일 발송 자격증명(Gmail 앱 비밀번호)은 서버에만 둔다.
  */
 import { getFunctions, httpsCallable } from 'firebase/functions';
 

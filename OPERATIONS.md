@@ -13,9 +13,8 @@
 | Firebase 프로젝트 생성 (Blaze, 예산 알림) | 사용자 | Firestore는 서울(asia-northeast3). 만든 뒤 `.firebaserc`의 `demo-asset-survey`를 실제 ID로 바꾼다 |
 | 웹 앱 등록 → `.env` 값 채우기 | 사용자 + AI | [.env.example](.env.example) |
 | Google 로그인 사용 설정, OAuth 동의 화면 | 사용자 | 전용 도메인을 정하면 승인된 리디렉션 URI에 `https://<도메인>/__/auth/handler` 추가 |
-| Secret Manager 비밀값 등록 | 사용자 | `GEMINI_API_KEY` · `GMAIL_APP_PASSWORD` · `EMAILJS_PRIVATE_KEY` · `ALIMTALK_PROXY_TOKEN` → [README](README.md#환경변수) |
+| Secret Manager 비밀값 등록 | 사용자 | `GEMINI_API_KEY` · `GMAIL_APP_PASSWORD` · `ALIMTALK_PROXY_TOKEN` → [README](README.md#환경변수) |
 | `functions/.env` 채우기 | 사용자 + AI | [functions/.env.example](functions/.env.example) |
-| EmailJS 템플릿 새로 만들기 | 사용자 | 지금 코드의 서비스·템플릿 ID는 차량운행일지 것이다([verifyHelpers.ts](functions/src/services/orgDocument/verifyHelpers.ts)) |
 | 카카오 알림톡 템플릿 새로 등록 | 사용자 | 차량운행일지 템플릿 문구라 그대로 쓰지 않는다. 등록 전까지 알림톡은 끈다 |
 | 이용약관·개인정보 처리방침 검토 | 사용자 검토 | 6단계에서 재물조사 서비스용 첫 초안으로 바꿨다(차량 처리 제거, 재물·조사 기록 처리 추가). **법률 검토와 시행일 확정**이 남았다 — 시행일은 `src/lib/constants.ts`의 `TERMS_VERSION`·`PRIVACY_VERSION` |
 | Storage 버킷 리전 | 사용자 | 처리방침 제8조는 증빙서류 사본을 **미국(us-east1)**에 둔다고 적었다. 다른 리전으로 만들면 처리방침을 고친다 |
@@ -50,7 +49,7 @@
 
 ### 2.3 환경 변수 (사용자 + AI)
 1. AI가 [.env.example](.env.example)과 [functions/.env.example](functions/.env.example)를 보고 **채울 칸 목록**을 만들어 준다(값이 비밀이 아닌 것은 AI가 채운다).
-2. 비밀값은 사용자가 직접 넣는다 — Secret Manager(`GEMINI_API_KEY` · `GMAIL_APP_PASSWORD` · `EMAILJS_PRIVATE_KEY` · `ALIMTALK_PROXY_TOKEN`):
+2. 비밀값은 사용자가 직접 넣는다 — Secret Manager(`GEMINI_API_KEY` · `GMAIL_APP_PASSWORD` · `ALIMTALK_PROXY_TOKEN`). 메일은 모두 Gmail로 직접 보낸다(EmailJS는 2026-11-21 뺐다):
    ```powershell
    npx.cmd firebase-tools functions:secrets:set GEMINI_API_KEY --project <프로젝트 ID>
    ```

@@ -15,7 +15,6 @@ const EFFECTIVE_DATE = formatLegalVersion(PRIVACY_VERSION);
  * - Gemini: functions/src/handlers/callable/ocrDocument.ts, functions/src/handlers/https/submitOrgApplication.ts,
  *           functions/src/handlers/triggers/{autoVerifyDocument,notifyNewFeedback}.ts
  * - Gmail: functions/src/core/mailer.ts 사용처
- * - EmailJS: functions/src/services/orgDocument/verifyHelpers.ts (승인 메일 트리거 경로)
  * - 알리고·Cafe24: functions/src/services/alimtalk/
  * - Discord: functions/src/core/discord.ts 의 sendDiscordAlert 호출부 전부
  * - Sentry: src/lib/sentry.ts, functions/src/core/sentry.ts
@@ -55,15 +54,8 @@ const PROCESSORS: {
         name: 'Google LLC (Gmail)',
         country: '미국',
         task: '기관 신청 승인·반려 안내, 문의 답변, 운영자 알림 메일 발송',
-        items: '이메일 주소, 이름, 전화번호, 기관명, 문의·답변 내용, 반려 사유',
+        items: '이메일 주소, 이름, 전화번호, 기관명, 초대 코드, 문의·답변 내용, 반려 사유',
         contact: 'https://support.google.com/policies/troubleshooter/7575787',
-    },
-    {
-        name: 'EmailJS Pte. Ltd.',
-        country: '싱가포르 (서버 소재: 미국)',
-        task: '기관 신청 자동 승인 안내 메일 발송',
-        items: '이메일 주소, 이름, 기관명, 초대 코드',
-        contact: 'https://www.emailjs.com/legal/privacy-policy/',
     },
     {
         name: '(주)알리고',
@@ -460,7 +452,7 @@ export default function PrivacyPage() {
                                     </li>
                                     <li>
                                         <strong>개별 거부가 불가한 항목</strong> — 인증·데이터 저장(Firebase), 운영자 알림(Discord),
-                                        오류 모니터링(Sentry), 안내 메일 발송(Gmail·EmailJS)은 서비스 제공과 장애 대응에 필수적입니다.
+                                        오류 모니터링(Sentry), 안내 메일 발송(Gmail)은 서비스 제공과 장애 대응에 필수적입니다.
                                         거부하시는 경우 서비스 이용이 불가하며 계정 삭제로 처리됩니다.
                                     </li>
                                 </ul>

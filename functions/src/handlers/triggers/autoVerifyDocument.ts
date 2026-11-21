@@ -7,7 +7,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { sendApprovalAlimtalk } from "../../services/alimtalk/sendAlimtalk";
 import { sanitizePromptValue } from "../../utils/helpers";
 import { generateInviteCode } from "../../utils/inviteCode";
-import { GEMINI_API_KEY, GMAIL_APP_PASSWORD, EMAILJS_PRIVATE_KEY, ALIMTALK_PROXY_TOKEN } from "../../core/params";
+import { GEMINI_API_KEY, GMAIL_APP_PASSWORD, ALIMTALK_PROXY_TOKEN } from "../../core/params";
 import {
     maskName, maskEmail,
     downloadFileAsBase64,
@@ -49,7 +49,7 @@ export const autoVerifyDocument = onDocumentWritten(
         region: "asia-northeast3",
         timeoutSeconds: 120,
         memory: "512MiB",
-        secrets: [GEMINI_API_KEY, GMAIL_APP_PASSWORD, EMAILJS_PRIVATE_KEY, ALIMTALK_PROXY_TOKEN],
+        secrets: [GEMINI_API_KEY, GMAIL_APP_PASSWORD, ALIMTALK_PROXY_TOKEN],
     },
     async (event) => {
         const before = event.data?.before?.data();

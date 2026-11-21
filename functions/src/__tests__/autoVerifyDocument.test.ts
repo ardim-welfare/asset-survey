@@ -1,7 +1,7 @@
 /**
  * autoVerifyDocument.test.ts
  * - maskName, maskEmail, classifyByBizNumber 등 순수 함수 단위 테스트
- * - Gemini API, Firebase Admin, EmailJS 등 외부 의존성은 모두 mock 처리
+ * - Gemini API, Firebase Admin, Nodemailer 등 외부 의존성은 모두 mock 처리
  */
 
 // ── Firebase Admin SDK Mock (파일 로드 시 초기화 에러 방지) ──
@@ -16,7 +16,6 @@ jest.mock('firebase-admin/storage', () => ({
     getStorage: jest.fn(() => ({ bucket: jest.fn(() => ({ file: jest.fn() })) })),
 }));
 jest.mock('@google/genai', () => ({ GoogleGenAI: jest.fn() }));
-jest.mock('@emailjs/nodejs', () => ({ send: jest.fn() }));
 jest.mock('nodemailer', () => ({ createTransport: jest.fn() }));
 jest.mock('../services/alimtalk/sendAlimtalk', () => ({ sendApprovalAlimtalk: jest.fn() }));
 jest.mock('firebase-functions/params', () => ({

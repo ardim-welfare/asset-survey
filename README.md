@@ -70,8 +70,7 @@ SENTRY_RELEASE=              # 비워 둔다. 배포 워크플로가 배포 커�
 
 ```bash
 firebase functions:secrets:set GEMINI_API_KEY          # 증빙서류 OCR
-firebase functions:secrets:set GMAIL_APP_PASSWORD      # 승인/반려 메일(Gmail SMTP)
-firebase functions:secrets:set EMAILJS_PRIVATE_KEY     # 기관 자동 검증 메일
+firebase functions:secrets:set GMAIL_APP_PASSWORD      # 승인/반려·자동 검증 메일(Gmail SMTP)
 firebase functions:secrets:set ALIMTALK_PROXY_TOKEN    # 카카오 알림톡 프록시
 ```
 

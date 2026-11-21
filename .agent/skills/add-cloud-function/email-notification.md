@@ -5,7 +5,7 @@
 ## 1. 라이브러리 선택 기준
 
 - **Nodemailer + Gmail (기본)**: 새 이메일 발송은 이쪽이다. **직접 `nodemailer.createTransport`를 쓰지 않고** 공용 헬퍼 `createGmailTransporter()`(`functions/src/core/mailer.ts`)를 재사용한다 — 과거 같은 복붙이 5곳에 흩어져 있던 것을 단일화한 것이다.
-- **EmailJS (`@emailjs/nodejs`)**: 기존 사용처는 기관 자동 검증 승인 메일(`functions/src/services/orgDocument/verifyHelpers.ts`) 한 곳뿐이다. 외부 UI에서 관리되는 템플릿이 꼭 필요할 때만 고려한다.
+- **EmailJS는 쓰지 않는다**(2026-11-21 제거). 마지막 사용처였던 자동 검증 승인 메일도 Gmail로 옮겼다 — 새 외부 메일 서비스를 넣으면 개인정보 처리방침의 처리위탁 목록도 바꿔야 한다.
 
 ## 2. 구현 패턴
 
@@ -25,16 +25,15 @@ if (isGmailConfigured()) {
 }
 ```
 
-### 2.2 EmailJS 패턴 (`verifyHelpers.ts` 참조)
-`EMAILJS_PRIVATE_KEY`는 `defineSecret`(`functions/src/core/params.ts`)으로 주입된다. 새 EmailJS 사용처를 추가하려면 verifyHelpers.ts의 `emailjs.send` 호출을 본뜬다.
+### 2.2 같은 메일을 여러 곳에서 보낼 때
+본문을 한 파일에 두고 양쪽이 가져다 쓴다 — 예: 기관 승인 메일 `functions/src/services/orgDocument/approvalMail.ts`(수동 승인 callable과 자동 검증 트리거가 공용).
 
 ## 3. 환경변수 등록
 
 이메일 연동은 무조건 민감 키(Secret)를 사용하므로 로컬 `functions/.env`와 배포 환경 양쪽에 키를 설정해야 합니다.
-- **Gmail**: `GMAIL_USER`, `GMAIL_APP_PASSWORD` (앱 비밀번호)
-- **EmailJS**: `EMAILJS_PRIVATE_KEY` (Secret Manager, `defineSecret`)
+- **Gmail**: `GMAIL_USER`(functions/.env), `GMAIL_APP_PASSWORD`(앱 비밀번호 — Secret Manager, `defineSecret`). 이 비밀을 읽는 함수는 `secrets: [GMAIL_APP_PASSWORD]`를 선언한다.
 - GitHub 배포를 위해 Repository Secrets에도 등록되었는지 확인하세요.
 
 ## 4. 에러 핸들링
 
-이메일 전송 실패가 비즈니스 로직(예: Firestore 데이터 상태 변경) 전체의 실패로 이어지지 않게 하려면, 비동기 호출(`await emailjs.send`)을 try-catch로 감싸 로그만 남기고 정상 종료시키는 방식을 고려합니다. (성공 여부가 Critical Flow인 경우 제외)
+이메일 전송 실패가 비즈니스 로직(예: Firestore 데이터 상태 변경) 전체의 실패로 이어지지 않게 하려면, 비동기 호출(`await transporter.sendMail`)을 try-catch로 감싸 로그만 남기고 정상 종료시키는 방식을 고려합니다. (성공 여부가 Critical Flow인 경우 제외)

@@ -26,7 +26,7 @@ jest.mock('firebase-admin/firestore', () => ({
     getFirestore: () => ({ doc: mockDocPath, collection: () => ({ where: mockWhere }) }),
 }));
 jest.mock('../core/gemini', () => ({ generateAiContent: (...a: unknown[]) => mockGenerateAiContent(...a) }));
-jest.mock('../core/params', () => ({ GEMINI_API_KEY: {}, GMAIL_APP_PASSWORD: {}, EMAILJS_PRIVATE_KEY: {}, ALIMTALK_PROXY_TOKEN: {} }));
+jest.mock('../core/params', () => ({ GEMINI_API_KEY: {}, GMAIL_APP_PASSWORD: {}, ALIMTALK_PROXY_TOKEN: {} }));
 jest.mock('../services/alimtalk/sendAlimtalk', () => ({ sendApprovalAlimtalk: (...a: unknown[]) => mockApprovalAlimtalk(...a) }));
 jest.mock('../services/orgDocument/verifyHelpers', () => ({
     ...jest.requireActual('../utils/mask'),

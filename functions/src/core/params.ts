@@ -25,8 +25,7 @@ export const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 /** Gmail SMTP 앱 비밀번호 — core/mailer 사용 함수 전부 */
 export const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 
-/** EmailJS 프라이빗 키 — 기관 자동 검증 승인 메일 (verifyHelpers) */
-export const EMAILJS_PRIVATE_KEY = defineSecret("EMAILJS_PRIVATE_KEY");
+// EMAILJS_PRIVATE_KEY는 2026-11-21 뺐다 — 자동 검증 승인 메일도 Gmail(GMAIL_APP_PASSWORD)로 보낸다.
 
 /** 알림톡 Cafe24 프록시 인증 토큰 — services/alimtalk 사용 함수 전부 */
 export const ALIMTALK_PROXY_TOKEN = defineSecret("ALIMTALK_PROXY_TOKEN");

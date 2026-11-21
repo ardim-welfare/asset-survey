@@ -4,12 +4,10 @@
  * autoVerifyDocument.ts에서 분리된 헬퍼 함수 및 이메일 발송 로직.
  */
 import { getStorage } from "firebase-admin/storage";
-import * as emailjs from "@emailjs/nodejs";
-import { EMAILJS_PRIVATE_KEY } from "../../core/params";
-import { createGmailTransporter, systemMailFrom } from "../../core/mailer";
+import { createGmailTransporter, isGmailConfigured, systemMailFrom } from "../../core/mailer";
 import { maskEmail } from "../../utils/mask";
 import { escapeHtml } from "../../utils/helpers";
-import { serviceUrl } from "../../utils/serviceUrl";
+import { approvalMailOptions } from "./approvalMail";
 
 // ── 마스킹 유틸리티 ──
 // 구현은 utils/mask.ts로 승격됨 (알림톡·이메일 로그 마스킹과 공용).
@@ -52,36 +50,20 @@ export async function downloadFileAsBase64(pathOrUrl: string, expectedPathPrefix
 
 // ── 이메일 발송 ──
 
-// ⚠️ 아래 EmailJS 공개 키·서비스·템플릿 ID는 차량운행일지의 EmailJS 계정·템플릿 그대로다.
-// 템플릿 문구가 차량운행일지용이므로, 재물조사용 템플릿을 만든 뒤 바꾼다(배포 전 할 일).
-const EMAILJS_PUBLIC_KEY = "2G7A7gudLQ01I4hJW";
-// EMAILJS_PRIVATE_KEY는 defineSecret(core/params)로 이관 — 사용 함수는 secrets 선언 필수
-const EMAILJS_SERVICE_ID = "service_p4hpecv";
-const EMAILJS_TEMPLATE_ID = "template_qmfktgb";
-const SERVICE_URL = serviceUrl();
-
 /**
- * 승인 이메일 발송 (서버 사이드)
+ * 승인 이메일 발송 (Nodemailer — Gmail SMTP)
+ *
+ * 관리자 수동 승인과 같은 본문(approvalMail.ts)을 쓴다. 원래 EmailJS였다(2026-11-21 제거).
  */
 export async function sendApprovalEmailServer(recipientEmail: string, orgName: string, inviteCode: string, applicantName?: string): Promise<boolean> {
+    if (!isGmailConfigured()) {
+        console.error("[AutoVerify] GMAIL_USER 또는 GMAIL_APP_PASSWORD가 설정되지 않아 승인 이메일을 보내지 못했습니다.");
+        return false;
+    }
     try {
-        const response = await emailjs.send(
-            EMAILJS_SERVICE_ID,
-            EMAILJS_TEMPLATE_ID,
-            {
-                to_email: recipientEmail,
-                to_name: applicantName || orgName,
-                name: applicantName || orgName,
-                org_name: orgName,
-                invite_code: inviteCode,
-                service_url: `${SERVICE_URL}?code=${inviteCode}`,
-            },
-            {
-                publicKey: EMAILJS_PUBLIC_KEY,
-                privateKey: EMAILJS_PRIVATE_KEY.value(),
-            }
-        );
-        console.log(`[AutoVerify] 📧 승인 이메일 발송 성공: ${maskEmail(recipientEmail)}`, response.status, response.text);
+        const transporter = createGmailTransporter();
+        await transporter.sendMail(approvalMailOptions(recipientEmail, orgName, inviteCode, applicantName));
+        console.log(`[AutoVerify] 📧 승인 이메일 발송 성공: ${maskEmail(recipientEmail)}`);
         return true;
     } catch (err: unknown) {
         console.error(`[AutoVerify] ❌ 승인 이메일 발송 실패: ${maskEmail(recipientEmail)}`, err);
