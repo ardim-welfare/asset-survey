@@ -227,7 +227,11 @@ jobs:
 
       - name: Create .env file
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: echo "${{ secrets.ENV_FILE }}" > .env
+        # 비밀값은 환경 변수로 넘겨 그대로 쓴다 — `echo "${{ secrets.X }}"`로 쓰면 값 안의 백틱·$가
+        # 셸에서 해석돼 파일이 깨진다(2026-11-21 첫 CI: .env 주석의 백틱 때문에 빌드 실패).
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: printf '%s\n' "$ENV_FILE" > .env
 
       - name: Build
         id: build
@@ -330,7 +334,11 @@ jobs:
 
       - name: Create .env file
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: echo "${{ secrets.ENV_FILE }}" > .env
+        # 비밀값은 환경 변수로 넘겨 그대로 쓴다 — `echo "${{ secrets.X }}"`로 쓰면 값 안의 백틱·$가
+        # 셸에서 해석돼 파일이 깨진다(2026-11-21 첫 CI: .env 주석의 백틱 때문에 빌드 실패).
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: printf '%s\n' "$ENV_FILE" > .env
 
       - name: Build
         id: build
