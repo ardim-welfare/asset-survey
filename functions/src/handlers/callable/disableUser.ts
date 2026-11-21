@@ -1,0 +1,87 @@
+/**
+ * disableUser — 직원 비활성화 (Soft Delete)
+ * onCall 함수: 관리자가 직원을 비활성화할 때 호출
+ * users 문서 status를 'disabled'로 바꾸고 Auth 계정 차단 + 리프레시 토큰 폐기 (짝: enableUser)
+ */
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
+
+export const disableUser = onCall(
+    {
+        region: "asia-northeast3",
+        enforceAppCheck: true,
+    },
+    async (request) => {
+        if (!request.auth) {
+            throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+        }
+
+        const { uid } = request.data;
+        if (!uid) {
+            throw new HttpsError("invalid-argument", "비활성화할 사용자 UID가 필요합니다.");
+        }
+
+        // 자기 자신 비활성화 방지
+        if (uid === request.auth.uid) {
+            throw new HttpsError("failed-precondition", "자기 자신은 비활성화할 수 없습니다.");
+        }
+
+        const db = getFirestore();
+
+        try {
+            // 1. 호출자가 관리자(admin) 또는 슈퍼관리자(superAdmin)인지 확인
+            const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+            const callerRole = callerDoc.data()?.role;
+            if (callerRole !== "admin" && callerRole !== "superAdmin") {
+                throw new HttpsError("permission-denied", "관리자만 직원을 비활성화할 수 있습니다.");
+            }
+
+            // 2. 대상 사용자 존재 확인 + 교차 기관 검증
+            const targetDoc = await db.collection("users").doc(uid).get();
+            if (!targetDoc.exists) {
+                throw new HttpsError("not-found", "사용자를 찾을 수 없습니다.");
+            }
+            if (callerRole === "admin" && callerDoc.data()?.organizationId !== targetDoc.data()?.organizationId) {
+                throw new HttpsError("permission-denied", "다른 기관의 직원을 비활성화할 수 없습니다.");
+            }
+            // 상위 권한(superAdmin) 계정은 admin이 비활성화할 수 없음
+            if (callerRole === "admin" && targetDoc.data()?.role === "superAdmin") {
+                throw new HttpsError("permission-denied", "시스템 관리자 계정은 비활성화할 수 없습니다.");
+            }
+
+            // 3. users 문서의 status를 'disabled'로 변경 (soft delete)
+            //    행위자 스탬프 — 접속기록(auditUserUpdated)은 문서의 lastEditedByUid로 행위자를 정한다.
+            //    서버 쓰기라 클라이언트 actorStamp가 없으므로 호출자를 직접 적는다. 빠뜨리면 비활성화가
+            //    직전에 문서를 고친 사람(흔히 직원 본인)에게 귀속된다(2026-11-12 실제 사례, 11-18 확인).
+            await db.collection("users").doc(uid).update({
+                status: "disabled",
+                disabledAt: FieldValue.serverTimestamp(),
+                lastEditedByUid: request.auth.uid,
+            });
+
+            // 4. 서버 차단 — Auth 계정을 실제로 비활성화하고 리프레시 토큰을 폐기한다.
+            //    (과거엔 Firestore status만 바꿔, 비활성 사용자가 SDK로 자기 기관 데이터에
+            //     계속 접근할 수 있었음. 2026-07-10 감사 #1)
+            try {
+                await getAuth().updateUser(uid, { disabled: true });
+                await getAuth().revokeRefreshTokens(uid);
+            } catch (authErr: unknown) {
+                const code = (authErr as { code?: string }).code;
+                if (code === "auth/user-not-found") {
+                    // Firestore 문서만 있고 Auth 계정이 없는 경우 — 문서 비활성화로 충분
+                    console.warn(`직원 비활성화: Auth 계정 없음, Firestore status만 적용 (${uid})`);
+                } else {
+                    throw authErr;
+                }
+            }
+
+            console.log(`직원 비활성화 완료: ${uid} (호출자: ${request.auth.uid})`);
+            return { success: true };
+        } catch (err: unknown) {
+            console.error("직원 비활성화 실패:", (err as Error).message);
+            if (err instanceof HttpsError) throw err;
+            throw new HttpsError("internal", "직원 비활성화 중 오류가 발생했습니다.");
+        }
+    }
+);

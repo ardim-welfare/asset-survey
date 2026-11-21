@@ -1,0 +1,266 @@
+/**
+ * autoVerifyDocument — 기관 신청 자동 검증 (OCR + AI 분석 + 이메일)
+ */
+import { onDocumentWritten } from "firebase-functions/firestore";
+import { generateAiContent } from "../../core/gemini";
+import { getFirestore } from "firebase-admin/firestore";
+import { sendApprovalAlimtalk } from "../../services/alimtalk/sendAlimtalk";
+import { sanitizePromptValue } from "../../utils/helpers";
+import { generateInviteCode } from "../../utils/inviteCode";
+import { GEMINI_API_KEY, GMAIL_APP_PASSWORD, EMAILJS_PRIVATE_KEY, ALIMTALK_PROXY_TOKEN } from "../../core/params";
+import {
+    maskName, maskEmail,
+    downloadFileAsBase64,
+    sendApprovalEmailServer, sendRejectionEmail,
+} from "../../services/orgDocument/verifyHelpers";
+import {
+    ScreenResult, isNonProfitDocument, normalizeStoredScreen, parseScreenResponse, buildOcrPrompt,
+} from "../../services/orgDocument/documentScreen";
+
+
+// 화이트리스트 자동 승인은 테스트 프로젝트 전용 (ALLOW_TEST_WHITELIST=true).
+// 프로덕션은 기본적으로 정식 AI 검증 경로를 타야 하며, 화이트리스트가 승인 절차를
+// 우회하는 백도어가 되지 않도록 한다 (2026-07-10 감사 #2).
+// defineString 파라미터는 기본값이 있어도 (구버전 firebase-tools에서) 비대화형 배포 시 값을
+// 요구해 배포를 막으므로, params 매니페스트를 거치지 않는 런타임 process.env로 직접 읽는다.
+// 프로덕션은 .env에 미지정 → undefined → 비활성. 테스트 프로젝트만 .env에 "true"로 지정.
+
+// ── 화이트리스트 / 블랙리스트 상수 ──
+
+const WHITELIST = [
+    { name: "소셜프리즘", uniqueNumber: "614-04-75763" },
+];
+
+const BLOCKED_CATEGORIES = [
+    { category: "종교단체", keywords: ["교회", "사찰", "성당", "수도원", "선교"] },
+    { category: "학교", keywords: ["학교", "초등학교", "중학교", "고등학교", "대학교", "유치원", "어린이집"] },
+    { category: "병원", keywords: ["병원", "의원", "한의원", "치과", "클리닉"] },
+];
+
+// OCR 프롬프트·문서 유형 판정은 services/orgDocument/documentScreen.ts가 단일 원본이다
+// (접수 프리스크린과 동일 규칙을 써야 "접수는 됐는데 트리거가 거절"하는 모순이 생기지 않는다).
+
+/**
+ * Firestore Trigger — organization 문서에 uniqueNumberImageUrl이 추가되거나 문서가 생성될 때 자동 OCR 실행
+ */
+export const autoVerifyDocument = onDocumentWritten(
+    {
+        document: "organizations/{orgId}",
+        region: "asia-northeast3",
+        timeoutSeconds: 120,
+        memory: "512MiB",
+        secrets: [GEMINI_API_KEY, GMAIL_APP_PASSWORD, EMAILJS_PRIVATE_KEY, ALIMTALK_PROXY_TOKEN],
+    },
+    async (event) => {
+        const before = event.data?.before?.data();
+        const after = event.data?.after?.data();
+        const orgId = event.params.orgId;
+
+        // 문서 삭제된 경우 중단
+        if (!after) return;
+        
+        // 이미지가 존재하지 않으면 중단. 신규 문서는 경로(uniqueNumberImagePath),
+        // 레거시 문서는 토큰 URL(uniqueNumberImageUrl)을 쓴다. (2026-07-18 보안 재검증 P0-3)
+        const imagePath = (after.uniqueNumberImagePath || after.uniqueNumberImageUrl) as string | undefined;
+        if (!imagePath) return;
+
+        // 문서가 변경(update)된 경우라면 이미지가 새로 등록(또는 변경)된 건지 확인
+        const beforePath = before ? (before.uniqueNumberImagePath || before.uniqueNumberImageUrl) : undefined;
+        if (before && beforePath === imagePath) return;
+        if (after.aiVerifyDetail) return;
+
+        // 사용자 입력 기관명은 프롬프트에 보간되므로 위생 처리한다 (따옴표·개행 제거 + 60자 절단).
+        // 화이트/블랙리스트 매칭·Tmap 검색·사업자번호 보정에도 동일하게 위생값을 사용한다.
+        const orgName = sanitizePromptValue(after.name, 60);
+        const applicantEmail = after.applicantEmail as string | undefined;
+        const applicantName = after.applicantName as string | undefined;
+        const applicantPhone = after.applicantPhone as string | undefined;
+
+        // ── 화이트리스트 예외 처리 (테스트용) ──
+        const whitelistMatch = process.env.ALLOW_TEST_WHITELIST === "true"
+            ? WHITELIST.find((w) => orgName.includes(w.name))
+            : undefined;
+        if (whitelistMatch) {
+            console.log(`[AutoVerify] ✅ 화이트리스트 기관 감지: ${orgName} (${orgId})`);
+            const db = getFirestore();
+            const inviteCode = generateInviteCode();
+            await db.doc(`organizations/${orgId}`).update({
+                aiVerified: true,
+                aiVerifyDetail: {
+                    documentType: "고유번호증",
+                    uniqueNumber: whitelistMatch.uniqueNumber,
+                    extractedName: orgName,
+                    nameMatch: true,
+                    address: null,
+                    bizScore: 100,
+                    whitelisted: true,
+                },
+                uniqueNumber: whitelistMatch.uniqueNumber,
+                status: "approved",
+                approvedAt: new Date(),
+                inviteCode,
+            });
+
+            // 초대코드는 재사용 가능한 민감정보이므로 로그에는 마스킹하여 남긴다
+            console.log(`[AutoVerify] 화이트리스트 자동 승인: ${orgName} (${orgId}), 초대코드: ${inviteCode.slice(0, 2)}****`);
+
+            if (applicantEmail) {
+                await sendApprovalEmailServer(applicantEmail, orgName, inviteCode, applicantName);
+            }
+            if (applicantPhone) {
+                await sendApprovalAlimtalk(applicantPhone, applicantName || orgName, orgName, inviteCode);
+            }
+            return;
+        }
+
+        // ── 종교단체·학교·병원 자동 거절 ──
+        const blockedMatch = BLOCKED_CATEGORIES.find((cat) =>
+            cat.keywords.some((kw) => orgName.includes(kw))
+        );
+        if (blockedMatch) {
+            const reason = `${blockedMatch.category}는 현재 서비스 대상이 아닙니다.`;
+            console.log(`[AutoVerify] 🚫 ${blockedMatch.category} 감지 → 자동 거절: ${orgName} (${orgId})`);
+            const db = getFirestore();
+            await db.doc(`organizations/${orgId}`).update({
+                aiVerified: false,
+                aiVerifyDetail: { rejected: true, reason },
+                status: "rejected",
+                rejectedAt: new Date(),
+            });
+
+            if (applicantEmail) {
+                await sendRejectionEmail(applicantEmail, orgName, reason);
+            }
+            return;
+        }
+
+        console.log(`[AutoVerify] 기관 ${orgName} (${orgId}) AI 분석 시작`);
+
+        try {
+
+            // 접수 단계(submitOrgApplication)에서 이미 판별했으면 그 결과를 그대로 쓴다.
+            // 같은 서류를 두 번 판별할 이유가 없다 — Gemini 호출은 신청 1건당 1회로 유지한다.
+            const stored = normalizeStoredScreen(after.ocrPrescreen);
+            let result: ScreenResult;
+
+            if (stored) {
+                result = stored;
+                console.log(`[AutoVerify] 접수 단계 판별 결과 재사용: ${result.documentType} (${orgId})`);
+            } else {
+                // 반드시 현재 기관 경로의 증빙서류만 다운로드 (교차 테넌트 OCR 차단, 감사 #3)
+                const fileInfo = await downloadFileAsBase64(imagePath, `organizations/${orgId}/`);
+
+                const text = await generateAiContent(
+                    buildOcrPrompt(orgName),
+                    {
+                        mimeType: fileInfo.mimeType,
+                        data: fileInfo.base64,
+                    }
+                );
+
+                result = parseScreenResponse(text);
+            }
+
+            // 사업자번호·기관명 점수에 의한 유형 보정은 파싱 단계(parseScreenResponse)에서 끝난다.
+            const finalDocType = result.documentType;
+            const bizScore = result.bizScore;
+
+            const isForProfit = finalDocType === "사업자등록증(영리)";
+            // "판독불가"·"기타"는 비영리로 인정하지 않는다 → 자동 승인 없이 수동 심사로 남는다.
+            const aiVerified = isNonProfitDocument(finalDocType) && result.uniqueNumber != null;
+
+            // Firestore 업데이트
+            const db = getFirestore();
+            const updateData: Record<string, unknown> = {
+                aiVerified,
+                aiVerifyDetail: {
+                    documentType: finalDocType,
+                    uniqueNumber: result.uniqueNumber,
+                    extractedName: result.extractedName,
+                    nameMatch: result.nameMatch,
+                    address: result.address,
+                    bizScore,
+                } as Record<string, unknown>,
+                uniqueNumber: result.uniqueNumber || "",
+                address: result.address || "",
+            };
+
+            // 영리 사업자등록증이면 자동 거부
+            if (isForProfit) {
+                updateData.status = "rejected";
+                updateData.rejectedAt = new Date();
+                (updateData.aiVerifyDetail as Record<string, unknown>).rejected = true;
+                (updateData.aiVerifyDetail as Record<string, unknown>).reason =
+                    "영리 목적의 사업자등록증이 제출되었습니다. 본 서비스는 비영리단체 전용입니다.";
+
+                if (applicantEmail) {
+                    await sendRejectionEmail(
+                        applicantEmail, orgName,
+                        (updateData.aiVerifyDetail as Record<string, unknown>).reason as string
+                    );
+                }
+            }
+
+            // 고유번호 중복 체크
+            if (result.uniqueNumber && !isForProfit) {
+                const duplicateSnapshot = await db.collection("organizations")
+                    .where("uniqueNumber", "==", result.uniqueNumber)
+                    .where("status", "in", ["pending", "approved"])
+                    .get();
+
+                const realDuplicates = duplicateSnapshot.docs.filter((d) => d.id !== orgId);
+                if (realDuplicates.length > 0) {
+                    const existingOrg = realDuplicates[0].data();
+                    const existingStatus = existingOrg.status === "approved" ? "승인된" : "대기 중인";
+                    const existingApplicant = maskName(existingOrg.applicantName as string);
+                    const existingEmail = maskEmail(existingOrg.applicantEmail as string);
+                    updateData.status = "rejected";
+                    updateData.rejectedAt = new Date();
+                    updateData.aiVerified = false;
+                    (updateData.aiVerifyDetail as Record<string, unknown>).rejected = true;
+                    (updateData.aiVerifyDetail as Record<string, unknown>).reason =
+                        `동일한 고유번호(${result.uniqueNumber})로 이미 ${existingStatus} 기관이 있습니다. (신청자: ${existingApplicant}, 이메일: ${existingEmail})`;
+
+                    console.log(
+                        `[AutoVerify] 기관 ${orgName} (${orgId}) 중복 고유번호 거절: ${result.uniqueNumber} (기존 기관: ${existingOrg.name})`
+                    );
+
+                    if (applicantEmail) {
+                        await sendRejectionEmail(
+                            applicantEmail, orgName,
+                            (updateData.aiVerifyDetail as Record<string, unknown>).reason as string
+                        );
+                    }
+                }
+            }
+
+            // AI 검증 통과 시 자동 승인
+            if (aiVerified && updateData.status !== "rejected") {
+                const inviteCode = generateInviteCode();
+                updateData.status = "approved";
+                updateData.approvedAt = new Date();
+                updateData.inviteCode = inviteCode;
+
+                console.log(`[AutoVerify] 기관 ${orgName} (${orgId}) AI 자동 승인! 초대코드: ${inviteCode.slice(0, 2)}****`);
+
+                if (applicantEmail) {
+                    await sendApprovalEmailServer(applicantEmail, orgName, inviteCode, applicantName);
+                } else {
+                    console.warn(`[AutoVerify] 신청자 이메일 없음, 이메일 발송 스킵`);
+                }
+                if (applicantPhone) {
+                    await sendApprovalAlimtalk(applicantPhone, applicantName || orgName, orgName, inviteCode);
+                }
+            }
+
+            await db.doc(`organizations/${orgId}`).update(updateData);
+
+            console.log(
+                `[AutoVerify] 기관 ${orgName} (${orgId}) AI 분석 완료:`,
+                aiVerified ? "승인 추천" : "거절 추천"
+            );
+        } catch (error: unknown) {
+            console.error(`[AutoVerify] 기관 ${orgName} (${orgId}) AI 분석 실패:`, error);
+        }
+    }
+);

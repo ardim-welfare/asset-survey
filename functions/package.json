@@ -1,0 +1,99 @@
+{
+    "name": "functions",
+    "description": "Cloud Functions for 차량운행일지",
+    "scripts": {
+        "build": "tsc",
+        "gcp-build": "",
+        "build:watch": "tsc --watch",
+        "type-check": "tsc --noEmit",
+        "test": "jest --verbose --testPathIgnorePatterns=emulator",
+        "test:coverage": "jest --coverage --testPathIgnorePatterns=emulator",
+        "test:emulator": "jest --verbose --runInBand --testPathPatterns=\"emulator\\.test\"",
+        "serve": "npm run build && firebase emulators:start --only functions",
+        "shell": "npm run build && firebase functions:shell",
+        "start": "npm run shell",
+        "deploy": "firebase deploy --only functions",
+        "logs": "firebase functions:log"
+    },
+    "engines": {
+        "node": "22"
+    },
+    "main": "lib/functions/src/index.js",
+    "dependencies": {
+        "@emailjs/nodejs": "^5.0.2",
+        "@google/genai": "^2.32.0",
+        "@sentry/node": "^11.12.0",
+        "firebase-admin": "^14.5.0",
+        "firebase-functions": "^7.4.0",
+        "nodemailer": "^10.5.0"
+    },
+    "devDependencies": {
+        "@babel/core": "^8.1.0",
+        "@babel/preset-env": "^8.0.7",
+        "@types/express": "^5.0.6",
+        "@types/jest": "^30.0.0",
+        "@types/node": "^22.20.5",
+        "@types/nodemailer": "^8.0.2",
+        "babel-jest": "^30.5.2",
+        "jest": "^30.5.2",
+        "ts-jest": "^29.4.15",
+        "typescript": "^5.7.0"
+    },
+    "jest": {
+        "testEnvironment": "node",
+        "coverageProvider": "v8",
+        "collectCoverageFrom": [
+            "src/**/*.ts",
+            "!src/__tests__/**",
+            "!src/**/*.d.ts",
+            "!src/index.ts"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "statements": 75,
+                "branches": 82,
+                "functions": 72,
+                "lines": 75
+            }
+        },
+        "maxWorkers": "50%",
+        "roots": [
+            "<rootDir>/src"
+        ],
+        "transform": {
+            "^.+\\.tsx?$": [
+                "ts-jest",
+                {
+                    "diagnostics": false,
+                    "tsconfig": "tsconfig.test.json"
+                }
+            ],
+            "^.+\\.m?js$": [
+                "babel-jest",
+                {
+                    "presets": [
+                        [
+                            "@babel/preset-env",
+                            {
+                                "targets": {
+                                    "node": "current"
+                                }
+                            }
+                        ]
+                    ]
+                }
+            ]
+        },
+        "transformIgnorePatterns": [
+            "node_modules/(?!(jose)/)"
+        ]
+    },
+    "private": true,
+    "overrides": {
+        "qs": "^6.16.0",
+        "minimatch": "^11.0.5",
+        "glob": "^14.0.4",
+        "uuid": "^11.1.1",
+        "js-yaml": "^4.2.0"
+    }
+}
