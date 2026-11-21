@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
+// CI의 vite preview 포트. 셀프호스티드 러너는 같은 PC에서 다른 저장소의 E2E와 함께 돌아
+// 기본값 4173이 겹칠 수 있어 ci.yml이 따로 정한다. --strictPort로 다른 앱에 붙는 일을 막는다.
+const previewPort = Number(process.env.E2E_PREVIEW_PORT) || 4173;
 
 export default defineConfig({
     testDir: './e2e',
@@ -16,15 +19,15 @@ export default defineConfig({
     // test-results/ 전체라 하위 폴더로 나누기만 하면 그대로 수집된다.
     outputDir: 'test-results/e2e',
     use: {
-        baseURL: isCI ? 'http://localhost:4173' : 'http://localhost:5173',
+        baseURL: isCI ? `http://localhost:${previewPort}` : 'http://localhost:5173',
         headless: true,
         screenshot: 'only-on-failure',
         // CI 실패 진단용 trace — 실패한 테스트만 남기고 아티팩트로 업로드된다(ci.yml)
         trace: isCI ? 'retain-on-failure' : 'off',
     },
     webServer: {
-        command: isCI ? 'npx vite preview --port 4173' : 'npm run dev',
-        port: isCI ? 4173 : 5173,
+        command: isCI ? `npx vite preview --port ${previewPort} --strictPort` : 'npm run dev',
+        port: isCI ? previewPort : 5173,
         reuseExistingServer: !isCI,
     },
     // ── 브라우저·뷰포트 프로젝트 ──

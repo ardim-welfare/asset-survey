@@ -42,7 +42,8 @@ concurrency:
 
 jobs:
   harness:
-    runs-on: ubuntu-latest
+    # 러너 전환 — ci.yml 상단 "어느 러너에서 도는가" 참고(Dependabot·포크 PR은 호스티드).
+    runs-on: ${{ ((github.event.pull_request && (github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest') || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     env:
       TZ: "Asia/Seoul"
@@ -53,7 +54,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment != 'self-hosted' && 'npm' || '' }}
 
       - name: Install dependencies
         run: npm ci

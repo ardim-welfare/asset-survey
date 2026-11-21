@@ -37,12 +37,36 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# ── 어느 러너에서 도는가 (2026-11-21~) ─────────────────────────────
+# 잡은 사용자 PC의 WSL 셀프호스티드 러너(asset-1·asset-2, 라벨 asset-survey)에서 돈다.
+# 비공개 저장소라 호스티드 분량이 과금되기 때문이다. 같은 PC의 실적관리·통합돌봄·주간활동
+# 저장소가 먼저 이렇게 운영하며 겪은 것을 그대로 반영했다:
+#   - runs-on은 리포 변수 CI_RUNNER로 고른다. PC가 꺼져 있으면 잡이 큐에 묶이므로
+#     `gh variable delete CI_RUNNER --repo dreamworker0/asset-survey` 한 줄로 호스티드로 돌아간다.
+#   - ⛔ Dependabot PR·포크 PR은 항상 호스티드. 외부 패키지 새 버전·남의 코드가 상주 러너에서
+#     install 스크립트를 돌리면 흔적이 다음 잡(같은 PC의 다른 저장소 포함)과 Windows 드라이브의
+#     인증 정보까지 닿는다. 판정은 PR 작성자로 한다(github.actor는 재실행한 사람으로 바뀐다).
+#     ⚠️ 삼항의 참 쪽에 falsy 값을 두지 말 것.
+#   - setup-node `cache: npm`·actions/cache는 셀프호스티드에서 끈다. $HOME이 잡 사이에 남아
+#     ~/.npm·에뮬레이터·브라우저가 이미 있는데, 그 액션들은 잡이 끝날 때 가정용 회선으로 다시
+#     올려 보낸다. 판정은 vars가 아니라 runner.environment로 한다(이벤트에 따라 러너가 갈린다).
+#   - 에뮬레이터는 firebase.json의 고정 포트(8080·9099·9199)를 쓰고 같은 PC의 다른 저장소도
+#     같은 번호를 쓴다 → 에뮬레이터 스텝은 `flock /tmp/firebase-emulators.lock`으로 줄 세운다
+#     (다른 저장소와 같은 잠금 파일). Windows 쪽에서 직접 띄운 에뮬레이터는 이 잠금이 못 막는다 —
+#     `port taken`으로 실패하면 `Get-NetTCPConnection -LocalPort 8080`으로 점유자를 본다.
+#   - `playwright install --with-deps`는 sudo가 필요해 셀프호스티드에서는 브라우저만 받는다.
+#     시스템 라이브러리는 러너 머신에 한 번 설치해 두었다(root로 `npx playwright install-deps
+#     chromium webkit`). 러너를 새로 만들면 이것부터 한다.
+#   - 실패 스텝 기록 없이 잡 여러 개가 한꺼번에 죽으면 코드가 아니라 러너(WSL·PC 전원)를 의심한다.
+#     `gh run rerun <id> --failed`로 충분하다.
+
 jobs:
   # 변경 경로 감지 — Functions 단위 테스트(~1.5분, 에뮬레이터 통합 포함)는 관련 경로 변경 시에만 실행한다.
   # shared/**는 Functions에서도 소비(shared/faqData.ts → functions/src/utils/faqData.ts)하므로
   # 반드시 포함한다. 워크플로 자체 변경 시에는 안전하게 전체 실행.
   changes:
-    runs-on: ubuntu-latest
+    # 러너 전환 — 파일 상단 "어느 러너에서 도는가" 참고.
+    runs-on: ${{ ((github.event.pull_request && (github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest') || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       functions: ${{ steps.filter.outputs.functions }}
@@ -85,7 +109,8 @@ jobs:
   # scripts/security-audit.ts는 Node 내장 모듈만 쓴다. 설치가 깨지는 PR에서도 감사는
   # 돌아야 하므로 설치 단계를 아예 두지 않는다(Node 22의 네이티브 TS 실행 사용).
   security-audit:
-    runs-on: ubuntu-latest
+    # 러너 전환 — 파일 상단 "어느 러너에서 도는가" 참고.
+    runs-on: ${{ ((github.event.pull_request && (github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest') || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     env:
       TZ: "Asia/Seoul"
@@ -107,7 +132,8 @@ jobs:
   functions-tests:
     needs: changes
     if: needs.changes.outputs.functions == 'true'
-    runs-on: ubuntu-latest
+    # 러너 전환 — 파일 상단 "어느 러너에서 도는가" 참고.
+    runs-on: ${{ ((github.event.pull_request && (github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest') || vars.CI_RUNNER || 'ubuntu-latest' }}
     # 한때 이 잡이 CI 전체의 임계경로였다(테스트 스텝 953초 = 15.9분). 원인은 테스트 양이
     # 아니라 ts-jest 기본 모드였다 — 워커마다 TypeScript 프로그램 전체를 들고 있느라
     # (googleapis 등 거대한 .d.ts 포함) 워커 하나가 GB 단위로 부풀었고, 그걸 누르려고 건
@@ -125,7 +151,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment != 'self-hosted' && 'npm' || '' }}
 
       - name: Install functions dependencies
         id: install
@@ -155,7 +181,7 @@ jobs:
           java-version: 21
 
       - name: Cache Firebase emulators
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.environment != 'self-hosted' }}
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
@@ -163,12 +189,14 @@ jobs:
 
       - name: Functions emulator integration tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm run test:functions:emulator
+        run: flock /tmp/firebase-emulators.lock npm run test:functions:emulator
 
   ci:
-    runs-on: ubuntu-latest
-    # E2E를 별도 잡(e2e)으로 떼어낸 뒤 실측 ~5분. 캐시 미적중·러너 변동을 감안해 15분.
-    timeout-minutes: 15
+    # 러너 전환 — 파일 상단 "어느 러너에서 도는가" 참고.
+    runs-on: ${{ ((github.event.pull_request && (github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-latest') || vars.CI_RUNNER || 'ubuntu-latest' }}
+    # E2E를 별도 잡(e2e)으로 떼어낸 뒤 실측 ~5분(호스티드). 셀프호스티드는 같은 PC의 다른 저장소 잡과
+    # 겹치고 에뮬레이터 잠금을 기다릴 수 있어 30분으로 둔다.
+    timeout-minutes: 30
     env:
       TZ: "Asia/Seoul"
 
@@ -189,7 +217,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment != 'self-hosted' && 'npm' || '' }}
 
       - name: Install dependencies
         id: install
@@ -270,7 +298,7 @@ jobs:
           java-version: 21
 
       - name: Cache Firebase emulators
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.environment != 'self-hosted' }}
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
@@ -282,7 +310,7 @@ jobs:
       # 뜨지 않게 하고, 테스트 파일의 PROJECT_ID와 맞춘다(firebase.json singleProjectMode).
       - name: Security Rules tests (Firestore + Storage emulator)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npx firebase-tools emulators:exec --only firestore,storage --project demo-asset-survey "npx vitest run tests/firestore-rules.test.ts tests/storage-rules.test.ts"
+        run: flock /tmp/firebase-emulators.lock npx firebase-tools emulators:exec --only firestore,storage --project demo-asset-survey "npx vitest run tests/firestore-rules.test.ts tests/storage-rules.test.ts"
 
   # ── E2E (별도 잡) ──
   # 한때 이 스텝들은 ci 잡 안에 있었고 그때는 그게 맞았다 — 임계경로가 functions 단위 테스트
@@ -310,7 +338,8 @@ jobs:
     # 아래 캐시(키에 OS 버전이 없다)가 24.04용 WebKit을 그대로 복원했고, 26.04에는 그 빌드가
     # 링크한 libicudata.so.74가 없어 mobile-safari 74건이 브라우저 실행 단계에서 전부 실패했다.
     # Playwright가 26.04를 공식 지원하는 버전으로 올라간 뒤 latest로 되돌리고 캐시 키에 이미지 OS를 넣는다.
-    runs-on: ubuntu-24.04
+    # 러너 전환 — 파일 상단 "어느 러너에서 도는가" 참고.
+    runs-on: ${{ ((github.event.pull_request && (github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository)) && 'ubuntu-24.04') || vars.CI_RUNNER || 'ubuntu-24.04' }}
     # 25분이었다가 40분으로 올렸다. 실제 소요는 9~12분인데, `playwright install --with-deps`가
     # apt에서 OS 의존성을 받아오는 구간이 러너 미러 상태에 따라 20분을 넘긴 적이 있다
     # (#207에서 두 번 연속 그 지점에서 25분 제한에 걸려 cancelled — 테스트는 한 줄도 못 돌았다).
@@ -326,7 +355,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment != 'self-hosted' && 'npm' || '' }}
 
       - name: Install dependencies
         id: install
@@ -353,7 +382,7 @@ jobs:
           java-version: 21
 
       - name: Cache Firebase emulators
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && runner.environment != 'self-hosted' }}
         uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
@@ -365,7 +394,7 @@ jobs:
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && runner.environment != 'self-hosted' }}
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
@@ -375,7 +404,8 @@ jobs:
         id: pw-install
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # webkit을 함께 설치한다 — 아래 E2E가 mobile-safari 프로젝트를 포함한다.
-        run: npx playwright install --with-deps chromium webkit
+        # --with-deps는 sudo apt-get을 부른다 — 셀프호스티드는 브라우저만 받는다(라이브러리는 머신에 설치돼 있다).
+        run: npx playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium webkit
 
       # ── E2E (비인증) ──
       # 오랫동안 **Chromium 데스크톱 단독**이었다. 이 앱은 PWA·오프라인·IndexedDB가 핵심인데
@@ -391,9 +421,12 @@ jobs:
       # 실제 공백만 메우기 위한 배분이다.
       - name: E2E tests (chromium · mobile-chrome · mobile-safari)
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
-        run: npm run test:e2e
+        # vite preview 포트를 같은 PC의 다른 저장소(4173 기본값)와 겹치지 않게 따로 두고,
+        # 이 저장소의 E2E 두 개(PR·master)가 동시에 뜨지 않게 잠근다.
+        run: flock /tmp/asset-survey-e2e.lock npm run test:e2e
         env:
           CI: true
+          E2E_PREVIEW_PORT: 4273
 
       # 인증 E2E — 에뮬레이터(auth,firestore) 위에서 로그인·역할 리다이렉트·오프라인 동기화 검증
       # 비인증 E2E와 검증 대상이 겹치지 않으므로 그쪽 실패에 묶지 않는다.
@@ -401,7 +434,7 @@ jobs:
       # 데이터 공간이 맞는다. 규칙 테스트 스텝과 같은 이유로 실제 프로젝트 ID로 뜨지 않게 한다.
       - name: Authed E2E (emulator)
         if: ${{ !cancelled() && steps.pw-install.outcome == 'success' }}
-        run: npx firebase-tools emulators:exec --only auth,firestore --project demo-asset-survey "npx playwright test -c playwright.emulator.config.ts"
+        run: flock /tmp/firebase-emulators.lock npx firebase-tools emulators:exec --only auth,firestore --project demo-asset-survey "npx playwright test -c playwright.emulator.config.ts"
         env:
           CI: true
 
