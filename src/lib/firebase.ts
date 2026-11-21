@@ -54,7 +54,17 @@ export function getAppCheckBlock(): { code: string; at: number } | null {
 // === App Check 초기화 (initializeApp 직후, 다른 서비스보다 먼저) ===
 // 개발 환경: VITE_APPCHECK_DEBUG_TOKEN으로 에뮬레이터/로컬 통과
 // 프로덕션: reCAPTCHA v3 토큰 자동 발급
-if (typeof window !== 'undefined' && !USE_EMULATOR && !isInAppBrowser()) {
+//
+// 사이트 키(VITE_RECAPTCHA_SITE_KEY)가 없으면 켜지 않는다. 빈 키로 켜면 reCAPTCHA가
+// `Missing required parameters: sitekey`로 죽고, App Check 토큰을 기다리던 Auth 요청까지
+// 끝나지 않아 Google 로그인이 `auth/network-request-failed`로 실패했다(2026-11-21 첫 배포 —
+// 차량운행일지에서 복사한 뒤 재물조사용 키를 아직 만들지 않았다). 키가 없는 동안에는
+// enforceAppCheck를 건 callable 함수가 거부되므로, 키를 만들어 ENV_FILE에 넣어야 한다.
+const RECAPTCHA_SITE_KEY: string | undefined = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+if (typeof window !== 'undefined' && !USE_EMULATOR && !RECAPTCHA_SITE_KEY) {
+    console.warn('[App Check] VITE_RECAPTCHA_SITE_KEY가 없어 App Check를 켜지 않습니다 — 서버 함수 호출이 거부될 수 있습니다.');
+}
+if (typeof window !== 'undefined' && !USE_EMULATOR && !isInAppBrowser() && RECAPTCHA_SITE_KEY) {
     // @firebase/app-check / @firebase/auth SDK 내부 logger가 토큰 교환 500/throttle 시
     // console.warn을 N회 직접 호출한다 (per-component setLogLevel 미제공). 우리 쪽
     // onTokenChanged 핸들러에서 이미 60초 dedup으로 1회 안내하므로, 동일한 의미의
@@ -94,7 +104,7 @@ if (typeof window !== 'undefined' && !USE_EMULATOR && !isInAppBrowser()) {
     // @ts-expect-error -- HMR 및 중복 실행 시 reCAPTCHA 중복 렌더링 에러 방지
     if (!window.__APP_CHECK_INITIALIZED__) {
         appCheck = initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(import.meta.env.VITE_RECAPTCHA_SITE_KEY),
+            provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
             isTokenAutoRefreshEnabled: true,
         });
         // @ts-expect-error -- window.__APP_CHECK_INITIALIZED__ 속성 할당 허용
