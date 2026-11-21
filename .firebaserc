@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-asset-survey"
+    "default": "asset-survey-sp",
+    "demo": "demo-asset-survey"
   }
 }

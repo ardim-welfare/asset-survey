@@ -35,14 +35,18 @@
 2. 기본 브랜치는 **`master`**다. CI·배포 워크플로가 모두 `master`를 기준으로 돈다(이 PC의 저장소는 2026-11-21에 `main`에서 `master`로 바꿨다). GitHub 저장소를 만들 때 기본 브랜치도 `master`로 둔다.
 3. 원격 `origin` = `https://github.com/dreamworker0/asset-survey.git`. Dependabot이 의존성 갱신 PR을 열 수 있다.
 
-### 2.2 Firebase 프로젝트 (사용자)
-1. [Firebase 콘솔](https://console.firebase.google.com)에서 새 프로젝트를 만든다(이름 예: `asset-survey`). Google 애널리틱스는 켠다(처리방침 제1조가 이용 통계를 적고 있다).
-2. **요금제를 Blaze로** 바꾸고 Google Cloud 결제에서 **예산 알림**(예: 월 1만 원, 50·90·100%)을 만든다. Functions·백업에 Blaze가 필요하다.
-3. **Firestore** 만들기 → 위치 **asia-northeast3(서울)**, 프로덕션 모드.
-4. **Storage** 만들기 → 위치 **us-east1**(처리방침 제8조와 같게, 무료 한도 리전).
-5. **Authentication** → 로그인 방법에서 **Google** 사용 설정.
-6. 프로젝트 설정 → 일반 → **웹 앱 추가** → 나오는 설정값(apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId, measurementId)을 메모한다.
-7. 프로젝트 ID를 AI에게 알려 준다 → AI가 `.firebaserc`의 `demo-asset-survey`를 바꾼다.
+### 2.2 Firebase 프로젝트
+**AI가 CLI로 한 것 (2026-11-21)**
+- 프로젝트 **`asset-survey-sp`** 생성(표시 이름 Asset Survey). `asset-survey`는 이미 다른 곳이 쓰고 있었다.
+- 웹 앱 `Asset Survey Web` 등록 → 설정값으로 로컬 `.env`를 만들었다(git 제외).
+- Firestore API를 켜고 **Firestore 기본 데이터베이스를 asia-northeast3(서울)**에 만들었다(처음엔 모두 막힌 규칙 — 첫 배포가 `firestore.rules`를 올린다).
+- `.firebaserc` 기본값을 `asset-survey-sp`로(에뮬레이터용 `demo-asset-survey`는 별칭 `demo`), GitHub 저장소 변수 `FIREBASE_PROJECT_ID=asset-survey-sp`.
+
+**사용자가 콘솔에서 할 것** — [Firebase 콘솔](https://console.firebase.google.com/project/asset-survey-sp/overview)
+1. **요금제를 Blaze로** 바꾸고 Google Cloud 결제에서 **예산 알림**(예: 월 1만 원, 50·90·100%)을 만든다. Functions·Storage·백업에 Blaze가 필요하다.
+2. **Storage** 시작하기 → 위치 **us-east1**(처리방침 제8조와 같게). 버킷 이름은 `asset-survey-sp.firebasestorage.app`.
+3. **Authentication** 시작하기 → 로그인 방법에서 **Google** 사용 설정.
+4. (선택) 이용 통계를 쓰려면 프로젝트 설정 → 통합 → **Google 애널리틱스** 연결 → 나오는 측정 ID를 AI에게 알려 주면 `.env`에 넣는다(처리방침 제1조가 이용 통계를 적고 있다).
 
 ### 2.3 환경 변수 (사용자 + AI)
 1. AI가 [.env.example](.env.example)과 [functions/.env.example](functions/.env.example)를 보고 **채울 칸 목록**을 만들어 준다(값이 비밀이 아닌 것은 AI가 채운다).

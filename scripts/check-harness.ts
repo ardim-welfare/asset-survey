@@ -52,7 +52,8 @@ export function extractRelativeLinks(content: string): string[] {
 const PATH_ROOTS = /^(?:src|functions|scripts|tests|docs|shared|public|e2e|\.agent|\.claude|\.github|\.husky)\//;
 
 /** 실존 검사에서 제외할 경로 — gitignore 대상(CI 체크아웃에 없음)과 날짜 플레이스홀더. */
-const PATH_CHECK_SKIP = [/(^|\/)\.env(\.|$)/, /settings\.local\.json$/, /YYYY/];
+// docs/ — 참고 자료는 실명 캡처 때문에 git에서 뺐다(2026-11-21). 로컬에는 있고 CI에는 없다.
+const PATH_CHECK_SKIP = [/(^|\/)\.env(\.|$)/, /settings\.local\.json$/, /YYYY/, /^docs(\/|$)/];
 
 /**
  * 마크다운 본문의 인라인 백틱 코드에서 저장소 루트 기준 경로로 보이는 토큰을 뽑는다.

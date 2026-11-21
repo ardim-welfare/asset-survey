@@ -6,7 +6,7 @@
 
 - **차량운행일지를 보일러플레이트로 복사해 시작했다**(2026-11-21, `fa069be9`). 코드 주석·`.agent/` 문서에 차량운행일지의 사례(Phase 번호·감사 날짜·차량·예약)가 남아 있다 — 원칙의 근거로 읽고, 차량 기능이 이 저장소에 있다고 가정하지 않는다.
 - **`docs/`는 참고 자료**(다른 기관 재물관리 앱 3종의 소스·문서)다. 린트·테스트 대상이 아니고, 이 프로젝트 문서는 루트에 둔다. **git에서 제외**(`.gitignore`)라 GitHub에는 없고 이 PC에만 있다 — 실명이 든 화면 캡처가 있어서다(2026-11-21 이력에서도 지움). 코드·문서에서 `docs/` 파일을 근거로 들 때는 다른 PC에 없을 수 있음을 염두에 둔다.
-- **Firebase 프로젝트가 아직 없다.** `.firebaserc` 기본값은 에뮬레이터 전용 `demo-asset-survey`다. 실제 프로젝트를 만들기 전에는 바꾸지 않는다.
+- **Firebase 프로젝트는 `asset-survey-sp`**(2026-11-21 생성, `asset-survey`는 다른 곳이 이미 써서 못 씀). `.firebaserc` 기본값이 실제 프로젝트이고 에뮬레이터용 `demo-asset-survey`는 별칭 `demo`로 남겼다 — 에뮬레이터 명령은 늘 `--project demo-asset-survey`를 명시한다(package.json 스크립트가 그렇게 되어 있다). 저장소는 비공개 `dreamworker0/asset-survey`.
 - **도메인을 코드에 박지 않는다.** 프론트는 `APP_URL`(`src/lib/constants.ts`)·`HOSTING_AUTH_DOMAINS`(`src/lib/authDomain.ts`), Functions는 `serviceUrl()`(`functions/src/utils/serviceUrl.ts`)을 쓴다.
 - **의존성 설치·변경은 npm 10**(`npx.cmd -y npm@10 ...`). npm 11이 만든 lockfile은 CI의 `npm ci`를 깬다.
 - 새 기관 단위 컬렉션을 만들면 `functions/src/services/organization/purgeOrganizationData.ts`의 `ORG_SCOPED`에 함께 넣는다(해지 기관 파기 대상).
