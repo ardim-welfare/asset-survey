@@ -1,0 +1,165 @@
+/**
+ * Firestore — 접속기록 조회 (기관 관리자 점검용, 읽기만)
+ *
+ * 근거: 고시 「개인정보의 안전성 확보조치 기준」 제16조 ②는 접속기록을 **월 1회 이상
+ * 점검**하도록 한다. 점검 주체는 개인정보처리자, 즉 각 기관이므로(이용약관 제9조)
+ * 기관 관리자가 자기 기관 기록을 조회한다. Rules(`auditLogs`)도 같은 경계로 열려 있다.
+ *
+ * 쓰기 함수는 두지 않는다 — 기록은 서버(트리거·콜러블)만 하고 Rules가 클라이언트 쓰기를
+ * 전면 차단한다. 여기에 쓰기 함수를 만들면 호출 즉시 permission-denied가 된다.
+ *
+ * `organizationId: '__system__'` 기록(기관 미소속 계정, 주로 superAdmin)은 실재하는
+ * 기관 ID가 아니라 이 필터에 걸리지 않는다 — 의도된 동작이다.
+ */
+import {
+    collection, query, where, orderBy, limit, getDocs, Timestamp, and, or,
+    type QueryFieldFilterConstraint,
+    type QueryNonFilterConstraint,
+    type DocumentData,
+} from 'firebase/firestore';
+import { db } from '../firebase';
+import { createZodConverter, auditLogSchema } from '../../schemas';
+import type { AuditAction, AuditLog } from '../../types/auditLog';
+import { captureError } from '../sentry';
+
+const auditLogConverter = createZodConverter(auditLogSchema);
+
+/** 한 번에 불러오는 건수 — 모바일 목록에서 한 화면 스크롤 분량 */
+export const AUDIT_LOG_PAGE_SIZE = 50;
+
+/**
+ * 점검 화면의 유형 필터.
+ *
+ * 수행업무(action)를 화면 어휘로 묶는다. 관리자에게 필요한 구분은 "누가 들어왔나 /
+ * 무엇이 바뀌었나 / 무엇이 나갔나"이고, create·update·delete를 따로 고르는 것은
+ * 점검에 도움이 되지 않는다.
+ */
+export type AuditLogKind = 'all' | 'access' | 'change' | 'export';
+
+/** 유형 → 수행업무 매핑. `all`은 필터를 걸지 않는다(단일 인덱스로 처리된다). */
+const KIND_ACTIONS: Record<Exclude<AuditLogKind, 'all'>, AuditAction[]> = {
+    access: ['login'],
+    change: ['create', 'update', 'delete'],
+    // 반출과 증빙서류 열람은 둘 다 "기관 밖으로 나간 사실"이라 함께 본다
+    export: ['export', 'read'],
+};
+
+export interface AuditLogQueryOptions {
+    /** 이 시각 이후의 기록만 (기간 필터) */
+    since?: Date;
+    /** 이 시각 이전의 기록만 — 직접 지정한 종료일이 있을 때만 쓴다 */
+    until?: Date;
+    kind?: AuditLogKind;
+    /**
+     * 이 직원과 관련된 기록만 — 직접 한 일(actorUid)이거나 대상이 된 일(subjectUids).
+     * 둘 중 하나만 보면 빠지는 기록이 생긴다: 관리자가 한 엑셀 반출은 대상 직원이 없고,
+     * 서버가 남긴 약관 동의·삭제는 행위자가 비어 있다.
+     */
+    uid?: string;
+    /** 커서 — 이전 페이지의 `lastDoc` */
+    startAfter?: unknown;
+    pageSize?: number;
+}
+
+export interface AuditLogPage {
+    logs: AuditLog[];
+    /** 다음 페이지 커서. 더 없으면 null */
+    lastDoc: unknown | null;
+    hasMore: boolean;
+}
+
+/**
+ * 기관의 접속기록을 최신순으로 조회한다.
+ *
+ * 인덱스: `all`은 `(organizationId, at desc)`, 유형 필터는 `(organizationId, action, at desc)`를
+ * 쓴다(둘 다 firestore.indexes.json에 있다). `action`을 `in`으로 묶어도 같은 인덱스로 처리되므로
+ * 유형이 늘어도 인덱스를 더 만들지 않는다.
+ *
+ * **`(action, organizationId, at desc)`도 파일에 있고, 중복처럼 보여도 지우지 않는다.**
+ * Firestore가 이 쿼리에 대해 실제로 요구한 순서가 그것이다 — 프로덕션 에러의 `create_composite`
+ * 링크가 지목한 조합이 `action → organizationId → at`이었다(Sentry JAVASCRIPT-REACT-5F,
+ * 2026-08-02). 동등 필터 두 개의 순서가 바뀐 것뿐이라 중복으로 보고 #176에서 파일에서 지웠는데,
+ * 프로덕션에는 남아 있어(인덱스 배포는 `--force` 없이는 삭제하지 않는다) 화면은 계속 동작했다.
+ * 즉 파일만 프로덕션과 어긋난 상태였다. 정리하려면 순서 무관성을 먼저 확인해야 한다.
+ *
+ * 직원 필터(`uid`)는 OR의 갈래마다 인덱스가 따로 필요하다 — `(actorUid, organizationId, at desc)`,
+ * `(organizationId, subjectUids, at desc)`와 유형 필터가 붙은 `action` 포함 조합. 위 사례처럼
+ * Firestore가 요구하는 동등 필드 순서(알파벳순)로 등록했다.
+ */
+export const getAuditLogs = async (
+    orgId: string,
+    options: AuditLogQueryOptions = {},
+): Promise<AuditLogPage> => {
+    const pageSize = options.pageSize ?? AUDIT_LOG_PAGE_SIZE;
+    try {
+        const filters: QueryFieldFilterConstraint[] = [
+            where('organizationId', '==', orgId),
+        ];
+
+        const kind = options.kind ?? 'all';
+        if (kind !== 'all') {
+            filters.push(where('action', 'in', KIND_ACTIONS[kind]));
+        }
+        if (options.since) {
+            filters.push(where('at', '>=', Timestamp.fromDate(options.since)));
+        }
+        if (options.until) {
+            filters.push(where('at', '<=', Timestamp.fromDate(options.until)));
+        }
+
+        const constraints: QueryNonFilterConstraint[] = [orderBy('at', 'desc'), limit(pageSize)];
+
+        if (options.startAfter) {
+            // 커서를 쓰는 화면에서만 필요한 함수라 초기 번들에 넣지 않는다
+            const { startAfter: startAfterFn } = await import('firebase/firestore');
+            constraints.push(startAfterFn(options.startAfter as DocumentData));
+        }
+
+        const ref = collection(db, 'auditLogs').withConverter(auditLogConverter);
+        // OR 필터는 복합 필터라 다른 조건과 함께 and()로 묶어야 한다
+        const q = options.uid
+            ? query(
+                ref,
+                and(...filters, or(where('actorUid', '==', options.uid), where('subjectUids', 'array-contains', options.uid))),
+                ...constraints,
+            )
+            : query(ref, ...filters, ...constraints);
+        const snap = await getDocs(q);
+
+        return {
+            logs: snap.docs.map((d) => d.data()) as AuditLog[],
+            lastDoc: snap.docs[snap.docs.length - 1] || null,
+            hasMore: snap.docs.length === pageSize,
+        };
+    } catch (error) {
+        captureError(error, { context: 'getAuditLogs', orgId, options });
+        throw error;
+    }
+};
+
+/**
+ * 내보내기 1회의 상한. 운행일지 내보내기(EXPORT_MAX_DOCS)와 같은 수준으로 맞춘다 —
+ * 상한이 없으면 1년치 전량이 한 번에 읽혀 읽기 비용과 브라우저 메모리를 함께 밀어붙인다.
+ */
+export const AUDIT_LOG_EXPORT_MAX = 5000;
+
+export interface AuditLogExportResult {
+    logs: AuditLog[];
+    /** 상한에 걸려 잘렸는지 — 화면이 사용자에게 알려야 한다(조용히 자르면 전량으로 오해한다) */
+    truncated: boolean;
+}
+
+/**
+ * 선택한 기간·유형의 기록을 내보내기용으로 한 번에 가져온다.
+ *
+ * 화면 목록과 달리 페이지를 나누지 않는다 — 점검 결과를 파일로 남기는 용도이므로
+ * "화면에 불러온 만큼"이 아니라 "기간 전체"가 담겨야 의미가 있다.
+ */
+export const getAuditLogsForExport = async (
+    orgId: string,
+    options: Omit<AuditLogQueryOptions, 'startAfter' | 'pageSize'> = {},
+): Promise<AuditLogExportResult> => {
+    const page = await getAuditLogs(orgId, { ...options, pageSize: AUDIT_LOG_EXPORT_MAX });
+    return { logs: page.logs, truncated: page.logs.length >= AUDIT_LOG_EXPORT_MAX };
+};
+

@@ -1,0 +1,490 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /*
+   * 'Pretendard Variable'을 맨 앞에 둔다 — index.html이 불러오는 @font-face의 family 이름이
+   * 그것이다(pretendardvariable-dynamic-subset.css). 여기에 'Pretendard'만 적혀 있어서
+   * 그동안 내려받은 웹 폰트가 실제로 적용되지 않았다(family 이름은 정확히 일치해야 한다).
+   * 뒤의 'Pretendard'는 기기에 정식 설치된 사용자를 위한 폴백으로 남긴다.
+   */
+  --font-sans: 'Pretendard Variable', Pretendard, Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+
+  --color-accent-50: #f0fdf4;
+  --color-accent-100: #dcfce7;
+  --color-accent-200: #bbf7d0;
+  --color-accent-300: #86efac;
+  --color-accent-400: #4ade80;
+  --color-accent-500: #22c55e;
+  --color-accent-600: #16a34a;
+  --color-accent-700: #15803d;
+  --color-accent-800: #166534;
+  --color-accent-900: #14532d;
+
+  --color-surface-50: #f8fafc;
+  --color-surface-100: #f1f5f9;
+  --color-surface-200: #e2e8f0;
+  --color-surface-300: #cbd5e1;
+  --color-surface-400: #94a3b8;
+  --color-surface-500: #64748b;
+  --color-surface-600: #475569;
+  --color-surface-700: #334155;
+  --color-surface-800: #1e293b;
+  --color-surface-900: #0f172a;
+  --color-surface-950: #020617;
+
+  --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  --shadow-glass-lg: 0 16px 48px 0 rgba(31, 38, 135, 0.12);
+  --shadow-inner-glow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+
+  --blur-xs: 2px;
+
+  --animate-fade-in: fadeIn 0.3s ease-out;
+  --animate-slide-up: slideUp 0.3s ease-out;
+  --animate-slide-down: slideDown 0.3s ease-out;
+  --animate-scale-in: scaleIn 0.2s ease-out;
+  --animate-pulse-soft: pulseSoft 2s ease-in-out infinite;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes slideUp {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes slideDown {
+    0% { transform: translateY(-10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes scaleIn {
+    0% { transform: scale(0.95); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes pulseSoft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  body {
+    @apply font-sans antialiased text-surface-900 bg-surface-50 dark:text-surface-100 dark:bg-surface-950;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 모바일 입력 필드 줌 방지 */
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="number"],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /*
+   * iOS 사파리는 글자가 16px보다 작은 입력칸에 포커스가 가면 화면을 확대한다.
+   * 위 규칙은 type이 없는 input과 date·time·search·password 등을 빠뜨려, 부모의 text-sm을
+   * 물려받으면 작아졌다. 모바일 폭·터치 기기에서는 글자를 입력하는 칸을 모두 16px 이상으로 둔다.
+   * base 레이어라 text-lg 같은 유틸리티는 그대로 이긴다(작은 유틸리티는 파일 끝 규칙이 막는다).
+   * viewport의 maximum-scale·user-scalable로 막지 않는다 — 확대 자체를 막는 접근성 위반이다.
+   */
+  @media (max-width: 639px), (pointer: coarse) {
+    :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"]), select, textarea) {
+      font-size: max(16px, 1rem);
+    }
+  }
+}
+
+@layer components {
+
+  /* Glass morphism 카드 */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 rounded-2xl shadow-glass dark:bg-surface-800/80 dark:border-surface-700/50;
+  }
+
+  .glass-card-dark {
+    @apply bg-surface-800/80 backdrop-blur-md border border-surface-700/50 rounded-2xl shadow-glass;
+  }
+
+  /* 버튼 베이스 */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-md hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-surface-100 text-surface-700 hover:bg-surface-200 focus:ring-surface-400 border border-surface-200 dark:bg-surface-700 dark:text-surface-200 dark:hover:bg-surface-600 dark:border-surface-600;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-red-500 text-white hover:bg-red-600 focus:ring-red-400 shadow-md hover:shadow-lg;
+  }
+
+  .btn-success {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-accent-600 text-white hover:bg-accent-700 focus:ring-accent-500 shadow-md hover:shadow-lg;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 text-surface-600 hover:bg-surface-100 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-100;
+  }
+
+  /* Soft 버튼 — 다크 모드 자동 적용 */
+  .btn-soft-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-primary-50 text-primary-600 hover:bg-primary-100 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50;
+  }
+
+  .btn-soft-blue {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50;
+  }
+
+  .btn-soft-amber {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50;
+  }
+
+  .btn-soft-red {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50;
+  }
+
+  .btn-sm {
+    @apply text-sm px-3 py-1.5 rounded-lg;
+    min-height: 44px;
+    /* 모바일 접근성: 최소 터치 타겟 */
+  }
+
+  @media (min-width: 640px) {
+    .btn-sm {
+      min-height: auto;
+    }
+  }
+
+  .btn-lg {
+    @apply text-lg px-6 py-3 rounded-xl;
+  }
+
+  .btn-icon {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] dark:focus:ring-offset-surface-900 p-2.5 rounded-xl;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 입력 필드 */
+  .input {
+    @apply w-full px-4 py-2.5 rounded-xl border border-surface-200 bg-white text-surface-900 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all duration-200 dark:bg-surface-800 dark:border-surface-600 dark:text-surface-100 dark:placeholder:text-surface-400;
+  }
+
+  .input-error {
+    @apply border-red-400 focus:ring-red-500/30 focus:border-red-500;
+  }
+
+  /* 다크 모드에서 date/time picker 아이콘 (캘린더, 시계) 흰색 처리 */
+  :is(.dark) input[type="date"]::-webkit-calendar-picker-indicator,
+  :is(.dark) input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+
+  .label {
+    @apply block text-sm font-medium text-surface-700 mb-1.5 dark:text-surface-300;
+  }
+
+  /* 뱃지 */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-primary {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300;
+  }
+
+  .badge-success {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent-100 text-accent-700 dark:bg-accent-900/40 dark:text-accent-300;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300;
+  }
+
+  .badge-danger {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300;
+  }
+
+  .badge-neutral {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300;
+  }
+
+  /* 사이드바 */
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-surface-600 hover:bg-primary-50 hover:text-primary-700 transition-all duration-200 dark:text-surface-400 dark:hover:bg-primary-900/30 dark:hover:text-primary-300;
+  }
+
+  .sidebar-link-active {
+    @apply bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-900/30 dark:text-primary-300;
+  }
+
+  /* 스피너 */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-surface-200 border-t-primary-600 dark:border-surface-700 dark:border-t-primary-400;
+  }
+
+  /* 알림 드롭다운 — 모바일 우선 */
+  .notification-dropdown {
+    position: fixed;
+    top: 56px;
+    left: 16px;
+    right: 16px;
+    max-height: 70vh;
+    overflow-y: auto;
+    @apply bg-white rounded-2xl shadow-glass-lg border border-surface-100 z-50 animate-slide-down dark:bg-surface-800 dark:border-surface-700;
+  }
+
+  @media (min-width: 480px) {
+    .notification-dropdown {
+      position: absolute;
+      top: 100%;
+      left: auto;
+      right: 0;
+      margin-top: 0.5rem;
+      width: 20rem;
+      /* w-80 */
+      max-height: 24rem;
+      /* max-h-96 */
+    }
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-400;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+/* ===== 운행 중 강조 디자인 ===== */
+
+/* 운행 중 카드 */
+.driving-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%);
+  border: 1px solid #fcd34d;
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+}
+
+:is(.dark .driving-card) {
+  background: linear-gradient(135deg, #422006 0%, #451a03 100%);
+  border-color: #b45309;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+
+/* 상단 주행 진행바 */
+.driving-progress-bar {
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #fbbf24 40%, #f59e0b 60%, transparent 100%);
+  background-size: 200% 100%;
+  animation: driveProgress 2s linear infinite;
+}
+
+@keyframes driveProgress {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* 운행 중 뱃지 */
+.driving-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background: #fef3c7;
+  color: #b45309;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+:is(.dark .driving-badge) {
+  background: #78350f;
+  color: #fbbf24;
+}
+
+/* 라이브 도트 */
+.driving-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: liveDot 1.5s ease-in-out infinite;
+}
+
+@keyframes liveDot {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* 운행 중 차 아이콘 위아래 흔들림 애니메이션 */
+@keyframes carDrive {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  25% {
+    transform: translateY(-2px);
+  }
+
+  50% {
+    transform: translateY(0);
+  }
+
+  75% {
+    transform: translateY(-1px);
+  }
+}
+
+/* 운행 중 뱃지 펄스 */
+@keyframes drivePulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ===== 토스트 애니메이션 ===== */
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ===== 글자 크기 조절 (더보기 > 글자 크기) ===== */
+/* 보통: text-xs 13px, text-sm 15px (@theme 기본값) */
+html.font-small .text-xs {
+  font-size: 0.625rem !important;
+  /* 10px */
+  line-height: 0.875rem !important;
+}
+
+html.font-small .text-sm {
+  font-size: 0.75rem !important;
+  /* 12px */
+  line-height: 1rem !important;
+}
+
+html.font-large .text-xs {
+  font-size: 0.9375rem !important;
+  /* 15px */
+  line-height: 1.25rem !important;
+}
+
+html.font-large .text-sm {
+  font-size: 1.0625rem !important;
+  /* 17px */
+  line-height: 1.5rem !important;
+}
+
+/* ===== iOS 사파리 입력칸 포커스 확대 방지 (모바일 폭·터치 기기) ===== */
+/* 입력칸에 붙은 text-xs·text-sm(보통 13·15px, 작게 10·12px, 크게 text-xs 15px)을 16px로 올린다.
+   위 글자 크기 조절 규칙이 !important라 같은 수준으로 덮어야 이긴다. 크게 모드의 text-sm(17px)은
+   이미 16px 이상이라 건드리지 않는다. 데스크톱 폭(마우스)에서는 원래 크기를 그대로 쓴다.
+   줄 높이는 보통 모드 text-sm과 같은 22px로 맞춰 칸 높이가 거의 바뀌지 않게 한다. */
+@media (max-width: 639px), (pointer: coarse) {
+  html :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"]), select, textarea).text-xs,
+  html:not(.font-large) :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"]), select, textarea).text-sm {
+    font-size: max(16px, 1rem) !important;
+    line-height: 1.375rem !important;
+  }
+}
+
+/* ===== 접근성: 동작 줄이기 (prefers-reduced-motion) ===== */
+/* 시스템 설정에서 "동작 줄이기"를 켠 사용자(전정 장애 등)에게는 장식성 애니메이션·전환을 비활성화한다.
+   로딩 스피너는 진행 상태를 전달하는 수단이므로 예외로 계속 회전시킨다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .spinner,
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

@@ -1,0 +1,491 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
+import { authReady as _authReady } from './firebaseAuth';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, getFirestore, clearIndexedDbPersistence, terminate, connectFirestoreEmulator } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
+import { initializeAppCheck, ReCaptchaV3Provider, onTokenChanged } from 'firebase/app-check';
+import { isInAppBrowser } from './inAppBrowser';
+import { runCacheClearWithMarker, runPendingCacheClear } from './offline/cacheClearMarker';
+import { markFirestoreTerminated } from './firestoreLifecycle';
+import { notifyUser } from './notify';
+import { resolveAuthDomain } from './authDomain';
+// firebase/analytics, firebase/messaging은 동적 import (번들 최적화)
+
+// === E2E/로컬 에뮬레이터 모드 ===
+// VITE_USE_EMULATOR=true 일 때만 Auth/Firestore/Functions 에뮬레이터에 연결하고
+// App Check·Analytics·Messaging(FCM)을 비활성화한다. 빌드 타임 치환되는 환경변수이므로
+// 프로덕션 빌드(false)에서는 아래 분기들이 dead code로 제거되어 기존 동작과 100% 동일하다.
+const USE_EMULATOR = import.meta.env.VITE_USE_EMULATOR === 'true';
+
+const firebaseConfig = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    // 접속한 Hosting 도메인과 authDomain을 맞춘다 (리다이렉트 로그인 세션 유실 방지)
+    authDomain: resolveAuthDomain(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN),
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
+
+const app = initializeApp(firebaseConfig);
+
+/**
+ * App Check 토큰 발급이 막힌 상태 (막혔으면 코드와 시각, 아니면 null)
+ *
+ * **왜 상태를 들고 있나.** reCAPTCHA 검증이 403으로 거부되면 SDK가 최대 24시간
+ * 스로틀에 들어가고(`appCheck/throttled`), 그동안 이 클라이언트는 App Check를 강제하는
+ * 모든 제품에서 거부된다 — Firestore·Storage(둘 다 '적용됨')와 콜러블 34개 중 32개다.
+ * 즉 화면에는 `permission-denied`만 보이지만 원인은 권한도 네트워크도 아니고,
+ * **새로고침으로는 풀리지 않는다.**
+ *
+ * 그런데 App Check 경고는 sentry.ts·이 파일의 console.warn 후킹에서 의도적으로 걸러진다
+ * (노이즈라서). 그래서 원인이 화면에도 Sentry에도 남지 않아, 사용자는 "새로고침 하세요"
+ * 안내를 받고 하루 종일 새로고침만 반복하게 된다. 그 오안내를 막으려고 상태를 남긴다.
+ */
+let appCheckBlock: { code: string; at: number } | null = null;
+
+/** App Check 토큰이 막혀 있으면 그 코드와 시각, 아니면 null */
+export function getAppCheckBlock(): { code: string; at: number } | null {
+    return appCheckBlock;
+}
+
+// === App Check 초기화 (initializeApp 직후, 다른 서비스보다 먼저) ===
+// 개발 환경: VITE_APPCHECK_DEBUG_TOKEN으로 에뮬레이터/로컬 통과
+// 프로덕션: reCAPTCHA v3 토큰 자동 발급
+if (typeof window !== 'undefined' && !USE_EMULATOR && !isInAppBrowser()) {
+    // @firebase/app-check / @firebase/auth SDK 내부 logger가 토큰 교환 500/throttle 시
+    // console.warn을 N회 직접 호출한다 (per-component setLogLevel 미제공). 우리 쪽
+    // onTokenChanged 핸들러에서 이미 60초 dedup으로 1회 안내하므로, 동일한 의미의
+    // SDK 내부 경고만 좁게 필터링한다. 전역 setLogLevel은 다른 진단 경고까지 막아 부적합.
+    const origWarn = console.warn.bind(console);
+    const appCheckNoisePatterns = [
+        '@firebase/app-check',
+        'Error while retrieving App Check token',
+    ];
+    const appCheckNoiseCodes = [
+        'appCheck/throttled',
+        'appCheck/initial-throttle',
+        'AppCheck: 500 error',
+        'Requests throttled due to previous',
+    ];
+    console.warn = (...args: unknown[]) => {
+        // @firebase/logger는 prefix("[ts]  @firebase/xxx:")를 args[0]에,
+        // 실제 메시지(코드 포함)를 args[1]+에 넣어 호출한다. 따라서 두 패턴을
+        // 같은 인자에서 찾으면 안 되고, args 전체를 합쳐서 본다.
+        const combined = args.map(a => (typeof a === 'string' ? a : '')).join(' ');
+        if (
+            appCheckNoisePatterns.some(p => combined.includes(p)) &&
+            appCheckNoiseCodes.some(c => combined.includes(c))
+        ) {
+            return;
+        }
+        origWarn(...args);
+    };
+    const debugToken = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN;
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (debugToken && isLocalhost) {
+        // @ts-expect-error -- 글로벌 디버그 토큰 설정 (firebase 공식 방법)
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
+    }
+    
+    let appCheck;
+    // @ts-expect-error -- HMR 및 중복 실행 시 reCAPTCHA 중복 렌더링 에러 방지
+    if (!window.__APP_CHECK_INITIALIZED__) {
+        appCheck = initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider(import.meta.env.VITE_RECAPTCHA_SITE_KEY),
+            isTokenAutoRefreshEnabled: true,
+        });
+        // @ts-expect-error -- window.__APP_CHECK_INITIALIZED__ 속성 할당 허용
+        window.__APP_CHECK_INITIALIZED__ = appCheck;
+    } else {
+        // @ts-expect-error -- window.__APP_CHECK_INITIALIZED__ 속성 참조 허용
+        appCheck = window.__APP_CHECK_INITIALIZED__;
+    }
+
+    // App Check 내부 에러(500 에러 등) — 동일 errorCode 기준 60초 윈도우에 1회만 출력
+    const appCheckWarnDedup = new Map<string, number>();
+    onTokenChanged(appCheck, {
+        next: () => {
+            // 토큰이 다시 나오면 막힘이 풀린 것이다.
+            appCheckBlock = null;
+        },
+        error: (err) => {
+            const code = (err as { code?: string })?.code || 'unknown';
+            // 안내를 가르기 위해 **먼저** 상태를 남긴다 — 아래 60초 dedup은 콘솔 출력만 줄이는
+            // 장치라서, 그 뒤에 두면 같은 코드가 연달아 날 때 상태가 갱신되지 않는다.
+            appCheckBlock = { code, at: Date.now() };
+            const now = Date.now();
+            const last = appCheckWarnDedup.get(code) ?? 0;
+            if (now - last < 60_000) return;
+            appCheckWarnDedup.set(code, now);
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            console.warn(
+                `[App Check] 토큰 발급 실패 (${code}) — ${isLocalhost ? '로컬' : '인프라/네트워크'} 이슈로 간주:`,
+                err
+            );
+        }
+    });
+}
+
+// === Analytics 지연 초기화 (초기 번들에서 ~20KB 제외) ===
+let _analytics: ReturnType<typeof import('firebase/analytics').getAnalytics> | null = null;
+function initAnalyticsLazy() {
+    if (typeof window === 'undefined' || import.meta.env.MODE === 'test') return;
+    // 에뮬레이터 모드: Analytics는 에뮬레이터가 없어 설정 조회(firebase.googleapis.com)와
+    // Installations 등록(firebaseinstallations.googleapis.com)이 실제 Google 서버로 나간다.
+    // CI의 인증 E2E는 실제 키(.env)로 돌므로 그대로 두면 테스트 실행이 운영 Analytics에 집계된다.
+    if (USE_EMULATOR) return;
+    import('firebase/analytics').then(({ getAnalytics }) => {
+        _analytics = getAnalytics(app);
+    }).catch(() => { /* Analytics 로드 실패 무시 */ });
+}
+
+// 브라우저 유휴 시점에 Analytics 초기화 (메인 스레드 미차단)
+const scheduleIdle = typeof requestIdleCallback === 'function'
+    ? requestIdleCallback
+    : (cb: () => void) => setTimeout(cb, 100);
+scheduleIdle(() => {
+    initAnalyticsLazy();
+});
+
+export const auth = getAuth(app);
+// 에뮬레이터 모드: Auth 에뮬레이터(9099)에 연결 (E2E 인증 세션용).
+// firebaseAuth.ts에서 이미 연결됐을 수 있으므로 emulatorConfig 유무로 중복 연결을 가드한다.
+if (USE_EMULATOR && typeof window !== 'undefined' && !(auth as unknown as { emulatorConfig?: unknown }).emulatorConfig) {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+}
+// firebaseAuth.ts가 만든 것과 같은 인스턴스다(getAuth는 앱당 하나). persistence는 지정하지
+// 않는다 — 기본 우선순위(IndexedDB 우선)를 쓰는 이유는 firebaseAuth.ts 주석에 적어 뒀다.
+// authReady도 거기서 만든 Promise를 재수출한다(중복 대기 없이 ~200-500ms 절감).
+export const authReady = _authReady;
+
+// IndexedDB / Firestore 비동기 에러 억제 (Sentry 노이즈 방지)
+function isFirestorePersistenceError(msg: string) {
+    if (!msg) return false;
+    return (
+        msg.includes('INTERNAL ASSERTION FAILED') ||
+        msg.includes('QuotaExceededError') ||
+        msg.includes('Encountered full disk') ||
+        msg.includes('Failed to obtain exclusive access') ||
+        msg.includes('Internal error opening backing store') ||
+        msg.includes('indexedDB.open') ||
+        (msg.includes('AbortError') && !msg.includes('fetch')) ||
+        msg.includes('UnknownError') ||
+        // DOMException은 이름(UnknownError)과 메시지가 갈려 있어 위 줄이 닿지 않는 판이 있다 —
+        // iOS Safari의 IDB 백엔드 실패가 그렇다(문장만 message에 담긴다). 억제만 하고
+        // isCacheCorruptionError에는 넣지 않는다: 일시적인 경우가 많은데 복구는 미전송 쓰기까지 지운다.
+        msg.includes('An internal error was encountered in the Indexed Database server') ||
+        msg.includes('Failed to delete record from object store') ||
+        msg.includes("Cannot read properties of null (reading 'Te')") ||
+        msg.includes('mutating the [[Prototype]]') ||
+        msg.includes('A mutation operation was attempted on a database that did not allow mutations') ||
+        msg.includes('The object can not be found here') ||
+        msg.includes('The node to be removed is not a child of this node') ||
+        msg.includes('BloomFilter') ||
+        msg.includes('BloomFilterError')
+    );
+}
+
+// QuotaExceeded 전용: 사용자가 저장공간을 확보하도록 1회만 안내
+let quotaAlertShown = false;
+function showQuotaAlert(msg: string) {
+    if (quotaAlertShown) return;
+    if (msg.includes('QuotaExceededError') || msg.includes('Encountered full disk')) {
+        quotaAlertShown = true;
+        notifyUser('기기 저장공간이 부족합니다. 불필요한 앱이나 파일을 삭제한 후 다시 시도해주세요.', 'error', 12000);
+    }
+}
+
+function isCacheCorruptionError(msg: string) {
+    if (!msg) return false;
+    return (
+        msg.includes('Failed to obtain exclusive access') ||
+        msg.includes('Internal error opening backing store') ||
+        msg.includes('A mutation operation was attempted on a database that did not allow mutations') ||
+        msg.includes('BloomFilter') ||
+        msg.includes('BloomFilterError') ||
+        msg.includes('indexedDB.open')
+    );
+}
+
+let isRecoveringCache = false;
+async function attemptCacheRecovery() {
+    if (isRecoveringCache || typeof window === 'undefined') return;
+    isRecoveringCache = true;
+    console.warn('[Firestore] 로컬 캐시 꼬임 감지. 자동 복구를 시작합니다.');
+    try {
+        if (typeof db !== 'undefined' && db) {
+            await clearIndexedDbPersistence(db);
+        }
+        console.warn('[Firestore] 복구 완료. 페이지를 새로고침합니다.');
+        if (!sessionStorage.getItem('firestore_recovered')) {
+            sessionStorage.setItem('firestore_recovered', 'true');
+            window.location.reload();
+        } else {
+            notifyUser('오프라인 데이터 로딩 중 지속적인 문제가 발생하고 있습니다. 브라우저 방문 기록(캐시 및 쿠키)을 비운 후 다시 시도해주세요.', 'error', 12000);
+            sessionStorage.removeItem('firestore_recovered');
+        }
+    } catch (err) {
+        console.error('[Firestore] 캐시 자동 복구 실패:', err);
+    } finally {
+        isRecoveringCache = false;
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('error', (event) => {
+        const msg = event?.message || '';
+        if (isFirestorePersistenceError(msg)) {
+            console.warn('[Firestore] 지속성 에러 억제:', msg);
+            if (isCacheCorruptionError(msg)) {
+                attemptCacheRecovery();
+            } else {
+                showQuotaAlert(msg);
+            }
+            event.preventDefault();
+            return true;
+        }
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        const msg = event?.reason?.message || String(event?.reason || '');
+        if (isFirestorePersistenceError(msg)) {
+            console.warn('[Firestore] 지속성 에러 억제:', msg);
+            if (isCacheCorruptionError(msg)) {
+                attemptCacheRecovery();
+            } else {
+                showQuotaAlert(msg);
+            }
+            event.preventDefault();
+        }
+        // permission-denied 에러는 useAuth의 onSnapshot에서 재시도/로그아웃으로
+        // 이미 처리되므로 unhandledrejection으로 Sentry에 중복 리포트되지 않도록 억제
+        if (event?.reason?.code === 'permission-denied' || msg.includes('Missing or insufficient permissions')) {
+            console.warn('[Firestore] 권한 에러 억제 (앱 로직에서 처리됨):', msg);
+            event.preventDefault();
+        }
+    });
+}
+
+// IndexedDB 가용성 사전 검사 (프라이빗 모드, 비정상 스토리지 등 감지)
+async function checkIndexedDBAvailability() {
+    if (typeof window === 'undefined' || !window.indexedDB) return false;
+    try {
+        const testRequest = window.indexedDB.open('__idb_test__');
+        return await new Promise((resolve) => {
+            testRequest.onsuccess = () => {
+                testRequest.result.close();
+                window.indexedDB.deleteDatabase('__idb_test__');
+                resolve(true);
+            };
+            testRequest.onerror = () => resolve(false);
+            // 일부 환경에서는 onblocked가 발생
+            testRequest.onblocked = () => resolve(false);
+            // 타임아웃 (2초 이내 응답 없으면 불가 판정)
+            setTimeout(() => resolve(false), 2000);
+        });
+    } catch {
+        return false;
+    }
+}
+
+// Firestore 초기화 (동기 시도 후 비동기 IndexedDB 검사 필요 시 재초기화)
+let db: ReturnType<typeof getFirestore>;
+
+/**
+ * 로컬 캐시가 **내구성이 있는지**(브라우저를 닫아도 남는지) 나타낸다.
+ *
+ * persistentLocalCache면 Firestore가 미전송 쓰기를 IndexedDB에 남겨 다음 접속에 재전송한다.
+ * memoryLocalCache로 떨어지면 그 쓰기는 탭이 닫히는 순간 사라진다.
+ * **"저장했다"고 말해도 되는지가 여기서 갈린다** — 느린 통신으로 응답을 못 받았을 때
+ * 낙관적으로 안내할지, 확인이 필요하다고 말할지의 근거다.
+ *
+ * **기본값이 false인 것이 핵심이다.** `initializeFirestore`가 persistent 설정으로 반환해도
+ * 그것은 아무것도 보증하지 않는다 — SDK는 IndexedDB를 나중에 열고, 사생활 보호 모드에서는
+ * **비동기로 조용히** 실패한다(그래서 이 파일에 checkIndexedDBAvailability 2단계가 있다).
+ * 생성자가 돌아온 것만 보고 true로 두면, 정작 안내가 필요한 그 기기에서 계속 "저장했다"고
+ * 말하게 된다. 확인된 뒤에만 true로 올린다 — 모르는 동안은 조심하는 쪽이 맞다.
+ */
+let durableLocalCache = false;
+/** 동기 초기화가 persistent 설정으로 성공했는가(2단계 검사와 함께 봐야 뜻이 있다). */
+let persistentConfigured = false;
+
+/** 로컬 캐시가 내구성이 있는가. 초기화 전이나 폴백 상태면 false. */
+export function hasDurableLocalCache(): boolean {
+    return durableLocalCache;
+}
+
+function initFirestoreSync() {
+    try {
+        // 에뮬레이터 모드: 메모리 캐시 + Firestore 에뮬레이터(8080) 연결.
+        // 테스트 간 IndexedDB 캐시 오염을 피하기 위해 memoryLocalCache 사용.
+        if (USE_EMULATOR) {
+            const instance = initializeFirestore(app, { localCache: memoryLocalCache() });
+            connectFirestoreEmulator(instance, '127.0.0.1', 8080);
+            return instance;
+        }
+        if (typeof window === 'undefined') {
+            return initializeFirestore(app, { localCache: memoryLocalCache() });
+        }
+        const instance = initializeFirestore(app, {
+            localCache: persistentLocalCache({
+                cacheSizeBytes: 25 * 1024 * 1024, // 25MB 제한 (저사양 기기 QuotaExceeded 예방)
+                tabManager: persistentMultipleTabManager(),
+            }),
+        });
+        persistentConfigured = true;
+        return instance;
+    } catch (err) {
+        const errObj = err as { message?: string; code?: string };
+        const errMsg = errObj?.message || '';
+        if (errObj?.code === 'failed-precondition' || errMsg.includes('already initialized')) {
+            // 이미 초기화된 인스턴스를 재사용하는 경로다. 위 persistent 분기가 먼저 성공했을
+            // 수도, 아래 memory 폴백이었을 수도 있어 **모른다** — 모르면 내구성이 없다고 본다
+            // (있다고 잘못 말하면 사용자에게 "저장됐다"고 거짓을 말하게 된다).
+            return getFirestore(app);
+        }
+        console.warn('[Firestore] persistent 초기화 실패, memoryLocalCache 대체:', err);
+        try {
+            return initializeFirestore(app, { localCache: memoryLocalCache() });
+        } catch {
+            try { return getFirestore(app); } catch { return null; }
+        }
+    }
+}
+
+// 1단계: 동기적으로 먼저 초기화 (페이지 로드 즉시 사용 가능)
+db = initFirestoreSync()!;
+
+/*
+ * 지난 로그아웃에서 끝내지 못한 캐시 폐기를 여기서 다시 시도한다 (2026-07-10 감사 #8).
+ *
+ * **인스턴스를 만든 직후, 아직 아무 쿼리도 걸리지 않은 이 자리**여야 한다 —
+ * `clearIndexedDbPersistence`는 시작된 인스턴스에서 거부되고, 앱의 첫 구독은
+ * `authReady`(firebaseAuth.ts) 이후에 걸리므로 이 시점이 가장 앞이다.
+ * 표식이 없으면 아무 일도 하지 않으므로 정상 경로에는 비용이 없다.
+ * 실패해도 표식이 남아 다음 부팅에 다시 시도하므로 여기서 기다리지 않는다.
+ */
+if (typeof window !== 'undefined' && !USE_EMULATOR) {
+    void retryPendingCacheClear();
+}
+
+// 2단계: 비동기로 IndexedDB 검사 후 사용 불가 시 memoryLocalCache로 재초기화
+// (에뮬레이터 모드는 이미 memory 캐시 + 에뮬레이터 연결 상태이므로 재초기화 스킵)
+checkIndexedDBAvailability().then((available) => {
+    if (USE_EMULATOR) return db;
+    // 내구성 판정은 **여기서** 확정된다. 동기 초기화가 persistent 설정이었고, IndexedDB가
+    // 실제로 열리는 것까지 확인돼야 "저장했다"고 말할 수 있다.
+    durableLocalCache = persistentConfigured && available === true;
+    if (!available && db) {
+        if (typeof window !== 'undefined') {
+            console.warn('[Firestore] IndexedDB 사용 불가 → memoryLocalCache로 재초기화');
+        }
+        try {
+            db = initializeFirestore(app, { localCache: memoryLocalCache() });
+        } catch {
+            // 이미 초기화된 경우 기존 인스턴스 유지 (에러를 글로벌 핸들러에서 억제)
+            db = getFirestore(app);
+        }
+    }
+    return db;
+});
+
+export { db };
+
+/**
+ * 로그아웃 시 Firestore 영구(IndexedDB) 캐시를 폐기한다.
+ * 공용 기기에서 이전 사용자의 문서 캐시가 남지 않도록 한다 (2026-07-10 감사 #8).
+ * 인스턴스를 terminate하므로 호출 후에는 반드시 페이지를 리로드해야 한다.
+ *
+ * ## 실패하면 표식을 남긴다 — 그 자리에서 더 할 수 있는 것이 없기 때문이다
+ *
+ * 대표적인 실패 원인은 **다중 탭**이다. `persistentMultipleTabManager`로 캐시를 공유하므로
+ * 다른 탭이 붙어 있으면 `clearIndexedDbPersistence`가 `failed-precondition`으로 거부된다.
+ * 그 탭을 우리가 닫을 수는 없으니 지금은 포기하고 로그아웃을 계속 진행하는 것이 맞다 —
+ * 문제는 **그렇게 포기한 사실이 어디에도 남지 않아 캐시가 영구히 남는다**는 것이었다.
+ * 공용 기기에서 다음 사용자가 오프라인으로 이전 사용자의 문서를 읽을 수 있는 상태다.
+ *
+ * 그래서 실패를 `localStorage`에 적어 두고, 다음 부팅에서 `retryPendingCacheClear()`가
+ * 다시 시도한다. 성공할 때까지 남으므로 "다른 탭이 닫힌 첫 부팅"에 정리된다.
+ */
+export async function clearOfflineCache(): Promise<void> {
+    // terminate() 이후 살아남은 타이머·이벤트 핸들러가 새 구독을 걸면 SDK가 동기 throw를 낸다.
+    // 종료를 기다리는 동안에도 이미 종료 의도가 확정이므로 호출 직전에 표시한다.
+    markFirestoreTerminated();
+    // 표식·순서 계약은 offline/cacheClearMarker.ts가 지킨다(그 파일 주석 참고).
+    await runCacheClearWithMarker(
+        () => terminate(db),
+        () => clearIndexedDbPersistence(db),
+        (err) => console.warn('[Firestore] 오프라인 캐시 정리 실패 — 다음 실행에서 다시 시도합니다:', err),
+    );
+}
+
+/**
+ * 지난 로그아웃에서 끝내지 못한 캐시 폐기를 다시 시도한다.
+ *
+ * **부팅 중 가장 이른 시점에** 불러야 한다. `clearIndexedDbPersistence`는 인스턴스가
+ * 시작되지 않은 상태(방금 만든 상태 또는 terminate 이후)에서만 허용되므로, 첫 쿼리·구독이
+ * 걸리면 `failed-precondition`으로 거부된다. 그 경우에도 표식을 지우지 않아 다음 부팅에
+ * 다시 시도한다 — 늦게 성공하는 것이 조용히 포기하는 것보다 낫다.
+ *
+ * 표식이 없으면 아무 일도 하지 않는다(정상 경로의 비용 0).
+ */
+export async function retryPendingCacheClear(): Promise<void> {
+    const result = await runPendingCacheClear(
+        () => clearIndexedDbPersistence(db),
+        (err) => console.warn('[Firestore] 남은 캐시 정리 재시도 실패 — 다음 실행에서 다시 시도합니다:', err),
+    );
+    if (result === 'cleared') {
+        console.warn('[Firestore] 지난 로그아웃에서 남은 오프라인 캐시를 정리했습니다.');
+    }
+}
+export const storage = getStorage(app);
+export const googleProvider = new GoogleAuthProvider();
+// 브라우저에 활성 Google 세션이 하나뿐이면 Google이 계정 선택 화면을 건너뛰고 그 계정으로
+// 바로 인증시킨다. 그 결과 "다른 계정으로 로그인"을 눌러도 직전 계정으로 재로그인된다.
+// prompt=select_account로 매번 계정 선택 화면을 강제한다 (공용 기기 오로그인 방지 효과도 있다).
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+export const firebaseFunctions = getFunctions(app, 'asia-northeast3');
+// 에뮬레이터 모드: Functions 에뮬레이터(5001)에 연결
+if (USE_EMULATOR && typeof window !== 'undefined') {
+    connectFunctionsEmulator(firebaseFunctions, '127.0.0.1', 5001);
+}
+
+// FCM은 브라우저 지원 시에만 초기화 (동적 import로 번들 최적화)
+let _messaging: ReturnType<typeof import('firebase/messaging').getMessaging> | null = null;
+let _messagingInit = false;
+
+export async function getMessagingInstance() {
+    if (_messagingInit) return _messaging;
+    _messagingInit = true;
+    // 에뮬레이터 모드: FCM도 에뮬레이터가 없어 토큰 발급(getToken)이 Installations 등록과
+    // FCM 등록을 실제 Google 서버로 보낸다. null을 돌려주면 호출부(useNotification)가
+    // "지원되지 않는 환경"으로 처리하므로 별도 분기가 필요 없다.
+    if (USE_EMULATOR) return _messaging;
+    try {
+        const { getMessaging, isSupported } = await import('firebase/messaging');
+        const supported = await isSupported();
+        _messaging = supported ? getMessaging(app) : null;
+    } catch {
+        _messaging = null;
+    }
+    return _messaging;
+}
+
+export function getAnalyticsInstance() { return _analytics; }
+
+// === E2E 전용 로그인 헬퍼 ===
+// 에뮬레이터 모드에서만 window에 노출한다. Google 로그인 전용 앱이라 Playwright로
+// OAuth 팝업을 자동화할 수 없으므로, Auth 에뮬레이터의 이메일/비밀번호 계정으로
+// 로그인하는 헬퍼를 제공해 인증 후 화면 E2E를 가능하게 한다. (프로덕션 빌드에선 제거됨)
+if (USE_EMULATOR && typeof window !== 'undefined') {
+    import('firebase/auth').then(({ signInWithEmailAndPassword, signOut }) => {
+        (window as unknown as Record<string, unknown>).__E2E_AUTH__ = {
+            signIn: (email: string, password: string) => signInWithEmailAndPassword(auth, email, password),
+            signOut: () => signOut(auth),
+        };
+    });
+}
+
+export default app;

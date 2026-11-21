@@ -1,0 +1,373 @@
+/**
+ * useEmployeeManager — 직원 관리 상태 + CRUD 로직
+ * EmployeeManager에서 추출된 커스텀 훅
+ */
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from './useAuth';
+import { useToast } from './useToast';
+import { useConfirm } from './useConfirm';
+import useRetry from './useRetry';
+import { getOrganizationMembers, getOrganization, regenerateInviteCode, updateUser, getPreRegisteredEmployees, addPreRegisteredEmployee, deletePreRegisteredEmployee, recheckDeniedTarget } from '../lib/firestore';
+import { invalidateCache } from '../lib/firestore/cache';
+import type { User, UserRole, MemberStatus, UnifiedMember } from '../types/user';
+import type { Organization } from '../types/organization';
+import { captureError } from '../lib/sentry';
+import { APP_URL } from '../lib/constants';
+
+/**
+ * 대상 사용자가 이미 기관에 없어서 거부된 경우인지 판별한다.
+ *
+ * 직원 목록은 마운트 시 한 번만 읽어 오므로(실시간 구독이 아니다), 화면을 열어 둔 사이에
+ * 직원이 스스로 기관을 탈퇴하거나(소속 비움) 다른 관리자·슈퍼관리자가 계정을 지우면(문서 삭제)
+ * **이미 빠진 계정의 행이 남는다.** 그 행의 작업은 서버가 규칙대로 거부한다 — 코드 결함이 아니라
+ * 목록이 낡았다는 신호다. 문서가 지워졌으면 not-found로 오고, 문서가 남아 소속만 비워졌으면
+ * permission-denied로 오는데 후자는 recheckDeniedTarget이 대상을 다시 읽어 not-found로 바꿔 온다
+ * (updateUser는 데이터 계층에서, 콜러블은 아래 callTargetCallable에서).
+ *
+ * 메시지가 아니라 **코드로 판별한다.** 같은 한국어 문구를 sendAdminNotice는
+ * permission-denied(호출자 문서 없음)로도 던지는데, 그건 성격이 다른 실패라 함께 묶으면
+ * 진짜 문제를 예상된 결과로 오인한다.
+ */
+function isTargetUserMissing(err: unknown): boolean {
+    const code = (err as { code?: unknown })?.code;
+    if (typeof code !== 'string') return false;
+    return code === 'not-found' || code === 'functions/not-found';
+}
+
+export default function useEmployeeManager() {
+    const { userData } = useAuth();
+    const { showToast } = useToast();
+    const { confirm } = useConfirm();
+    const { runWithRetry } = useRetry();
+    const [employees, setEmployees] = useState<User[]>([]);
+    const [disabledEmployees, setDisabledEmployees] = useState<User[]>([]);
+    const [preRegisteredEmployees, setPreRegisteredEmployees] = useState<{ id: string; name: string; email: string; createdAt: unknown }[]>([]);
+    const [organization, setOrganization] = useState<Organization | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [newEmployee, setNewEmployee] = useState({ name: '', email: '' });
+    const [copiedType, setCopiedType] = useState<'none' | 'link' | 'code'>('none');
+    const [regenerating, setRegenerating] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState({ name: '', email: '' });
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const orgId = userData?.organizationId;
+
+    const fetchData = useCallback(async () => {
+        if (!orgId) return;
+        setLoading(true);
+        try {
+            // 직원 관리 화면은 비활성화/영구삭제(Cloud Function 경유) 직후에도 최신 목록이
+            // 보여야 하므로, 5분 TTL 캐시를 무효화하고 항상 서버에서 새로 읽는다.
+            invalidateCache(`members:${orgId}`);
+            const [members, org, preReg] = await Promise.all([
+                getOrganizationMembers(orgId),
+                getOrganization(orgId),
+                getPreRegisteredEmployees(orgId),
+            ]);
+            const nonSuperAdmins = members.filter((m) => m.role !== 'superAdmin');
+            const activeMembers = nonSuperAdmins.filter((m) => m.status !== 'disabled');
+            const disabledMembers = nonSuperAdmins.filter((m) => m.status === 'disabled');
+            setEmployees(
+                activeMembers.sort((a, b) => {
+                    if (a.role === 'admin' && b.role !== 'admin') return -1;
+                    if (a.role !== 'admin' && b.role === 'admin') return 1;
+                    return (a.name || '').localeCompare(b.name || '');
+                }) as User[]
+            );
+            setDisabledEmployees(
+                disabledMembers.sort((a, b) => (a.name || '').localeCompare(b.name || '')) as User[]
+            );
+            setPreRegisteredEmployees(preReg);
+            setOrganization(org as Organization | null);
+        } catch (err) {
+            console.error('데이터 로드 실패:', err);
+            captureError(err, { context: 'useEmployeeManager.fetchData', orgId });
+        } finally {
+            setLoading(false);
+        }
+    }, [orgId]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    const handleAddEmployee = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!newEmployee.name.trim()) return;
+        await runWithRetry('add-emp', async () => {
+            await addPreRegisteredEmployee(orgId!, newEmployee.name.trim(), newEmployee.email.trim().toLowerCase());
+            setNewEmployee({ name: '', email: '' });
+            setShowAddForm(false);
+            await fetchData();
+        }, { errorMessage: '직원 추가에 실패했습니다.' });
+    };
+
+    const handleCopyInviteCode = async (type: 'link' | 'code' = 'link') => {
+        if (!organization?.inviteCode) return;
+        const textToCopy = type === 'link' 
+            ? `${APP_URL}?code=${organization.inviteCode}`
+            : organization.inviteCode;
+            
+        try {
+            await navigator.clipboard.writeText(textToCopy);
+            setCopiedType(type);
+            setTimeout(() => setCopiedType('none'), 2000);
+        } catch {
+            const textArea = document.createElement('textarea');
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            setCopiedType(type);
+            setTimeout(() => setCopiedType('none'), 2000);
+        }
+    };
+
+    const handleRegenerateCode = async () => {
+        if (!await confirm({ message: '초대 코드를 재발급하시겠습니까?\n기존 코드는 더 이상 사용할 수 없습니다.', confirmColor: 'warning' })) return;
+        setRegenerating(true);
+        await runWithRetry('regen-code', async () => {
+            const newCode = await regenerateInviteCode(orgId!);
+            setOrganization(prev => prev ? ({ ...prev, inviteCode: newCode }) : null);
+        }, { errorMessage: '코드 재발급에 실패했습니다.' });
+        setRegenerating(false);
+    };
+
+    const handleEditEmployee = (emp: User) => {
+        setEditingId(emp.id);
+        setEditForm({ name: emp.name || '', email: emp.email || '' });
+    };
+
+    /**
+     * 이미 사라진 직원 행에서 실패했을 때의 공통 처리.
+     *
+     * 안내 문구를 띄우고 목록을 다시 읽어 유령 행을 걷어낸다. Sentry 보고도 생략한다 —
+     * 서버가 규칙대로 거부한 예상된 결과이지 코드 결함이 아니다(isTargetUserMissing 주석 참고).
+     * 대상이 같은 기관에 그대로 있는데 거부된 permission-denied는 여기 걸리지 않고 지금처럼 보고된다.
+     *
+     * @param onOtherError not-found가 아닌 실패의 처리. 직접 처리했으면 true를 반환한다.
+     */
+    const staleRowGuard = (onOtherError?: (err: unknown) => boolean | void) => ({
+        shouldReport: (err: unknown) => !isTargetUserMissing(err),
+        onError: (err: unknown) => {
+            if (isTargetUserMissing(err)) {
+                showToast('이미 탈퇴하거나 삭제된 직원입니다. 목록을 새로 고칩니다.', 'warning');
+                fetchData(); // 사라진 행을 목록에서 걷어낸다 — 그대로 두면 같은 실패를 반복한다
+                return true;
+            }
+            return onOtherError?.(err);
+        },
+    });
+
+    /**
+     * 대상 직원에 대한 콜러블을 호출한다. permission-denied면 대상을 다시 읽어, 이미 기관에서
+     * 빠진 경우 not-found로 바꿔 던진다 — 서버는 이 경우 "다른 기관의 직원을 …할 수 없습니다"로
+     * 거부하는데, 열어 둔 목록 입장에서는 탈퇴한 직원이라 그 문구가 오해를 부른다.
+     */
+    const callTargetCallable = async (name: 'disableUser' | 'enableUser' | 'deleteUserPermanently', uid: string) => {
+        const { getFunctions, httpsCallable } = await import('firebase/functions');
+        const functions = getFunctions(undefined, 'asia-northeast3');
+        try {
+            await httpsCallable(functions, name)({ uid });
+        } catch (err) {
+            throw await recheckDeniedTarget(err, uid, orgId);
+        }
+    };
+
+    /**
+     * 콜러블이 규칙대로 거부한 사유(다른 기관 직원·상위 권한 계정 등)는 서버 문구가 가장
+     * 정확하므로 그대로 보여준다. 네트워크 실패는 useRetry의 재시도 흐름에 맡긴다.
+     */
+    const showServerMessage = (err: unknown) => {
+        const message = err instanceof Error ? err.message : null;
+        if (message && !message.toLowerCase().includes('network')) {
+            showToast(message, 'error');
+            return true;
+        }
+    };
+
+    const handleSaveEdit = async (empId: string) => {
+        await runWithRetry(`save-edit-${empId}`, async () => {
+            await updateUser(empId, { name: editForm.name.trim() });
+            setEditingId(null);
+            await fetchData();
+        }, { errorMessage: '수정에 실패했습니다.', ...staleRowGuard() });
+    };
+
+    const handleDeleteEmployee = async (emp: User) => {
+        // 안전 검증: 세션 유저 정보가 아직 로드되지 않은 경우 동작 차단
+        if (!userData?.id) {
+            showToast('사용자 정보를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.', 'warning');
+            return;
+        }
+        // 자기 자신 삭제 금지
+        if (emp.id === userData.id) {
+            showToast('자기 자신은 비활성화할 수 없습니다.', 'warning');
+            return;
+        }
+        if (!await confirm({ message: `${emp.name || emp.email} 직원을 비활성화하시겠습니까?\n\n비활성 직원은 앱 이용이 차단됩니다.`, confirmColor: 'danger' })) return;
+        
+        await runWithRetry(`disable-emp-${emp.id}`, async () => {
+            await callTargetCallable('disableUser', emp.id);
+            showToast('직원이 비활성화되었습니다.', 'success');
+            await fetchData();
+        }, {
+            errorMessage: '비활성화에 실패했습니다.',
+            useBackoff: true,
+            ...staleRowGuard(showServerMessage),
+        });
+    };
+
+    const handleDeletePermanently = async (emp: User) => {
+        if (!userData?.id) {
+            showToast('사용자 정보를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.', 'warning');
+            return;
+        }
+        // 되돌릴 수 없는 작업 — 직원 이름(없으면 이메일)을 직접 입력받아 확인
+        const confirmKey = (emp.name || '').trim() || emp.email || '';
+        const typed = await confirm({
+            type: 'input',
+            title: '직원 완전 삭제',
+            message: `${emp.name || emp.email} 직원의 계정을 영구 삭제합니다.\n\n• 계정과 개인 데이터(즐겨찾기 등)가 삭제되며 되돌릴 수 없습니다.\n• 과거 운행 기록은 그대로 보존됩니다.\n\n삭제하려면 아래에 "${confirmKey}"를 입력하세요.`,
+            inputPlaceholder: confirmKey,
+            confirmColor: 'danger',
+            confirmText: '완전 삭제',
+            cancelText: '취소',
+        });
+        if (typed === false || typed === null) return;
+        if (typeof typed !== 'string' || typed.trim() !== confirmKey) {
+            showToast('입력한 내용이 일치하지 않아 삭제를 취소했습니다.', 'warning');
+            return;
+        }
+
+        await runWithRetry(`hard-delete-emp-${emp.id}`, async () => {
+            await callTargetCallable('deleteUserPermanently', emp.id);
+            showToast('직원 계정이 완전히 삭제되었습니다.', 'success');
+            await fetchData();
+        }, {
+            errorMessage: '완전 삭제에 실패했습니다.',
+            ...staleRowGuard(showServerMessage),
+        });
+    };
+
+    const handleRestoreEmployee = async (emp: User) => {
+        if (!await confirm({ message: `${emp.name || emp.email} 직원을 다시 활성화하시겠습니까?` })) return;
+        // 서버 콜러블로 한다 — 비활성화(disableUser)가 막은 Auth 계정은 Admin SDK로만 풀 수 있다.
+        // 예전엔 문서 status만 고쳐, 목록은 '활성'인데 직원 로그인이 auth/user-disabled로 막혔다(2026-11-18).
+        await runWithRetry(`restore-emp-${emp.id}`, async () => {
+            await callTargetCallable('enableUser', emp.id);
+            showToast('직원이 활성화되었습니다.', 'success');
+            await fetchData();
+        }, {
+            errorMessage: '활성화에 실패했습니다.',
+            useBackoff: true,
+            ...staleRowGuard(showServerMessage),
+        });
+    };
+
+    const handleChangeRole = async (emp: User, newRole: UserRole) => {
+        // 자기 자신 역할 변경 금지
+        if (emp.id === userData?.id) {
+            showToast('자신의 역할은 변경할 수 없습니다.', 'warning');
+            await fetchData(); // select 원래 값으로 복원
+            return;
+        }
+        // 마지막 admin 강등 금지
+        if (newRole === 'employee' && emp.role === 'admin') {
+            const adminCount = employees.filter(e => e.role === 'admin').length;
+            if (adminCount <= 1) {
+                showToast('관리자는 최소 1명이 있어야 합니다.', 'warning');
+                await fetchData(); // select 원래 값으로 복원
+                return;
+            }
+        }
+        await runWithRetry(`change-role-${emp.id}`, async () => {
+            await updateUser(emp.id, { role: newRole });
+            await fetchData();
+        }, { errorMessage: '역할 변경에 실패했습니다.', ...staleRowGuard() });
+    };
+
+    const handleDeletePreRegistered = async (preRegId: string) => {
+        if (!orgId) return;
+        if (!await confirm({ message: '사전 등록을 취소하시겠습니까?', confirmColor: 'warning' })) return;
+        await runWithRetry(`del-prereg-${preRegId}`, async () => {
+            await deletePreRegisteredEmployee(orgId, preRegId);
+            showToast('사전 등록이 취소되었습니다.', 'success');
+            await fetchData();
+        }, { errorMessage: '삭제에 실패했습니다.' });
+    };
+
+    const filteredEmployees = employees.filter(emp => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return emp.name?.toLowerCase().includes(q) || emp.email?.toLowerCase().includes(q);
+    });
+
+    const admins = employees.filter(e => e.role === 'admin');
+    const regularEmployees = employees.filter(e => e.role === 'employee');
+
+    // ── 통합 목록: 활성 + 가입대기 + 비활성 ──
+    // 타입은 src/types/user.ts가 단일 원본이다 (EmployeeListItem과 공유).
+
+    const unifiedList: UnifiedMember[] = [
+        // 1) 활성 직원 — 관리자 먼저, 이름순
+        ...employees.map(emp => ({
+            id: emp.id,
+            name: emp.name || '',
+            email: emp.email || '',
+            role: emp.role,
+            memberStatus: 'active' as MemberStatus,
+            original: emp,
+        })),
+        // 2) 가입 대기
+        ...preRegisteredEmployees.map(pre => ({
+            id: pre.id,
+            name: pre.name || '',
+            email: pre.email || '',
+            role: undefined,
+            memberStatus: 'pending' as MemberStatus,
+            original: pre as User,
+        })),
+        // 3) 비활성 직원
+        ...disabledEmployees.map(emp => ({
+            id: emp.id,
+            name: emp.name || '',
+            email: emp.email || '',
+            role: emp.role,
+            memberStatus: 'disabled' as MemberStatus,
+            original: emp,
+        })),
+    ];
+
+    // 통합 검색
+    const filteredUnifiedList = unifiedList.filter(m => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    });
+
+    // 상태별 통계
+    const stats = {
+        total: employees.length + preRegisteredEmployees.length + disabledEmployees.length,
+        active: employees.length,
+        pending: preRegisteredEmployees.length,
+        disabled: disabledEmployees.length,
+        admins: admins.length,
+        regularEmployees: regularEmployees.length,
+    };
+
+    return {
+        employees, disabledEmployees, preRegisteredEmployees, organization, loading,
+        showAddForm, setShowAddForm,
+        newEmployee, setNewEmployee,
+        copiedType, regenerating,
+        editingId, setEditingId, editForm, setEditForm,
+        searchQuery, setSearchQuery,
+        filteredEmployees, admins, regularEmployees,
+        unifiedList, filteredUnifiedList, stats,
+        handleAddEmployee, handleCopyInviteCode, handleRegenerateCode,
+        handleEditEmployee, handleSaveEdit, handleDeleteEmployee, handleChangeRole,
+        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently,
+    };
+}

@@ -1,0 +1,141 @@
+/**
+ * main.tsx — 경량 진입점
+ *
+ * Firebase Auth 상태만 최소한으로 확인한 뒤, 인증 여부에 따라
+ * 서로 다른 엔트리포인트를 동적으로 로드한다.
+ *
+ * - 인증 사용자: appEntry.tsx  (전체 앱 — AuthProvider, Sentry 등 포함)
+ * - 비인증 사용자: lightEntry.tsx (Landing/Login만 — 경량)
+ *
+ * 이를 통해 비인증 사용자의 초기 번들 크기를 ~300KB 절감하여
+ * Lighthouse Performance 점수를 개선한다.
+ */
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, authReady } from './lib/firebaseAuth';
+import { readReturningHint, writeReturningHint, noteUnauthenticatedBoot } from './lib/sessionBoot';
+import { captureInviteCodeFromUrl } from './lib/inviteCodeCapture';
+import './index.css';
+
+// 초대 링크의 ?code=를 **어느 화면으로 시작하든** 먼저 보관한다. 비로그인 경량 화면에서
+// 로그인으로 넘어가며 코드가 떨어지던 문제 — inviteCodeCapture.ts 머리 주석 참고.
+captureInviteCodeFromUrl();
+
+// 로딩 표시 (Auth 상태 확인 중)
+const root = document.getElementById('root')!;
+root.innerHTML = `
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#4f46e5 0%,#3730a3 100%)">
+    <div style="text-align:center">
+      <div style="width:48px;height:48px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;margin:0 auto 16px;animation:spin 1s linear infinite"></div>
+      <p style="color:rgba(255,255,255,.8);font-family:system-ui,sans-serif;font-size:14px">로딩 중...</p>
+    </div>
+  </div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+`;
+
+/**
+ * 엔트리 번들을 못 받았을 때의 마지막 방어선.
+ *
+ * 엔트리 로드가 실패하면 **React가 아예 마운트되지 않으므로 ErrorBoundary가 낄 자리가 없다.**
+ * catch가 없던 동안에는 위 "로딩 중..." 화면이 그대로 남아, 회선이 불안정한 환경의
+ * 사용자에게는 앱이 죽은 것처럼 보였다(랜딩 청크를 2회 연속 실패시켜 실측).
+ * React 없이 그릴 수 있어야 하므로 로딩 화면과 같은 방식으로 직접 마크업을 넣는다.
+ *
+ * ## 자동 새로고침을 넣지 않은 이유 — 해 보고 물렸다
+ *
+ * 이 실패의 **가장 흔한 원인은 네트워크가 아니라 배포**다. 서비스워커가 프리캐시한 옛
+ * index.html이 사라진 해시 청크를 부르면, Hosting의 SPA 리라이트가 index.html을 돌려주고
+ * 브라우저가 text/html을 모듈로 받아 거절한다. 새로고침 한 번이면 새 셸을 받아 풀린다.
+ *
+ * 그래서 한 번 자동으로 새로고침하게 해 봤는데(2026-09-11), CI e2e가 두 번 연속 깨졌다 —
+ * `Navigation to "/" is interrupted by another navigation to "/"`. **부팅 중의 리로드는 그
+ * 시점에 진행 중인 네비게이션을 가로챈다.** 사용자 화면에서도 같은 일이 일어날 수 있어
+ * (막 누른 링크가 취소된다) 되돌렸다. 원인을 못 가린 채로 리로드를 심는 대신, **문구를
+ * 사실대로** 고쳐 사용자가 한 번 누르면 낫게 했다.
+ */
+function showBootError(err: unknown) {
+    console.error('앱 로드 실패:', err);
+    root.innerHTML = `
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#4f46e5 0%,#3730a3 100%);padding:24px">
+    <div style="text-align:center;font-family:system-ui,sans-serif;max-width:320px">
+      <p style="color:#fff;font-size:16px;font-weight:600;margin:0 0 8px">앱을 불러오지 못했습니다</p>
+      <p style="color:rgba(255,255,255,.75);font-size:14px;line-height:1.6;margin:0 0 20px">
+        앱이 새 버전으로 바뀌었거나 연결이 잠시 끊겼을 수 있습니다.<br />
+        아래 버튼을 누르면 다시 불러옵니다.
+      </p>
+      <button id="boot-retry" style="min-height:48px;padding:0 24px;border:0;border-radius:12px;background:#fff;color:#3730a3;font-size:14px;font-weight:600;cursor:pointer">
+        다시 시도
+      </button>
+    </div>
+  </div>
+`;
+    document.getElementById('boot-retry')?.addEventListener('click', () => window.location.reload());
+}
+
+// 기존 SW가 있으면 즉시 업데이트 체크 (구버전 캐시 방지)
+//
+// ## controllerchange로 자동 새로고침하지 않는다
+// sw.ts가 최상단에서 skipWaiting()을 부르므로 새 워커는 activate 시점에 이 등록에 딸린
+// **모든 클라이언트**의 컨트롤러를 교체하고, 탭마다 controllerchange가 발생한다.
+// 여기서 reload()를 걸면 열려 있는 탭이 전부 동시에 새로고침됐다. UpdatePrompt가 탭 복귀마다
+// reg.update()를 호출하므로 탭을 옮기는 순간 이 경로가 걸려, 보고 있지 않던 탭이 제멋대로
+// 다시 로드되고(작성 중이던 폼 유실) AuthGuard 리다이렉트까지 겹치면 다른 탭을 따라가는
+// 것처럼 보였다. vite-plugin-pwa의 autoUpdate 리로드와 중복이기도 했다.
+//
+// 새 버전은 sw.ts가 문서화한 정책대로 반영한다 — (a) 다음 내비게이션·재접속,
+// (b) 구버전 청크 요청이 실패한 탭만 lazyWithRetry가 리로드. 둘 다 그 탭에서만 일어난다.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.ready.then((reg) => {
+    reg.update().catch(() => { /* 네트워크 에러 무시 */ });
+  });
+}
+
+/**
+ * Auth 상태 확인과 병렬로 appEntry 번들을 미리 로드 (추측적 프리로드).
+ *
+ * 예전에는 **무조건** 걸었다. 재방문(인증) 비중이 ~80%라는 근거였는데, 나머지 20%인
+ * 첫 방문자는 자기에게 필요 없는 appEntry(100KB + 의존성)를 내려받느라 정작 필요한
+ * lightEntry와 대역폭을 다퉜다. 느린 회선일수록 손해가 커지고, 기관 담당자가 링크를
+ * 처음 눌러 들어오는 순간이 정확히 그 경우다.
+ *
+ * 그래서 **이전에 로그인한 적이 있는 브라우저에만** 건다. 재방문자의 체감은 그대로이고
+ * (같은 시점에 같은 프리로드가 시작된다), 첫 방문자는 그만큼 덜 받는다.
+ * 힌트가 없는데 실제로는 인증 사용자인 경우(저장소 초기화 등)에도 아래에서 그때
+ * import하므로 동작은 같다 — 프리로드 이득만 한 번 놓친다.
+ */
+const appEntryPreload = readReturningHint() ? import('./appEntry') : null;
+// 비인증 사용자는 이 프리로드를 await하지 않으므로, 실패해도 unhandledrejection이
+// 뜨지 않게 여기서 한 번 받아 둔다. 원본 프라미스는 그대로라 아래 await는 정상적으로 던진다.
+appEntryPreload?.catch(() => { /* 인증 경로의 await에서 처리한다 */ });
+// persistence 설정 완료를 기다린 뒤 Auth 상태 확인
+authReady.then(() => {
+    // 에뮬레이터(E2E) 모드: 항상 전체 앱을 로드한다.
+    // 경량 entry(lightEntry)에는 AuthProvider와 __E2E_AUTH__ 로그인 헬퍼가 없어
+    // 테스트에서 로그인 후 리다이렉트가 동작하지 않으므로, 전체 앱으로 고정한다.
+    if (import.meta.env.VITE_USE_EMULATOR === 'true') {
+        (appEntryPreload ?? import('./appEntry')).then(({ renderFullApp }) => renderFullApp()).catch(showBootError);
+        return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        unsubscribe();
+
+        try {
+            if (user && !user.isAnonymous) {
+                // 다음 방문부터는 appEntry를 미리 받아 둔다
+                writeReturningHint(true);
+                // 인증 사용자 → 전체 앱 로드 (프리로드가 걸려 있으면 즉시 사용)
+                const { renderFullApp } = await (appEntryPreload ?? import('./appEntry'));
+                renderFullApp();
+            } else {
+                // 표식을 정리하고, 세션이 있었어야 하는 기기였다면 증거를 남긴다.
+                // (다음 방문을 가볍게 여는 것도 이 안에서 함께 한다 — 순서가 계약이 되지 않게)
+                noteUnauthenticatedBoot();
+                // 비인증 사용자 → 경량 앱 로드
+                const { renderLightApp } = await import('./lightEntry');
+                renderLightApp();
+            }
+        } catch (err) {
+            // 청크를 못 받으면 여기서 잡지 않는 한 "로딩 중..." 화면이 영원히 남는다
+            showBootError(err);
+        }
+    });
+}).catch(showBootError);

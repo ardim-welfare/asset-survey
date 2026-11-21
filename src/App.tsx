@@ -1,0 +1,304 @@
+import { Suspense, useEffect, useRef, useState } from 'react';
+import ConfirmModal from './components/common/ConfirmModal';
+import { useConfirmStore } from './store/useConfirmStore';
+import { useThemeStore } from './store/useThemeStore';
+import { useFontSizeStore } from './store/useFontSizeStore';
+import { lazyWithRetry } from './lib/lazyWithRetry';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from './hooks/useAuth';
+import useSessionRecord from './hooks/useSessionRecord';
+import { useOrientationLock } from './hooks/useOrientationLock';
+import useThemeSync from './hooks/useThemeSync';
+import { AuthGuard } from './components/auth/AuthGuard';
+import { adminHomePath } from './lib/lastArea';
+import { updateUser } from './lib/firestore/users';
+import InAppBrowserGuard from './components/common/InAppBrowserGuard';
+import { captureInviteCodeFromUrl } from './lib/inviteCodeCapture';
+
+// 레이아웃 (기존)
+const SuperAdminLayout = lazyWithRetry(() => import('./components/superAdmin/SuperAdminLayout'));
+const AdminLayout = lazyWithRetry(() => import('./components/admin/AdminLayout'));
+const EmployeeLayout = lazyWithRetry(() => import('./components/employee/EmployeeLayout'));
+const ConsentGate = lazyWithRetry(() => import('./components/common/ConsentGate'));
+
+// auth 페이지 (lazy 전환 — 번들 최적화)
+const LoginPage = lazyWithRetry(() => import('./components/auth/LoginPage'));
+const LandingPage = lazyWithRetry(() => import('./components/auth/LandingPage'));
+const InviteCodePage = lazyWithRetry(() => import('./components/auth/InviteCodePage'));
+const OrgApplicationPage = lazyWithRetry(() => import('./components/auth/OrgApplicationPage'));
+const PendingApprovalPage = lazyWithRetry(() => import('./components/auth/PendingApprovalPage'));
+const TermsPage = lazyWithRetry(() => import('./components/auth/TermsPage'));
+const PrivacyPage = lazyWithRetry(() => import('./components/auth/PrivacyPage'));
+const ReleaseNotesPage = lazyWithRetry(() => import('./components/auth/ReleaseNotesPage'));
+const FAQPage = lazyWithRetry(() => import('./components/auth/FAQPage'));
+
+// 슈퍼관리자 테스트 모드: 기관 관리자·직원 UI 체험 (sessionStorage key — 탭마다 독립)
+//
+// localStorage였다가 sessionStorage로 옮겼다. localStorage는 탭 간 공유라 한 탭에서 역할을
+// 바꾸면 **다른 탭이 리로드되는 순간 그 역할로 끌려갔다**(AuthGuard가 렌더 시점에 이 값을
+// 읽어 리다이렉트한다). 직원 화면과 관리자 화면을 나란히 띄워 보는 것이 이 기능의 용도인데
+// 그게 불가능했다. sessionStorage는 탭 단위라 각 탭이 자기 역할을 유지한다.
+export const SA_TEST_ROLE_KEY = 'sa-test-role' as const;
+
+// 옮기기 전 localStorage에 남은 값을 1회 정리한다. 읽는 곳이 없어졌으므로 그냥 두면
+// 모든 슈퍼관리자 브라우저에 영구히 남고, 나중에 이 키를 다시 읽는 코드가 생기면
+// 옛 역할이 되살아난다.
+try {
+  localStorage.removeItem(SA_TEST_ROLE_KEY);
+} catch { /* 스토리지를 못 쓰는 환경(사파리 프라이빗 등) 무시 */ }
+
+export function LoadingScreen() {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 500);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-primary-100 dark:from-surface-950 dark:via-surface-900 dark:to-surface-950">
+      <div className="text-center animate-fade-in">
+        <div className="w-16 h-16 spinner mx-auto mb-4"></div>
+        <p className="text-surface-500 dark:text-surface-400 font-medium">로딩 중...</p>
+        {elapsed >= 2 && elapsed < 8 && (
+          <p className="mt-2 text-sm text-surface-500 dark:text-surface-400">권한 정보를 동기화 중입니다…</p>
+        )}
+        {elapsed >= 8 && (
+          <p className="mt-2 text-sm text-surface-500 dark:text-surface-400">네트워크가 느리거나 보안 인증이 지연되고 있습니다.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 컴포넌트 마운트 에러 캐치용 Fallback (필요시 ErrorBoundary 추가 가능) */
+function RouteFallback() {
+  const { user, userData, userDocState } = useAuth();
+  if (!user) return <Navigate to="/" replace />;
+  // 사용자 문서 로딩이 아직 확정되지 않았으면(pending) 온보딩으로 보내지 말고 대기
+  if (userDocState === 'pending') return <LoadingScreen />;
+  if (!userData) return <Navigate to="/invite" replace />;
+  if (userData.role === 'superAdmin') return <Navigate to="/super-admin" replace />;
+  if (userData.role === 'admin') return <Navigate to={adminHomePath(user.uid)} replace />;
+  return <Navigate to="/employee" replace />;
+}
+
+/** 약관/개인정보 공통 라우트 (모든 인증 상태에서 접근 가능) */
+const legalRoutes = [
+  <Route key="terms" path="/terms" element={<TermsPage />} />,
+  <Route key="privacy" path="/privacy" element={<PrivacyPage />} />,
+  <Route key="release-notes" path="/release-notes" element={<ReleaseNotesPage />} />,
+  <Route key="faq" path="/faq" element={<FAQPage />} />,
+];
+
+
+import { notifyUser } from './lib/notify';
+
+/** 재동의 게이트를 띄우지 않는 경로 — 동의 대상 문서를 읽는 화면 자체는 막지 않는다. */
+const LEGAL_PATHS = ['/terms', '/privacy'];
+
+export default function App() {
+
+  // 전역 비동기 에러(App Check 등) 캐치 후 사용자 UI 피드백 제공
+  useEffect(() => {
+    // AppCheck 스로틀은 짧은 시간에 rejection이 연발되므로 표시 시간 내 재알림을 억제한다
+    let lastAppCheckToastAt = 0;
+    const APPCHECK_TOAST_DURATION_MS = 5000;
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason?.message || event.reason?.toString() || '';
+      if (
+        reason.includes('appCheck/throttled') ||
+        reason.includes('appCheck/initial-throttle') ||
+        (reason.includes('AppCheck') && reason.includes('500 error'))
+      ) {
+        const now = Date.now();
+        if (now - lastAppCheckToastAt < APPCHECK_TOAST_DURATION_MS) return;
+        lastAppCheckToastAt = now;
+        notifyUser('현재 네트워크 환경이 불안정하여 보안 인증이 지연되고 있습니다. 1분 후 다시 시도해주세요.', 'error', APPCHECK_TOAST_DURATION_MS);
+      }
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+  }, []);
+
+  const setTheme = useThemeStore(state => state.setTheme);
+  const fontSize = useFontSizeStore(state => state.fontSize);
+
+  // <html>에 dark 클래스 토글 + theme-color 메타 태그 동기화 (단위 테스트 대상)
+  useThemeSync();
+
+  // 시스템 설정 변경 감지 (사용자가 수동 설정한 경우 무시)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      const stored = localStorage.getItem('theme-preference');
+      if (!stored) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [setTheme]);
+
+  // <html>에 font-size class 적용
+  useEffect(() => {
+    const root = document.documentElement;
+    // 이전 class 제거
+    root.classList.remove('font-small', 'font-normal', 'font-large');
+    // 새 class 추가
+    root.classList.add(`font-${fontSize}`);
+  }, [fontSize]);
+
+
+
+  const open = useConfirmStore(state => state.open);
+  const options = useConfirmStore(state => state.options);
+  const handleConfirm = useConfirmStore(state => state.handleConfirm);
+  const handleCancel = useConfirmStore(state => state.handleCancel);
+
+  // 인앱 브라우저(카톡·네이버 등)에서는 메인 화면 대신 외부 브라우저 안내를 표시.
+  // 가드 의도는 InAppBrowserGuard 한 곳에서 관리한다(lightEntry의 /login과 동일 컴포넌트).
+  return (
+    <InAppBrowserGuard>
+      <AppContent />
+      <ConfirmModal
+        open={open}
+        title={options.title}
+        message={options.message}
+        type={options.type}
+        inputLabel={options.inputLabel}
+        inputPlaceholder={options.inputPlaceholder}
+        inputDefault={options.inputDefault}
+        confirmText={options.confirmText || '확인'}
+        cancelText={options.cancelText || '취소'}
+        confirmColor={options.confirmColor || 'primary'}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
+    </InAppBrowserGuard>
+  );
+}
+
+function AppContent() {
+  const { user, userData, loading } = useAuth();
+  const { pathname } = useLocation();
+  const isLegalRoute = LEGAL_PATHS.includes(pathname);
+  useOrientationLock();
+  // 로그인 세션을 접속기록에 남긴다(고시 제16조의 접속지 정보). 실패해도 화면을 막지 않는다.
+  useSessionRecord();
+  const theme = useThemeStore(state => state.theme);
+  const setTheme = useThemeStore(state => state.setTheme);
+
+  // Firestore DB <-> 로컬 테마 상태 양방향 동기화
+  const isThemeFirstSynced = useRef(false);
+
+  useEffect(() => {
+    if (!user || !userData) {
+      isThemeFirstSynced.current = false;
+      return;
+    }
+
+    // 1. 로그인 직후(초기 1회): DB 테마 정보가 있다면 로컬 스토어에 반영
+    if (!isThemeFirstSynced.current && userData.theme) {
+      if (userData.theme !== theme) {
+        setTheme(userData.theme as 'light' | 'dark');
+      }
+      isThemeFirstSynced.current = true;
+      return;
+    }
+
+    // 2. 초기 동기화 이후: 로컬 테마 변경 시 DB에 업데이트
+    if (isThemeFirstSynced.current || !userData.theme) {
+      if (userData.theme !== theme) {
+        updateUser(user.uid, { theme }).catch(err => {
+          console.error('테마 설정 DB 동기화 실패:', err);
+        });
+        // 테마가 없던 사용자가 처음 설정한 경우에도 이후엔 동기화된 것으로 간주
+        if (!isThemeFirstSynced.current) isThemeFirstSynced.current = true;
+      }
+    }
+  }, [user, userData, theme, setTheme]);
+
+  // 초대 링크의 ?code= 보관 — 부팅 첫 지점(main.tsx)이 먼저 하고, 여기서는 다른 경로로
+  // 들어온 코드까지 받는다(두 번 불려도 안전). 이유는 inviteCodeCapture.ts 머리 주석.
+  useEffect(() => {
+    captureInviteCodeFromUrl();
+  }, []);
+
+  // 서비스 워커의 알림 클릭 postMessage 수신 → 네비게이션
+  //
+  // 보내는 쪽은 public/firebase-messaging-sw.js다. 그 워커의 scope는
+  // `/firebase-cloud-messaging-push-scope`라서 앱 탭을 제어하지 않고, 제어하지 않는
+  // 클라이언트에는 navigate()가 거부되므로 이동을 여기에 맡긴다.
+  // (앱 SW인 src/sw.ts는 탭을 제어하므로 client.navigate로 직접 이동한다.)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'NOTIFICATION_CLICK' && event.data?.url) {
+        // Open Redirect 방지: 같은 origin의 URL만 허용
+        try {
+          const targetUrl = new URL(event.data.url, window.location.origin);
+          if (targetUrl.origin === window.location.origin) {
+            window.location.href = targetUrl.href;
+          }
+        } catch { /* 잘못된 URL은 무시 */ }
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', handler);
+    return () => navigator.serviceWorker?.removeEventListener('message', handler);
+  }, []);
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <Routes>
+        {/* Guest 전용 (로그인 시 대시보드로 리다이렉트됨) */}
+        <Route path="/" element={<AuthGuard requireGuest><LandingPage /></AuthGuard>} />
+        <Route path="/login" element={<AuthGuard requireGuest><LoginPage /></AuthGuard>} />
+        
+        {/* 기관 가입/생성 (로그인은 했지만 기관이 없거나 등록 중인 상태 허용) */}
+        <Route path="/invite" element={<AuthGuard requireAuth><InviteCodePage /></AuthGuard>} />
+        <Route path="/apply" element={<AuthGuard requireAuth={false}><OrgApplicationPage /></AuthGuard>} />
+        <Route path="/pending" element={<AuthGuard requireAuth><PendingApprovalPage /></AuthGuard>} />
+
+        {/* 역할별 메인 레이아웃 (기관 설정 완료 & 역할 일치 필요) */}
+        <Route path="/super-admin/*" element={
+          <AuthGuard requireAuth allowedRoles={['superAdmin']}>
+            <SuperAdminLayout />
+          </AuthGuard>
+        } />
+        <Route path="/admin/*" element={
+          <AuthGuard requireAuth requireOrgSetup allowedRoles={['admin']}>
+            <AdminLayout />
+          </AuthGuard>
+        } />
+        <Route path="/employee/*" element={
+          <AuthGuard requireAuth requireOrgSetup allowedRoles={['admin', 'employee']}>
+            <EmployeeLayout />
+          </AuthGuard>
+        } />
+
+        {/* 약관 등 공통 */}
+        {legalRoutes}
+
+        {/* Catch-all - 권한에 맞는 대시보드로 자동 리다이렉트 */}
+        <Route path="*" element={<RouteFallback />} />
+      </Routes>
+
+
+      {/*
+        개정 약관 재동의 게이트.
+        약관·처리방침 페이지에서는 띄우지 않는다 — 동의 화면의 링크는 새 탭으로 열리고
+        로그인 상태에서는 그 탭도 App을 렌더하므로, 제외하지 않으면 읽으려던 문서 위에
+        모달이 다시 덮여 동의도 열람도 못 하는 막다른 길이 된다.
+      */}
+      {!isLegalRoute && (
+        <Suspense fallback={null}><ConsentGate /></Suspense>
+      )}
+    </Suspense>
+  );
+}

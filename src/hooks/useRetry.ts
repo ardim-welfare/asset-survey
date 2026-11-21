@@ -1,0 +1,152 @@
+/**
+ * useRetry — 네트워크 에러 감지 + 자동 재시도 유틸리티 훅
+ * 비동기 작업 실패 시 Toast로 재시도 버튼을 표시한다.
+ */
+import { useCallback, useEffect, useRef } from 'react';
+import { useToast } from './useToast';
+import { captureError } from '../lib/sentry';
+
+interface RetryRunOptions {
+    errorMessage?: string;
+    /** 에러를 직접 처리하고 기본 Toast 알림을 무시하려면 true를 반환하세요. */
+    onError?: (err: unknown) => boolean | void;
+    /** 실행 타임아웃 (밀리초). 지정하지 않으면 대기(pending)합니다. */
+    timeoutMs?: number;
+    /**
+     * Sentry 보고 여부를 호출부가 판단한다. false를 반환하면 보고를 생략한다(기본: 보고).
+     *
+     * **예상된 결과를 걸러내는 용도다.** 서버가 규칙대로 거부한 것(이미 삭제된 대상,
+     * 중복 요청 등)은 코드 결함이 아니라 사용자에게 안내할 상태다. 그런 건까지 error로
+     * 올리면 진짜 실패가 그 사이에 묻힌다. 반대로 판단이 서지 않는 실패는 반드시 보고한다.
+     */
+    shouldReport?: (err: unknown) => boolean;
+}
+
+/**
+ * 네트워크/서버 에러인지 판별
+ */
+function isNetworkError(err: unknown) {
+    if (!err) return false;
+    const e = err as { message?: string; code?: string };
+    const msg = (e.message || '').toLowerCase();
+    // 네트워크 오류 패턴
+    if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return true;
+    if (msg.includes('failed to get document') || msg.includes('unavailable')) return true;
+    // Firebase 에러 코드
+    if (e.code === 'unavailable' || e.code === 'deadline-exceeded') return true;
+    if (e.code === 'resource-exhausted' || e.code === 'aborted') return true;
+    if (e.code === 'internal') return true;
+    return false;
+}
+
+/**
+ * @param {Object} options
+ * @param {number} [options.maxRetries=2] - 최대 재시도 횟수
+ * @param {string} [options.retryLabel='재시도'] - 재시도 버튼 텍스트
+ */
+export default function useRetry({ maxRetries = 2, retryLabel = '재시도' } = {}) {
+    const { showToast } = useToast();
+    const retryCountRef = useRef(new Map());
+    // 안정적인 최신 함수 참조를 위한 ref (순환 참조 방지)
+    const runWithRetryRef = useRef<(<T>(key: string, asyncFn: () => Promise<T>, opts?: RetryRunOptions & { useBackoff?: boolean; baseDelayMs?: number }) => Promise<T | undefined>) | null>(null);
+
+    /**
+     * 비동기 함수를 실행하고, 실패 시 재시도 토스트를 표시한다.
+     * @param {string} key - 재시도 카운터 키 (고유 식별자)
+     * @param {Function} asyncFn - 실행할 비동기 함수
+     * @param {Object} [opts] - 추가 옵션
+     * @returns {Promise<*>} asyncFn의 반환값 또는 에러 시 undefined
+     */
+    const runWithRetry = useCallback(async <T>(key: string, asyncFn: () => Promise<T>, opts: RetryRunOptions & { useBackoff?: boolean; baseDelayMs?: number } = {}): Promise<T | undefined> => {
+        try {
+            const currentCount = retryCountRef.current.get(key) || 0;
+            // 백오프 옵션이 켜져있고 처음 시도가 아니면 지연
+            if (opts.useBackoff && currentCount > 0) {
+                const delayMs = (opts.baseDelayMs || 1000) * Math.pow(2, currentCount - 1);
+                console.debug(`[useRetry:${key}] ${delayMs}ms 대기 후 재시도 (${currentCount}/${maxRetries})`);
+                await new Promise(res => setTimeout(res, delayMs));
+            }
+
+            let result: T;
+            if (opts.timeoutMs) {
+                const timeoutPromise = new Promise<never>((_, reject) => {
+                    setTimeout(() => reject(new Error('TIMEOUT_ERROR: 요청 시간이 초과되었습니다.')), opts.timeoutMs);
+                });
+                result = await Promise.race([asyncFn(), timeoutPromise]);
+            } else {
+                result = await asyncFn();
+            }
+
+            // 성공 시 재시도 카운터 초기화
+            retryCountRef.current.delete(key);
+            return result;
+        } catch (err) {
+            const isTimeoutOrDuplicate = err instanceof Error && (err.message.includes('TIMEOUT') || err.message.includes('중복'));
+            if (isTimeoutOrDuplicate) {
+                console.warn(`[useRetry:${key}] ${err.message}`);
+            } else if (opts.shouldReport && !opts.shouldReport(err)) {
+                // 호출부가 예상된 결과로 판정 — 콘솔에는 남기고 Sentry로는 올리지 않는다.
+                console.warn(`[useRetry:${key}] 예상된 실패로 보고를 생략합니다:`, err);
+            } else {
+                console.error(`[useRetry:${key}]`, err);
+                // `key`가 아니라 `retryKey`로 넘긴다 — sentryScrub의 허용 목록은 일반 명사를
+                // 담지 않는다(어떤 문서에든 같은 이름의 자유 입력이 생길 수 있다).
+                captureError(err, { retryKey: key, retryCount: retryCountRef.current.get(key) || 0, context: 'useRetry' });
+            }
+
+            const handled = opts.onError ? opts.onError(err) : false;
+            if (handled === true) return undefined; // 에러 처리를 위임하고 기본 플로우 종료
+
+            const currentCount = retryCountRef.current.get(key) || 0;
+
+            if (isNetworkError(err) && currentCount < maxRetries) {
+                // 네트워크 에러 → 재시도 버튼 표시 또는 자동 백오프 시도
+                retryCountRef.current.set(key, currentCount + 1);
+                const remaining = maxRetries - currentCount;
+                
+                // 자동 백오프 모드가 켜져있으면 Toast 대신 바로 재귀 호출 (안전 장치로 maxRetries 내에서만 돎)
+                if (opts.useBackoff) {
+                    return runWithRetryRef.current?.(key, asyncFn, opts);
+                }
+
+                showToast(
+                    opts.errorMessage || '네트워크 통신 중입니다.',
+                    'error',
+                    {
+                        duration: 8000,
+                        actionLabel: `${retryLabel} (${remaining})`,
+                        onAction: () => runWithRetryRef.current?.(key, asyncFn, opts),
+                    }
+                );
+            } else {
+                // 비네트워크 에러 또는 재시도 횟수 완전 초과 (포기)
+                retryCountRef.current.delete(key);
+                showToast(
+                    opts.errorMessage || (currentCount >= maxRetries 
+                        ? '일시적인 네트워크 오류가 지속됩니다. 잠시 후 다시 시도해 주세요.' 
+                        : '처리 중 오류가 발생했습니다.'),
+                    'error'
+                );
+            }
+
+            return undefined;
+        }
+    }, [showToast, maxRetries, retryLabel]);
+
+    // ref에 최신 함수 반영 (렌더 바깥에서 업데이트)
+    useEffect(() => { runWithRetryRef.current = runWithRetry; });
+
+    /**
+     * 재시도 카운터를 초기화
+     */
+    const resetRetry = useCallback((key?: string) => {
+        if (key) {
+            retryCountRef.current.delete(key);
+        } else {
+            retryCountRef.current.clear();
+        }
+    }, []);
+
+    return { runWithRetry, resetRetry, isNetworkError };
+}
+

@@ -1,0 +1,87 @@
+/**
+ * Firestore 함수 통합 re-export
+ *
+ * 모든 Firestore 관련 함수를 컬렉션별 모듈에서 가져와 통합 export합니다.
+ * 기존 `import { ... } from '../lib/firestore'` 구문이 그대로 동작합니다.
+ */
+
+// 사용자 (Users)
+export {
+    getUser,
+    createUser,
+    leaveOrganization,
+    updateUser,
+    getOrganizationMembers,
+    getOrganizationAdmins,
+    getOrgMemberCounts,
+    clearUserOrganization,
+    recheckDeniedTarget,
+} from './users';
+
+// 사전 등록 직원 (Pre-registered Employees)
+export {
+    getPreRegisteredEmployees,
+    addPreRegisteredEmployee,
+    deletePreRegisteredEmployee,
+} from './preRegistered';
+
+// 기관 (Organizations)
+export {
+    createOrganization,
+    getOrganization,
+    updateOrganization,
+    deleteOrganization,
+    permanentDeleteOrganization,
+    restoreOrganization,
+    getPendingOrganizations,
+    getRejectedOrganizations,
+    getDeletedOrganizations,
+    getApprovedOrganizations,
+    approveOrganization,
+    approveOrganizationWithAdmins,
+    rejectOrganization,
+    generateInviteCode,
+    findOrganizationByInviteCode,
+    regenerateInviteCode,
+} from './organizations';
+
+// 알림 (Notifications)
+export {
+    createNotification,
+    getNotifications,
+    markNotificationRead,
+    subscribeNotifications,
+    deleteNotification,
+} from './notifications';
+
+// 피드백 (Feedbacks)
+export {
+    createFeedback,
+    getAllFeedbacks,
+    updateFeedback,
+    deleteFeedback,
+} from './feedbacks';
+
+// 슈퍼관리자 관리
+export {
+    getSuperAdmins,
+    getUserByEmail,
+    addSuperAdmin,
+    removeSuperAdmin,
+} from './superAdmin';
+
+// 전체 공지 발송 이력 (Broadcasts) — superAdmin 전용 읽기, 전역 도메인
+export {
+    getRecentBroadcasts,
+} from './broadcasts';
+
+// 접속기록 (Audit Logs) — 기관 관리자 점검용 읽기 전용
+export {
+    getAuditLogs,
+    getAuditLogsForExport,
+    AUDIT_LOG_PAGE_SIZE,
+    AUDIT_LOG_EXPORT_MAX,
+} from './auditLogs';
+export type {
+    AuditLogKind, AuditLogPage, AuditLogQueryOptions, AuditLogExportResult,
+} from './auditLogs';
