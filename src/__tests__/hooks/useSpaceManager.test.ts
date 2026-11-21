@@ -1,0 +1,159 @@
+/**
+ * useSpaceManager — 공간 관리 화면 로직 (기획서 F03)
+ *
+ * 고정하는 계약:
+ *   - 담당자 후보에서 운영자(superAdmin)·비활성 계정을 뺀다
+ *   - 이름 검사에 걸리면 저장하지 않고 안내한다
+ *   - 저장 실패 시 화면을 직전 상태로 되돌린다
+ *   - 순서 바꾸기는 숨기지 않은 공간끼리만, 끝에서는 아무것도 하지 않는다
+ *   - 숨기기는 확인을 받고, 숨김 해제는 맨 아래로 붙인다
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import type { Space } from '../../types/space';
+
+const mockShowToast = vi.fn();
+const mockConfirm = vi.fn();
+
+vi.mock('../../hooks/useAuth', () => ({
+    useAuth: () => ({ userData: { organizationId: 'org-A' } }),
+}));
+vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ showToast: mockShowToast }) }));
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm: mockConfirm }) }));
+
+const space = (over: Partial<Space>): Space => ({
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, ...over,
+});
+
+vi.mock('../../lib/firestore', async () => {
+    const actual = await vi.importActual<typeof import('../../lib/firestore/spaces')>('../../lib/firestore/spaces');
+    return {
+        getSpaces: vi.fn(),
+        getOrganizationMembers: vi.fn(),
+        createSpace: vi.fn(),
+        updateSpace: vi.fn(),
+        reorderSpaces: vi.fn(),
+        validateSpaceName: actual.validateSpaceName,
+        normalizeSpaceName: actual.normalizeSpaceName,
+        sortSpaces: actual.sortSpaces,
+    };
+});
+
+import * as firestore from '../../lib/firestore';
+import useSpaceManager from '../../hooks/useSpaceManager';
+
+const SPACES = [
+    space({ id: 'a', name: '1층 상담실', order: 0, managerUids: ['u1'] }),
+    space({ id: 'b', name: '2층 사무실', order: 1 }),
+    space({ id: 'z', name: '옛 창고', order: 0, archived: true }),
+];
+
+async function setup() {
+    const hook = renderHook(() => useSpaceManager());
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    return hook;
+}
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(firestore.getSpaces).mockResolvedValue(SPACES.map((s) => ({ ...s })));
+    vi.mocked(firestore.getOrganizationMembers).mockResolvedValue([
+        { id: 'u1', uid: 'u1', name: '김직원', role: 'employee', status: 'active' },
+        { id: 'u2', uid: 'u2', name: '이관리', role: 'admin', status: 'active' },
+        { id: 'u3', uid: 'u3', name: '박퇴사', role: 'employee', status: 'disabled' },
+        { id: 'sa', uid: 'sa', name: '운영자', role: 'superAdmin', status: 'active' },
+    ] as never);
+    vi.mocked(firestore.updateSpace).mockResolvedValue(undefined);
+    vi.mocked(firestore.reorderSpaces).mockResolvedValue(undefined);
+});
+
+describe('useSpaceManager', () => {
+    it('숨긴 공간을 나눠 보이고, 담당자 후보에서 운영자·비활성 계정을 뺀다', async () => {
+        const { result } = await setup();
+        expect(result.current.activeSpaces.map((s) => s.id)).toEqual(['a', 'b']);
+        expect(result.current.archivedSpaces.map((s) => s.id)).toEqual(['z']);
+        expect(result.current.members.map((m) => m.uid)).toEqual(['u1', 'u2']);
+        expect(result.current.nameOf('u1')).toBe('김직원');
+        expect(result.current.nameOf('gone-uid-123')).toMatch(/퇴사·이동한 직원/);
+    });
+
+    it('불러오기 실패는 안내 문구로 보여 준다', async () => {
+        vi.mocked(firestore.getSpaces).mockRejectedValueOnce(new Error('denied'));
+        const { result } = await setup();
+        expect(result.current.loadError).toMatch(/불러오지 못했습니다/);
+    });
+
+    it('공간 추가는 맨 뒤 순서로 저장하고, 같은 이름이면 저장하지 않는다', async () => {
+        vi.mocked(firestore.createSpace).mockResolvedValue('c');
+        const { result } = await setup();
+
+        let ok = false;
+        await act(async () => { ok = await result.current.addSpace('3층 교육장'); });
+        expect(ok).toBe(true);
+        expect(firestore.createSpace).toHaveBeenCalledWith('org-A', '3층 교육장', 2);
+        expect(result.current.activeSpaces.map((s) => s.name)).toEqual(['1층 상담실', '2층 사무실', '3층 교육장']);
+
+        await act(async () => { ok = await result.current.addSpace('2층 사무실'); });
+        expect(ok).toBe(false);
+        expect(firestore.createSpace).toHaveBeenCalledTimes(1);
+        expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/이미 있습니다/), 'warning');
+    });
+
+    it('담당자 지정 저장이 실패하면 화면을 되돌린다', async () => {
+        vi.mocked(firestore.updateSpace).mockRejectedValueOnce(new Error('denied'));
+        const { result } = await setup();
+
+        await act(async () => { await result.current.addManager(result.current.activeSpaces[1], 'u2'); });
+
+        expect(firestore.updateSpace).toHaveBeenCalledWith('b', { managerUids: ['u2'] });
+        expect(result.current.activeSpaces[1].managerUids).toEqual([]);
+        expect(mockShowToast).toHaveBeenCalledWith('담당자를 지정하지 못했습니다.', 'error');
+    });
+
+    it('담당자 빼기는 그 사람만 뺀 목록을 저장한다', async () => {
+        const { result } = await setup();
+        await act(async () => { await result.current.removeManager(result.current.activeSpaces[0], 'u1'); });
+        expect(firestore.updateSpace).toHaveBeenCalledWith('a', { managerUids: [] });
+        expect(result.current.activeSpaces[0].managerUids).toEqual([]);
+    });
+
+    it('아래로 옮기면 두 공간의 순서를 바꿔 저장하고, 맨 끝에서는 아무것도 하지 않는다', async () => {
+        const { result } = await setup();
+
+        await act(async () => { await result.current.moveSpace(result.current.activeSpaces[0], 1); });
+        expect(vi.mocked(firestore.reorderSpaces).mock.calls[0][0].map((s) => s.id)).toEqual(['b', 'a']);
+        expect(result.current.activeSpaces.map((s) => s.id)).toEqual(['b', 'a']);
+
+        vi.mocked(firestore.reorderSpaces).mockClear();
+        await act(async () => { await result.current.moveSpace(result.current.activeSpaces[1], 1); });
+        expect(firestore.reorderSpaces).not.toHaveBeenCalled();
+    });
+
+    it('이름 바꾸기는 입력창 값으로 저장하고, 취소하면 아무것도 하지 않는다', async () => {
+        const { result } = await setup();
+
+        mockConfirm.mockResolvedValueOnce(null);
+        await act(async () => { await result.current.renameSpace(result.current.activeSpaces[0]); });
+        expect(firestore.updateSpace).not.toHaveBeenCalled();
+
+        mockConfirm.mockResolvedValueOnce('  1층 큰 상담실 ');
+        await act(async () => { await result.current.renameSpace(result.current.activeSpaces[0]); });
+        expect(firestore.updateSpace).toHaveBeenCalledWith('a', { name: '1층 큰 상담실' });
+    });
+
+    it('숨기기는 확인을 받아야 저장하고, 숨김 해제는 맨 아래 순서로 붙인다', async () => {
+        const { result } = await setup();
+
+        mockConfirm.mockResolvedValueOnce(false);
+        await act(async () => { await result.current.archiveSpace(result.current.activeSpaces[1]); });
+        expect(firestore.updateSpace).not.toHaveBeenCalled();
+
+        mockConfirm.mockResolvedValueOnce(true);
+        await act(async () => { await result.current.archiveSpace(result.current.activeSpaces[1]); });
+        expect(firestore.updateSpace).toHaveBeenCalledWith('b', { archived: true });
+        expect(result.current.archivedSpaces.map((s) => s.id).sort()).toEqual(['b', 'z']);
+
+        await act(async () => { await result.current.restoreSpace(result.current.archivedSpaces.find((s) => s.id === 'z')!); });
+        expect(firestore.updateSpace).toHaveBeenLastCalledWith('z', { archived: false, order: 1 });
+    });
+});

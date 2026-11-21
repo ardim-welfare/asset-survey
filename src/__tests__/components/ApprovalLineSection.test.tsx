@@ -11,6 +11,7 @@ function baseForm(overrides: Partial<SettingsForm> = {}): SettingsForm {
         phone: '010-1234-5678',
         approvalLine: [{ title: '담당' }, { title: '팀장' }],
         hideApprovalLine: false,
+        surveyMode: 'delegated',
         ...overrides,
     };
 }

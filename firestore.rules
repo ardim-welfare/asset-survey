@@ -142,6 +142,9 @@ service cloud.firestore {
       //   - applicant*·uniqueNumber: 신청 시 확정된 신원 정보. 알림톡·이메일 수신처가 여기서 나온다.
       // superAdmin(승인·반려·복구)과 신청자 경로(pending 상태의 본인 신청)는 종전과 같다.
       allow update: if !request.resource.data.diff(resource.data).affectedKeys().hasAny(['consent'])
+                    // 조사 방식은 정해진 값만 (기획서 F02). 화면이 고르게 하지만 우회 쓰기를 여기서 끊는다
+                    && (!('surveyMode' in request.resource.data)
+                        || request.resource.data.surveyMode in ['delegated', 'solo'])
                     && (
                       isSuperAdmin()
                       || (isOrgAdmin(orgId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -165,6 +168,39 @@ service cloud.firestore {
         allow read: if isOrgMember(orgId) || isSuperAdmin();
         allow write: if false; // Cloud Functions(admin SDK)에서만 쓰기
       }
+    }
+
+    // === 공간 (기획서 F03) ===
+    // 재물이 놓인 곳과 그 공간 담당자. 공간 이름은 민감하지 않고, 조사 중 "다른 공간에서 발견"을
+    // 보여 주려면 직원도 기관의 공간 목록을 알아야 하므로 **읽기는 같은 기관 구성원 전부**다.
+    // "공간 담당자는 자기 공간만" 경계는 조사 대상·스캔 컬렉션(4단계)에서 건다.
+    //
+    // 쓰기는 기관 관리자만. 지우지 않는다 — 재물·조사 기록이 공간을 가리키게 되므로 숨김(archived)만 쓴다.
+    // 담당자(managerUids)가 정말 같은 기관 사람인지는 Rules에서 확인하지 않는다(uid마다 get()이 든다).
+    // 다른 기관 uid를 넣어도 그 사람은 이 문서를 읽을 수 없으므로 권한이 새지 않는다 — 화면이 구성원만 고르게 한다.
+    function spaceDataValid(d) {
+      return d.keys().hasOnly(['organizationId', 'name', 'order', 'managerUids', 'archived',
+                               'lastEditedByUid', 'createdAt', 'updatedAt'])
+             && d.organizationId is string
+             && d.name is string && d.name.size() > 0 && d.name.size() <= 50
+             && d.order is int && d.order >= 0
+             && d.managerUids is list && d.managerUids.size() <= 20
+             && d.archived is bool
+             && d.updatedAt == request.time;
+    }
+
+    match /spaces/{spaceId} {
+      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      allow create: if (isSuperAdmin() || isOrgAdmin(request.resource.data.organizationId))
+                    && spaceDataValid(request.resource.data)
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.lastEditedByUid == request.auth.uid;
+      allow update: if (isSuperAdmin() || isOrgAdmin(resource.data.organizationId))
+                    && spaceDataValid(request.resource.data)
+                    && request.resource.data.organizationId == resource.data.organizationId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.lastEditedByUid == request.auth.uid;
+      allow delete: if false;
     }
 
     // === 알림 ===

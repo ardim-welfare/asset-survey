@@ -4,10 +4,13 @@
  * 문서 모양의 원본은 `src/schemas/organization.ts`다 — 여기서는 파생만 한다.
  */
 import type { z } from 'zod';
-import type { organizationSchema, orgStatusSchema, withdrawReasonSchema } from '../schemas/organization';
+import type { organizationSchema, orgStatusSchema, withdrawReasonSchema, surveyModeSchema } from '../schemas/organization';
 import type { FirestoreDoc } from './common';
 
 export type OrgStatus = z.infer<typeof orgStatusSchema>;
+
+/** 조사 방식 — 'delegated'(나눠서 조사) · 'solo'(혼자 조사) */
+export type SurveyMode = z.infer<typeof surveyModeSchema>;
 
 /** 기관 탈퇴(서비스 해지) 사유 */
 export type WithdrawReason = z.infer<typeof withdrawReasonSchema>;

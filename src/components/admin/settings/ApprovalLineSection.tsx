@@ -29,7 +29,7 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
                     />
                 </label>
             </div>
-            <p className="text-xs text-surface-500 dark:text-surface-400 mb-4">PDF 운행일지에 표시될 결재란을 설정합니다. (수동 결재용)</p>
+            <p className="text-xs text-surface-500 dark:text-surface-400 mb-4">PDF 보고서에 표시될 결재란을 설정합니다. (수동 결재용)</p>
 
             <div className={`space-y-2 mb-3 transition-opacity ${form.hideApprovalLine ? 'opacity-40 pointer-events-none' : ''}`}>
                 {form.approvalLine.map((item, idx) => (

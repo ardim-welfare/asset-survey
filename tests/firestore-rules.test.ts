@@ -3,6 +3,11 @@ import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnviro
 import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
+
+/** compat SDK의 서버 시각 — Rules가 `== request.time`으로 확인하는 필드에 쓴다 */
+const serverTs = () => firebase.firestore.FieldValue.serverTimestamp();
 
 // Firebase 에뮬레이터 프로젝트 ID — demo- 접두사는 에뮬레이터 전용(실제 프로젝트에 닿지 않음)임을 보장한다
 const PROJECT_ID = 'demo-asset-survey';
@@ -675,6 +680,96 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
         await assertFails(db.collection('_health').doc('ping').set({ at }));
         await assertFails(db.collection('_rateLimits').doc('k2').set({ count: 0 }));
       }
+    });
+
+    // ── 공간 (기획서 F03) ──
+    const spaceDoc = (org: 'A' | 'B', uid: string, extra: Record<string, unknown> = {}) => ({
+      organizationId: `org-${org}`, name: `공간${org}`, order: 0, managerUids: [], archived: false,
+      createdAt: serverTs(), updatedAt: serverTs(), lastEditedByUid: uid, ...extra,
+    });
+    const seedSpace = async (id: string, org: 'A' | 'B', managerUids: string[] = []) => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('spaces').doc(id).set({
+          organizationId: `org-${org}`, name: id, order: 0, managerUids, archived: false,
+          createdAt: at, updatedAt: at, lastEditedByUid: `admin_${org}`,
+        });
+      });
+    };
+
+    it('#S1 공간은 같은 기관 구성원만 읽는다 (단건·목록·내 담당 공간)', async () => {
+      await seedSpace('sp_A', 'A', ['emp_A1']);
+      await seedSpace('sp_B', 'B');
+      const db = emp('A', 2);
+      await assertSucceeds(db.collection('spaces').doc('sp_A').get());
+      await assertSucceeds(db.collection('spaces').where('organizationId', '==', 'org-A').get());
+      await assertSucceeds(emp('A', 1).collection('spaces')
+        .where('organizationId', '==', 'org-A').where('managerUids', 'array-contains', 'emp_A1').get());
+      await assertFails(db.collection('spaces').doc('sp_B').get());
+      await assertFails(db.collection('spaces').where('organizationId', '==', 'org-B').get());
+      await assertFails(db.collection('spaces').get());
+      await assertFails(anon().collection('spaces').doc('sp_A').get());
+    });
+
+    it('#S2 공간 추가·수정은 그 기관 관리자만 (직원·다른 기관 관리자는 막힌다)', async () => {
+      await assertSucceeds(admin('A').collection('spaces').doc('new_A').set(spaceDoc('A', 'admin_A')));
+      await assertFails(emp('A', 1).collection('spaces').doc('emp_new').set(spaceDoc('A', 'emp_A1')));
+      await assertFails(admin('B').collection('spaces').doc('cross').set(spaceDoc('A', 'admin_B')));
+
+      await seedSpace('sp_A', 'A');
+      const upd = { name: '바뀐 이름', updatedAt: serverTs() };
+      await assertSucceeds(admin('A').collection('spaces').doc('sp_A').update({ ...upd, lastEditedByUid: 'admin_A' }));
+      await assertFails(emp('A', 1).collection('spaces').doc('sp_A').update({ ...upd, lastEditedByUid: 'emp_A1' }));
+      await assertFails(admin('B').collection('spaces').doc('sp_A').update({ ...upd, lastEditedByUid: 'admin_B' }));
+    });
+
+    it('#S3 공간은 아무도 지울 수 없다 — 숨김(archived)만 쓴다', async () => {
+      await seedSpace('sp_A', 'A');
+      await assertFails(admin('A').collection('spaces').doc('sp_A').delete());
+      await assertFails(superAdmin().collection('spaces').doc('sp_A').delete());
+      await assertSucceeds(admin('A').collection('spaces').doc('sp_A')
+        .update({ archived: true, updatedAt: serverTs(), lastEditedByUid: 'admin_A' }));
+    });
+
+    it('#S4 공간 데이터 형식 — 빈 이름·긴 이름·담당자 과다·모르는 필드·다른 기관 이전은 막힌다', async () => {
+      const db = admin('A');
+      await assertFails(db.collection('spaces').doc('x1').set(spaceDoc('A', 'admin_A', { name: '' })));
+      await assertFails(db.collection('spaces').doc('x2').set(spaceDoc('A', 'admin_A', { name: '가'.repeat(51) })));
+      await assertFails(db.collection('spaces').doc('x3').set(spaceDoc('A', 'admin_A', {
+        managerUids: Array.from({ length: 21 }, (_, i) => `u${i}`),
+      })));
+      await assertFails(db.collection('spaces').doc('x4').set(spaceDoc('A', 'admin_A', { memo: '모르는 필드' })));
+      await assertFails(db.collection('spaces').doc('x5').set(spaceDoc('A', 'admin_A', { order: -1 })));
+      await assertFails(db.collection('spaces').doc('x6').set(spaceDoc('A', 'admin_A', { order: 1.5 })));
+
+      await seedSpace('sp_A', 'A');
+      await assertFails(db.collection('spaces').doc('sp_A')
+        .update({ organizationId: 'org-B', updatedAt: serverTs(), lastEditedByUid: 'admin_A' }));
+    });
+
+    it('#S5 공간 쓰기에는 본인 행위자 스탬프가 있어야 한다 (생략·타인 명의 모두 막힘)', async () => {
+      const db = admin('A');
+      const { lastEditedByUid: _omit, ...noStamp } = spaceDoc('A', 'admin_A');
+      await assertFails(db.collection('spaces').doc('s1').set(noStamp));
+      await assertFails(db.collection('spaces').doc('s2').set(spaceDoc('A', 'emp_A1')));
+
+      // 마지막 수정자가 다른 사람인 문서를 스탬프 없이 고치면, 남의 이름이 그대로 남으므로 막힌다
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('spaces').doc('sp_A').set({
+          organizationId: 'org-A', name: 'sp_A', order: 0, managerUids: [], archived: false,
+          createdAt: at, updatedAt: at, lastEditedByUid: 'someone_else',
+        });
+      });
+      await assertFails(db.collection('spaces').doc('sp_A').update({ name: '스탬프 없음', updatedAt: serverTs() }));
+      await assertSucceeds(db.collection('spaces').doc('sp_A')
+        .update({ name: '스탬프 있음', updatedAt: serverTs(), lastEditedByUid: 'admin_A' }));
+    });
+
+    it('#S6 조사 방식(surveyMode)은 정해진 값만 저장된다', async () => {
+      const db = admin('A');
+      await assertSucceeds(db.collection('organizations').doc('org-A').update({ surveyMode: 'solo' }));
+      await assertSucceeds(db.collection('organizations').doc('org-A').update({ surveyMode: 'delegated' }));
+      await assertFails(db.collection('organizations').doc('org-A').update({ surveyMode: 'anyone' }));
+      await assertFails(emp('A', 1).collection('organizations').doc('org-A').update({ surveyMode: 'solo' }));
     });
   });
 

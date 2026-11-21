@@ -10,6 +10,7 @@ import WithdrawOrgModal from './WithdrawOrgModal';
 import FeedbackForm from '../common/FeedbackForm';
 import OrgInfoSection from './settings/OrgInfoSection';
 import ApprovalLineSection from './settings/ApprovalLineSection';
+import SurveyModeSection from './settings/SurveyModeSection';
 import AccountSection from './settings/AccountSection';
 
 export default function Settings() {
@@ -58,6 +59,13 @@ export default function Settings() {
                 handleSave={handleSave}
                 saving={saving}
                 onRequestFeedback={() => setShowFeedback(true)}
+            />
+
+            {/* 조사 방식 (기획서 F02) — 고르는 즉시 저장 */}
+            <SurveyModeSection
+                value={form.surveyMode}
+                saving={saving}
+                onChange={(surveyMode) => handleSave(null, { surveyMode })}
             />
 
             {/* 결재 라인 설정 */}

@@ -11,7 +11,8 @@ import { getOrganization, updateOrganization, regenerateInviteCode } from '../li
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { formatDateKr } from '../lib/dateUtils';
 import { formatPhoneNumber } from './useOrgApplication';
-import type { Organization, WithdrawReason } from '../types/organization';
+import type { Organization, WithdrawReason, SurveyMode } from '../types/organization';
+import { DEFAULT_SURVEY_MODE } from '../schemas/organization';
 
 export interface SettingsForm {
     name: string;
@@ -20,6 +21,8 @@ export interface SettingsForm {
     phone: string;
     approvalLine: { title: string }[];
     hideApprovalLine: boolean;
+    /** 조사 방식 (기획서 F02) */
+    surveyMode: SurveyMode;
 }
 
 export default function useSettings() {
@@ -38,6 +41,7 @@ export default function useSettings() {
         phone: '',
         approvalLine: [{ title: '담당' }, { title: '팀장' }],
         hideApprovalLine: false,
+        surveyMode: DEFAULT_SURVEY_MODE,
     });
 
     const orgId = userData?.organizationId;
@@ -59,6 +63,7 @@ export default function useSettings() {
                             ? orgData.approvalLine
                             : [{ title: '담당' }, { title: '팀장' }],
                         hideApprovalLine: orgData.hideApprovalLine ?? false,
+                        surveyMode: orgData.surveyMode ?? DEFAULT_SURVEY_MODE,
                     });
                 }
             } catch (err) {
@@ -100,6 +105,7 @@ export default function useSettings() {
                     phone: targetData.phone.trim(),
                     approvalLine: targetData.approvalLine.filter(a => a.title.trim()).map(a => ({ title: a.title.trim() })),
                     hideApprovalLine: targetData.hideApprovalLine,
+                    surveyMode: targetData.surveyMode,
                 });
             }
             setSuccess(true);

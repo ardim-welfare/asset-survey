@@ -85,3 +85,15 @@ export {
 export type {
     AuditLogKind, AuditLogPage, AuditLogQueryOptions, AuditLogExportResult,
 } from './auditLogs';
+
+// 공간 (Spaces) — 기획서 F03
+export {
+    getSpaces,
+    getMySpaces,
+    createSpace,
+    updateSpace,
+    reorderSpaces,
+    sortSpaces,
+    normalizeSpaceName,
+    validateSpaceName,
+} from './spaces';

@@ -2,6 +2,14 @@ import { z } from 'zod';
 import { timestampSchema } from './common';
 
 export const orgStatusSchema = z.enum(['pending', 'approved', 'rejected', 'deleted']);
+/**
+ * 조사 방식 (기획서 F02) — 기관이 설정에서 고른다. 미설정은 'delegated'.
+ * - delegated: 공간 담당자가 스캔 → 공간 제출 → 재물 담당자 승인·반려
+ * - solo: 재물 담당자가 직접 스캔 → 바로 마감 (작은 기관)
+ */
+export const surveyModeSchema = z.enum(['delegated', 'solo']);
+export const DEFAULT_SURVEY_MODE = 'delegated' as const;
+
 export const withdrawReasonSchema = z.enum(['no_longer_needed', 'too_difficult', 'missing_features', 'other']);
 
 export const organizationSchema = z.object({
@@ -17,6 +25,8 @@ export const organizationSchema = z.object({
     message: z.string().optional().catch(undefined),
     approvalLine: z.array(z.object({ title: z.string().catch('') })).optional().catch(undefined),
     hideApprovalLine: z.boolean().optional().catch(undefined),
+    /** 조사 방식. firestore.rules가 허용 값을 다시 확인한다 */
+    surveyMode: surveyModeSchema.optional().catch(undefined),
     status: orgStatusSchema.catch('pending'),
     inviteCode: z.string().optional().catch(undefined),
     uniqueNumber: z.string().optional().catch(undefined),

@@ -38,7 +38,7 @@ vi.mock('../../hooks/useOrgApplication', () => ({
 }));
 
 import useSettings from '../../hooks/useSettings';
-import { updateOrganization } from '../../lib/firestore';
+import { updateOrganization, getOrganization } from '../../lib/firestore';
 
 describe('useSettings', () => {
     beforeEach(() => {
@@ -54,6 +54,17 @@ describe('useSettings', () => {
 
         expect(result.current.form.name).toBe('테스트 기관');
         expect(result.current.form.adminEmail).toBe('admin@test.com');
+    });
+
+    it('조사 방식이 비어 있으면 나눠서 조사(delegated)로 읽고, 저장된 값은 그대로 읽는다', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.form.surveyMode).toBe('delegated');
+
+        vi.mocked(getOrganization).mockResolvedValueOnce({ name: '작은 기관', surveyMode: 'solo' } as never);
+        const second = renderHook(() => useSettings());
+        await waitFor(() => expect(second.result.current.loading).toBe(false));
+        expect(second.result.current.form.surveyMode).toBe('solo');
     });
 
     it('orgId가 존재한다', async () => {

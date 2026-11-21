@@ -14,6 +14,8 @@ import { describe, it, expect } from 'vitest';
 import {
     createZodConverter,
     userSchema,
+    spaceSchema,
+    organizationSchema,
 } from '../../schemas';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 
@@ -40,6 +42,22 @@ describe('스키마가 앱이 실제로 쓰는 필드를 모두 담는다', () =
         });
 
         expect(result.fcmToken).toBe('token-abc');
+    });
+
+    it('공간: 담당자·순서·숨김이 컨버터를 통과하고, 빠진 값은 안전한 기본값이 된다', () => {
+        const full = readThrough(spaceSchema, {
+            organizationId: 'org1', name: '2층 사무실', order: 2, managerUids: ['u1', 'u2'], archived: true,
+            lastEditedByUid: 'admin-1',
+        });
+        expect(full).toMatchObject({ order: 2, managerUids: ['u1', 'u2'], archived: true, lastEditedByUid: 'admin-1' });
+
+        const sparse = readThrough(spaceSchema, { organizationId: 'org1', name: '창고' });
+        expect(sparse).toMatchObject({ order: 0, managerUids: [], archived: false });
+    });
+
+    it('기관: 조사 방식이 컨버터를 통과하고, 모르는 값은 비운다', () => {
+        expect(readThrough(organizationSchema, { name: '기관', applicantUid: 'u1', status: 'approved', surveyMode: 'solo' }).surveyMode).toBe('solo');
+        expect(readThrough(organizationSchema, { name: '기관', applicantUid: 'u1', status: 'approved', surveyMode: 'anyone' }).surveyMode).toBeUndefined();
     });
 
     it('컨버터는 스키마에 없는 키를 조용히 제거한다 — 이 테스트들이 필요한 이유', () => {

@@ -43,7 +43,7 @@ async function seedOrg(orgId: string, status: string) {
 }
 
 /** 기관 필드로 묶인 컬렉션 — purgeOrganizationData의 ORG_SCOPED와 같은 목록 */
-const BY_ORG = ["notifications", "feedbacks", "users"];
+const BY_ORG = ["notifications", "feedbacks", "spaces", "users"];
 
 async function countAll(orgId: string): Promise<Record<string, number>> {
     const out: Record<string, number> = {};

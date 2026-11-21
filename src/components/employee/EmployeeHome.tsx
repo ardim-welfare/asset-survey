@@ -1,19 +1,61 @@
 /**
  * EmployeeHome — 직원(공간 담당자) 첫 화면
  *
- * 0단계에서는 안내만 보여 준다. 담당 공간의 조사 대상·진행 상황은
- * 기획서 F10~F13(조사 회차·스캔·제출)에서 채운다.
+ * 1단계: 내가 담당하는 공간을 보여 준다(기획서 F03). 조사 대상·진행 상황은
+ * F10~F13(조사 회차·스캔·제출)에서 이 화면에 더한다.
  */
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { getMySpaces } from '../../lib/firestore';
+import type { Space } from '../../types/space';
 
 export default function EmployeeHome() {
-    const { userData } = useAuth();
+    const { user, userData } = useAuth();
+    const orgId = userData?.organizationId ?? null;
+    const uid = user?.uid ?? null;
+    const [spaces, setSpaces] = useState<Space[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        if (!orgId || !uid) return;
+        let cancelled = false;
+        setLoading(true);
+        setError(false);
+        getMySpaces(orgId, uid)
+            .then((list) => { if (!cancelled) setSpaces(list); })
+            .catch(() => { if (!cancelled) setError(true); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [orgId, uid]);
 
     return (
         <div className="max-w-lg mx-auto animate-fade-in space-y-4">
             <h1 className="text-xl font-bold text-surface-900 dark:text-surface-100">
                 {userData?.name ? `${userData.name}님, 안녕하세요` : '안녕하세요'}
             </h1>
+
+            <section className="glass-card p-5" aria-labelledby="my-spaces-heading">
+                <h2 id="my-spaces-heading" className="font-semibold text-surface-900 dark:text-surface-100 mb-3">내 담당 공간</h2>
+                {loading ? (
+                    <div className="flex justify-center py-4"><div className="w-6 h-6 spinner" /></div>
+                ) : error ? (
+                    <p className="text-sm text-red-600 dark:text-red-400">담당 공간을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.</p>
+                ) : spaces.length === 0 ? (
+                    <p className="text-sm text-surface-500 dark:text-surface-400">
+                        아직 담당 공간이 없습니다. 조사를 맡게 되면 재물 담당자가 공간을 지정해 줍니다.
+                    </p>
+                ) : (
+                    <ul className="flex flex-wrap gap-2">
+                        {spaces.map((s) => (
+                            <li key={s.id} className="px-3 py-2 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium">
+                                {s.name}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+
             <div className="glass-card p-6 text-center">
                 <div className="text-4xl mb-3" aria-hidden="true">📋</div>
                 <p className="text-surface-700 dark:text-surface-300 font-medium">진행 중인 재물조사가 없습니다</p>
