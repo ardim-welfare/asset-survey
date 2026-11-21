@@ -81,20 +81,6 @@
     ],
     "rewrites": [
       {
-        "regex": "^/api/holiday(?:/.*)?$",
-        "run": {
-          "serviceId": "holidayproxy",
-          "region": "asia-northeast3"
-        }
-      },
-      {
-        "regex": "^/api/tmap(?:/.*)?$",
-        "run": {
-          "serviceId": "tmapproxy",
-          "region": "asia-northeast3"
-        }
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }
