@@ -1,0 +1,45 @@
+---
+description: 에러 핸들링 및 Sentry 로깅 의무화 규칙. try-catch 및 비즈니스 에러 처리 시 반드시 참고한다.
+---
+
+# 글로벌 룰: 에러 핸들링 및 로깅 의무화 (Error Handling & Logging Guidelines)
+
+이 규칙은 `차량운행일지` 프로젝트에서 코드를 작성, 수정 또는 에이전트를 통해 기능을 생성할 때 **반드시 준수**해야 하는 글로벌 행동 규칙입니다.
+
+## 1. 목적
+조용히 실패하는 예외(Silent Failure)를 방지하고, 에러 모니터링 시스템(Sentry) 및 디버깅 로그를 일관되게 남기기 위함입니다. 차량운행일지는 다양한 운영체제와 인앱 브라우저에서 실행되므로 예외 관리가 필수적입니다.
+
+## 2. 세부 원칙
+- **선행 룰 확인**: 비동기 및 주요 로직을 짤 때 무조건 이 룰을 기준으로 체크.
+- **빈 catch 블록 절대 금지**: `try-catch` 구문을 작성할 때 `catch` 블록을 비워두거나 단순히 `console.error`만 남기지 마세요.
+- **Sentry 연동 필수**: 프론트엔드 및 백엔드 로직에서 의미 있는 비즈니스 에러가 발생할 소지가 있다면, 항상 래퍼 `captureError(error, context)`(§3)를 활용해 기록하세요.
+- **컨텍스트 포함**: 에러를 로깅할 때 단순 메세지만 보내지 말고, 영향을 받은 사용자 ID, 발생 위치, 관련 데이터(페이로드) 등의 컨텍스트(Context/Breadcrumbs)를 함께 넘겨야 합니다.
+
+## 3. 적용 예시 (권장 패턴)
+
+**Sentry SDK를 직접 import하지 않는다.** 프론트엔드는 SDK를 지연 로드하므로 `@sentry/react`를 정적 import하면 번들 첫 로드 예산([bundle-size-budget](bundle-size-budget.md))이 깨진다. 반드시 래퍼를 쓴다:
+
+- **프론트엔드**: `captureError(error, context)` — `src/lib/sentry.ts`. 내부에서 SDK를 지연 로드해 `captureException`을 호출하고 콘솔 출력을 유지한다.
+- **Cloud Functions**: `captureError(error, context)` — `functions/src/core/sentry.ts`. Sentry + Discord 웹훅 병행.
+
+```typescript
+import { captureError } from '../lib/sentry'; // 프론트엔드 예시
+
+try {
+  await someAsyncFunction(payload);
+} catch (error) {
+  // [MUST] 1. 단순히 삼키지 않는다. 2. 컨텍스트와 함께 기록한다.
+  captureError(error, { where: 'someFeature.submit', payload });
+
+  // [MUST] 3. 사용자에게 안전한 피드백 (컴포넌트: useToast().showToast / 비-React: notifyUser)
+  showToast("데이터 처리 중 문제가 발생했습니다.");
+  throw error; // 필요 시 상위로 전파
+}
+```
+
+## 4. 에이전트 체크리스트
+에이전트는 사용자가 코드를 수정해달라고 요청할 때 위 사항이 누락되어 있다면 먼저 **"try-catch 및 Sentry 로깅 처리를 포함해 작성해드릴까요?"** 라고 묻거나 코드를 자동으로 보강하여 제시해야 합니다.
+
+## 5. 관련 규칙
+- **인증 토큰 복원력**: [token-auth-resilience](token-auth-resilience.md) — Firebase Auth 토큰 만료/갱신, 세션 유지 패턴
+- **OCR 비용 보안**: [ocr-cost-security](ocr-cost-security.md) — API 할당량 초과 시 에러 처리 포함

@@ -1,0 +1,168 @@
+---
+description: Firestore & Storage 보안 규칙 수정 가이드. firestore.rules 또는 storage.rules를 수정할 때 반드시 참고한다.
+---
+
+# 🔒 Firestore & Storage 보안 규칙 가이드
+
+이 문서는 `firestore.rules`와 `storage.rules`를 수정할 때 따라야 할 규칙이다.
+
+---
+
+## 1. Firestore Rules 구조
+
+### 1.1 헬퍼 함수
+
+현재 정의된 헬퍼 함수들을 **우선 재사용**한다:
+
+| 함수 | 용도 |
+|------|------|
+| `isSignedIn()` | 로그인 여부 |
+| `isSuperAdmin()` | 슈퍼관리자 (커스텀 클레임 `role == 'superAdmin'`만 본다 — `get()` 없음) |
+| `isOrgMember(orgId)` | 해당 기관 소속 여부 |
+| `isOrgAdmin(orgId)` | 해당 기관의 관리자 여부 |
+| `isOwner(uid)` | 자신의 문서 여부 |
+| `userOrgId()` | 현재 사용자의 organizationId |
+| `belongsToMyOrg()` | 기존 문서가 내 기관 소속인지 (`resource.data`) |
+| `newBelongsToMyOrg()` | 새 문서가 내 기관 소속인지 (`request.resource.data`) |
+
+### 1.2 Rate Limiting 및 데이터 수명 주기 (TTL)
+
+데이터베이스 부하를 막고 비용을 절감하기 위해 임시성 데이터에 대한 관리를 철저히 한다.
+- **보안 규칙 상의 제약 방어**: Firestore 자체 보안 규칙으로는 분당 요청 수(Rate Limit)를 제한하기 어렵다.
+- **TTL (Time-To-Live)**: `rateLimits`, `temporaryData` 등 영구 저장이 불필요한 컬렉션의 데이터는 **문서 내에 `expiresAt` (Timestamp) 필드**를 두어 GCP Firestore TTL 정책을 통해 자동 삭제되도록 유도한다.
+- **App Check는 켜져 있다 (규칙에서는 요구하지 않는다)**: 클라이언트는 [src/lib/firebase.ts](../../src/lib/firebase.ts)에서 `initializeAppCheck` + reCAPTCHA v3로 App Check를 초기화한다. 다만 **규칙 파일에서는 App Check 토큰을 요구하지 않는다** — `firestore.rules`·`storage.rules` 어디에도 `request.app` 검사가 없고, 검증은 유저 인증 토큰(`request.auth`)과 역할(`role`)로만 한다. 인앱 브라우저(`isInAppBrowser()`)와 에뮬레이터에서는 초기화를 건너뛰므로, 규칙에서 `request.app`을 요구하면 그 경로의 사용자가 전부 막힌다. 규칙에 App Check 검사를 새로 넣지 말고, 반대로 **클라이언트의 App Check 초기화를 지침에 맞춘다는 이유로 제거하지도 않는다.**
+
+### 1.3 역할 체계
+
+| 역할 | Firestore `role` | 권한 범위 |
+|------|------------------|-----------|
+| 슈퍼관리자 | `superAdmin` | 전체 데이터 읽기/쓰기 |
+| 기관관리자 | `admin` | 자기 기관의 데이터 읽기/쓰기 |
+| 기관직원 | `employee` | 자기 기관의 데이터 읽기 + 제한적 쓰기 |
+
+---
+
+## 2. 새 컬렉션 규칙 추가 패턴
+
+```
+// === 컬렉션 이름 (한글) ===
+match /collectionName/{docId} {
+    allow read: if belongsToMyOrg() || isSuperAdmin();
+    allow create: if newBelongsToMyOrg();
+    // organizationId는 불변 — 빠뜨리면 문서를 다른 기관으로 옮길 수 있다(2026-07-10 감사 #6)
+    allow update: if isSuperAdmin()
+                  || (belongsToMyOrg()
+                      && request.resource.data.organizationId == resource.data.organizationId);
+    allow delete: if isSuperAdmin();
+}
+```
+
+> ⚠️ **update에는 반드시 organizationId 불변 조건을 붙인다.** `belongsToMyOrg()`는 **기존** 문서(`resource.data`)만
+> 보므로, 그것만으로는 내 기관 문서의 `organizationId`를 남의 기관 값으로 바꾸는 쓰기가 통과한다. 실제 규칙의
+> 모든 기관 컬렉션(vehicles·driveLogs·reservations·fuelLogs·hipassCharges·maintenanceRecords·hipassCards)이 이 조건을 갖고 있다.
+>
+> ⚠️ **서버가 소유한 값(누적 km·하이패스 잔액 등)에 구성원 쓰기 분기를 열지 않는다.** "증가만 허용" 같은 조건으로도
+> 상한 없는·기록 없는 조작은 막지 못한다 — 차량 `currentKm`과 카드 `balance`가 그래서 닫혔다(Phase 227, 2026-10-14 감사).
+
+### 2.1 패턴별 선택 가이드
+
+| 시나리오 | read | create | update | delete |
+|---------|------|--------|--------|--------|
+| 기관 공용 데이터 (차량, 예약 등) | `belongsToMyOrg()` | `newBelongsToMyOrg()` | `belongsToMyOrg()` **+ organizationId 불변** | `isSuperAdmin()` |
+| 관리자만 관리 (정비기록 등) | `belongsToMyOrg()` | `newBelongsToMyOrg() && isOrgAdmin(...)` | `isOrgAdmin(...)` **+ organizationId 불변** | `isOrgAdmin(...)` |
+| 개인 데이터 (즐겨찾기 등) | `resource.data.userId == request.auth.uid` | `request.resource.data.userId == request.auth.uid` | 소유자만 | 소유자만 |
+| 시스템 데이터 | `isSignedIn()` | `false` | `false` | `false` |
+
+### 2.2 서브컬렉션
+
+```
+match /parentCollection/{parentId} {
+    // 부모 규칙...
+
+    match /subCollection/{subId} {
+        allow read: if isOrgMember(parentId);
+        allow write: if isOrgAdmin(parentId) || isSuperAdmin();
+    }
+}
+```
+
+---
+
+## 3. 핵심 원칙
+
+### 3.1 조직 격리 (Multi-tenancy)
+
+- **모든 기관 데이터** 규칙에 `organizationId` 기반 접근 제어 필수
+- `belongsToMyOrg()`는 `resource.data.organizationId == userOrgId()`를 검증
+- `newBelongsToMyOrg()`는 `request.resource.data.organizationId == userOrgId()`를 검증
+
+### 3.2 SuperAdmin 접근은 컬렉션마다 명시한다
+
+`firestore.rules`에는 SuperAdmin 와일드카드(`match /{document=**}`)가 **없다.** SuperAdmin이 접근해야 하는 컬렉션은
+각 `allow`에 `|| isSuperAdmin()`를 **직접 적어야** 한다. 적지 않으면 SuperAdmin도 막힌다.
+
+> 와일드카드를 새로 두지 않는다 — 규칙은 OR로 합쳐지므로(§6.1) 넓은 허용 하나가 아래의 좁은 조건을 전부 무력화한다.
+
+### 3.3 Firestore read 제한
+
+- `get()` / `exists()` 호출은 보안 규칙 평가당 **최대 10회**까지만 허용된다
+- 중첩된 `get()` 호출을 줄이기 위해 헬퍼 함수를 최대한 재사용한다
+
+---
+
+## 4. Storage Rules
+
+`storage.rules`는 **기본 거부**다 — 와일드카드(`match /{allPaths=**}`) 허용 규칙을 두지 않고, 필요한 경로만 단일 파일 수준(`{fileName}`)으로 좁게 연다. 현재 열린 경로는 세 곳뿐이다:
+
+| 경로 | read | write |
+|------|------|-------|
+| `organizations/{orgId}/{fileName}` (기관 고유번호증 PII) | `isSuperAdmin()` | `false` (Admin SDK 전용) |
+| `feedbacks/ocr-report/{userId}/{fileName}` | 본인 또는 superAdmin | 본인 + 5MB + `image/*` |
+| `feedbacks/{userId}/{fileName}` | 본인 또는 superAdmin | 본인 + 5MB + `image/*` |
+
+새 업로드 경로 추가 시 패턴 (소유자 검증 + 크기 + contentType 전부 필수):
+
+```
+match /uploads/{userId}/{fileName} {
+    allow read: if request.auth != null && request.auth.uid == userId;
+    allow write: if request.auth != null
+                 && request.auth.uid == userId
+                 && request.resource.size < 5 * 1024 * 1024
+                 && request.resource.contentType.matches('image/.*');
+}
+```
+
+> ⚠️ `organizations/` PII 경로의 org 멤버 읽기는 2026-07-18 보안 재점검 B에서 **의도적으로 제거된 표면**이다. 다시 열지 않는다. 배경은 [ocr-cost-security §2](ocr-cost-security.md) 참고.
+
+---
+
+## 5. 수정 후 검증
+
+### 5.1 에뮬레이터 테스트 (필수)
+
+```bash
+npm run test:rules
+```
+
+Firestore Rules 변경은 에뮬레이터 테스트(`tests/firestore-rules.test.ts`)가 PR 머지 조건이다.
+`storage.rules`(§4)를 고쳤다면 `npm run test:rules:storage`(`tests/storage-rules.test.ts`)도 함께 돌린다.
+
+### 5.2 배포
+
+로컬에서 `firebase deploy`를 직접 실행하지 않는다 — **master 푸시 시 CI(Deploy 워크플로)가 배포한다.** 긴급 시에만 [/deploy-emergency 워크플로우](../workflows/deploy-emergency.md)를 따른다.
+
+### 5.3 테스트 권장 사항
+
+규칙 수정 후 다음 시나리오를 확인한다:
+- ✅ 해당 역할의 사용자가 정상 접근 가능한지
+- ✅ 다른 기관 사용자가 접근이 **차단**되는지
+- ✅ 비로그인 사용자가 접근이 **차단**되는지
+
+---
+
+## 6. 주의사항
+
+1. **규칙은 OR로 합쳐진다 (순서가 아니라)**: Firestore Rules는 첫 번째로 매칭된 규칙만 적용하는 것이 아니다. 요청에 맞는 `allow`가 여럿이면 **그중 하나라도 참이면 허용**된다([공식 문서](https://firebase.google.com/docs/rules/rules-behavior): "In the case where multiple `allow` expressions match a request, the access is allowed if **any** of the conditions is `true`"). 뒤에 오는 규칙으로 앞에서 허용한 것을 **다시 막을 수 없다** — 거부 규칙이라는 개념 자체가 없다. 그러므로 넓은 와일드카드 `match`를 하나 두면 아래에 아무리 좁은 조건을 적어도 그 넓은 허용이 그대로 살아 있다. 권한을 좁히려면 규칙을 추가하는 게 아니라 **넓은 쪽 조건 자체를 고쳐야 한다.**
+2. **인덱스**: 새 컬렉션에 복합 쿼리가 필요하면 `firestore.indexes.json`에 인덱스 추가
+3. **배포 영향**: 규칙 변경은 **즉시 모든 사용자에게 적용**되므로, 신중하게 테스트 후 배포한다
+4. **하드코딩 회피**: 슈퍼관리자 이메일을 제외하고, 특정 UID나 이메일을 하드코딩하지 않는다

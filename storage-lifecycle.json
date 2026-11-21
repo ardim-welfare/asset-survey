@@ -1,0 +1,29 @@
+{
+  "rule": [
+    {
+      "action": {
+        "type": "Delete"
+      },
+      "condition": {
+        "age": 30,
+        "isLive": true,
+        "matchesPrefix": [
+          "temp/",
+          "ocr_images/"
+        ]
+      }
+    },
+    {
+      "action": {
+        "type": "Delete"
+      },
+      "condition": {
+        "age": 730,
+        "isLive": true,
+        "matchesPrefix": [
+          "archives/driveLogs/"
+        ]
+      }
+    }
+  ]
+}

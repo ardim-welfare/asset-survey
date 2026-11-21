@@ -1,0 +1,309 @@
+name: Deploy — 프로덕션 배포
+
+# CI 성공이 배포의 하드 게이트다: master 푸시는 CI 워크플로가 전체 검증(lint·tsc·테스트·
+# Rules·E2E·번들 예산)을 통과했을 때만 이 워크플로가 이어서 배포한다.
+# workflow_dispatch는 긴급 수동 배포용 우회 경로(CI 미경유)로 유지.
+on:
+  workflow_run:
+    workflows: ["CI — 린트 · 테스트 · 빌드"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      force_functions:
+        # firebase-tools는 소스·env 해시가 같은 함수를 "변경 없음"으로 건너뛴다. 같은 커밋을
+        # 다시 배포하면 SENTRY_RELEASE도 같아 함수가 하나도 다시 빌드되지 않는다.
+        # 함수 컨테이너 이미지를 새로 만들어야 할 때(2026-10-23 장애: Artifact Registry 정리 정책이
+        # 이미지를 지운 뒤 베이스 이미지 자동 업데이트가 오자 전 함수가 기동 전 500) 켠다.
+        description: "변경 없는 함수도 강제로 다시 빌드·배포"
+        type: boolean
+        default: false
+
+# 최소 권한 — 배포는 Firebase 서비스 계정으로 수행하며 GITHUB_TOKEN으로 저장소에 쓰지 않는다.
+# actions: read는 '직전 배포와 간격 두기' 스텝이 이 워크플로의 지난 실행 시각을 읽는 데만 쓴다.
+permissions:
+  contents: read
+  actions: read
+
+# 동시 배포 방지: 여러 푸시가 겹쳐도 한 번에 하나만 실행하고 나머지는 대기시킨다.
+# (동일 Cloud Function을 동시에 업데이트하면 409 "unable to queue the operation"으로
+#  일부 함수 갱신이 조용히 누락된다. cancel-in-progress:false로 진행 중 배포는 끝까지 보장.)
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # workflow_run 트리거는 CI가 '성공'으로 끝났을 때만 배포 진행 (실패·취소 시 스킵)
+    #
+    # ⚠️ `branches: [master]`만으로는 이 배포를 지킬 수 없다 (2026-09-12 감사 발견 1).
+    # workflow_run의 branches 필터는 base가 아니라 **선행 실행의 head_branch**에 걸리고,
+    # pull_request 실행의 head_branch는 PR 소스 브랜치 이름이다. 이 저장소는 공개라 누구나
+    # 포크 PR을 열 수 있고, **포크의 기본 브랜치 이름은 원본과 같은 `master`다** — 그 브랜치에서
+    # PR을 열면 필터를 그대로 통과한다. 통과하면 아래 스텝들이 그 PR의 커밋을 체크아웃해
+    # `npm ci`·`npm run build`를 돌리는데, 이 잡은 FIREBASE_SERVICE_ACCOUNT를 비롯한 시크릿을
+    # 전부 들고 있다. 즉 남의 코드가 프로덕션 자격증명으로 실행된다.
+    # (GitHub 기본값인 '첫 기여자 승인'은 한 번 머지된 계정에는 걸리지 않아 방벽이 못 된다.)
+    #
+    # 그래서 **원본 저장소의 push로만** 배포한다:
+    #   - event == 'push'    : 포크 PR발 실행은 'pull_request'라 여기서 잘린다 (1차 자물쇠)
+    #   - head_repository    : 원본 저장소에서 난 실행만 통과 (2차 자물쇠)
+    # preview.yml이 미리보기 배포에 이미 같은 기준(head.repo.full_name)을 걸고 있다 —
+    # 더 센 권한을 쥔 프로덕션 배포에만 그 가드가 없었다.
+    # 연속행은 첫 줄과 같은 칸에 맞춘다 — folded scalar(`>-`)는 **더 들여쓴 줄의 줄바꿈을 접지 않아**
+    # 표현식 문자열에 `\n`이 남는다. Actions는 그래도 평가하지만, 표현식이 틀리면 잡이 아예
+    # 생성되지 않아 "배포가 조용히 안 도는" 실패가 된다. 굳이 그 관용에 기댈 이유가 없다.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    # 평소 8분 안팎. 직전 배포와의 간격(최대 5분)·한도 초과 재시도(90초 + 재배포)를 더해 25분
+    timeout-minutes: 25
+    env:
+      TZ: "Asia/Seoul"
+      # 배포되는 커밋 SHA = Sentry 릴리즈 버전. 프런트(VITE_SENTRY_RELEASE)와
+      # Functions(functions/.env의 SENTRY_RELEASE)가 **같은 값**을 써야 한 배포가
+      # Sentry에서 하나의 릴리즈로 묶인다.
+      SENTRY_RELEASE_VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
+      # 배포 도구 버전 고정 — 루트 devDependencies에 없어 `npx`가 실행 때마다 레지스트리 최신판을
+      # 받아 왔다. 그러면 같은 커밋도 언제 배포하느냐에 따라 다른 도구로 배포되고, 도구 쪽 회귀가
+      # 코드 변경 없이 배포를 깨뜨린다. 올릴 때는 이 두 줄만 바꾼다(값은 2026-11-08 성공 배포가 쓴 버전).
+      FIREBASE_TOOLS: firebase-tools@15.35.0
+      SENTRY_CLI: "@sentry/cli@2.58.6"
+
+    steps:
+      # CI가 검증한 바로 그 커밋을 배포한다 (workflow_run 사이에 새 푸시가 끼어도 안전)
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install functions dependencies
+        run: cd functions && npm ci
+
+      - name: Create .env files
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+          # Secret Manager(defineSecret)로 관리하는 키는 functions/.env에서 걸러낸다 —
+          # 같은 이름이 .env에 있으면 Firebase가 이름 충돌로 배포를 거부한다.
+          # 목록은 params.ts의 export 선언에서 뽑아 단일 원본을 유지한다: 새 키를 시크릿으로 옮길 때
+          # GitHub Secret(FUNCTIONS_ENV_FILE)의 옛 줄을 지우는 것을 잊어도 배포가 서지 않는다.
+          SECRET_KEYS=$(grep -oE '^export const [A-Z0-9_]+ = defineSecret\("[A-Z0-9_]+"\)' functions/src/core/params.ts | grep -oE '\("[A-Z0-9_]+"\)' | tr -d '(")' | paste -sd'|' -)
+          if [ -z "$SECRET_KEYS" ]; then
+            echo "::error::params.ts에서 defineSecret 키를 찾지 못했다 — 필터가 비면 이름 충돌을 놓친다"
+            exit 1
+          fi
+          echo "${{ secrets.FUNCTIONS_ENV_FILE }}" | grep -vE "^(${SECRET_KEYS})=" > functions/.env || true
+          # Functions 런타임에 릴리즈를 알린다 (functions/src/core/sentry.ts가 읽는다).
+          # 시크릿 파일에 넣지 않고 여기서 덧붙이는 이유: 값이 배포마다 달라진다.
+          echo "SENTRY_RELEASE=${SENTRY_RELEASE_VERSION}" >> functions/.env
+          # 강제 재배포: 실행마다 다른 값을 넣어 함수 해시를 바꾼다 (inputs.force_functions 주석 참고).
+          # firebase-tools 안내 문구의 FUNCTIONS_DEPLOY_UNCHANGED는 실제로 읽히지 않는다.
+          if [ "${{ inputs.force_functions }}" = "true" ]; then
+            echo "DEPLOY_NONCE=${{ github.run_id }}-${{ github.run_attempt }}" >> functions/.env
+          fi
+
+      - name: Build
+        env:
+          # 프런트 번들에 릴리즈를 새긴다. Vite는 VITE_ 접두사 process.env를 .env보다
+          # 우선해 읽으므로 secrets.ENV_FILE을 건드리지 않고 주입된다.
+          VITE_SENTRY_RELEASE: ${{ env.SENTRY_RELEASE_VERSION }}
+          # 소스맵(hidden) 생성 — Sentry 업로드용. Hosting에는 나가지 않는다(firebase.json ignore).
+          SENTRY_SOURCEMAPS: "1"
+        run: npm run build
+
+      # CI 성공이 하드 게이트이므로 CI 경유(workflow_run) 배포에선 중복 검증을 생략한다 (~1.5분 절감).
+      # workflow_dispatch(긴급 수동 배포, CI 미경유)일 때만 최소 안전망으로 실행.
+      - name: Unit tests (긴급 우회 경로만)
+        if: github.event_name == 'workflow_dispatch'
+        run: npx vitest run
+
+      - name: Security audit (긴급 우회 경로만)
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run audit
+
+      # 직전 배포가 막 끝났으면 간격을 두고 시작한다.
+      #
+      # PR은 CI가 초록이면 GitHub 자동 머지로 들어간다(2026-10-29부터). 자동 머지는 앞 머지의
+      # 배포가 끝났는지 보지 않으므로 배포가 연달아 돌 수 있다. 위 concurrency가 동시 실행은
+      # 막지만, 앞 배포가 끝나자마자 다음 배포가 함수 ~80개를 다시 갱신하면 Cloud Functions API
+      # 한도(Quota Exceeded)에 걸려 일부 함수가 실패하고 Hosting 단계가 실행되지 않는다
+      # (2026-10-01 실제 발생). 빌드가 끝난 이 자리에서 기다리면 빌드 시간만큼 덜 기다린다.
+      # 건너뛴(skipped)·취소된 실행은 함수를 갱신하지 않았으므로 셈에서 뺀다.
+      - name: 직전 배포와 간격 두기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COOLDOWN_SECONDS: "300"
+        run: |
+          LAST=$(gh run list -R "$GITHUB_REPOSITORY" --workflow deploy.yml --status completed --limit 10 \
+            --json updatedAt,conclusion,databaseId \
+            --jq "[.[] | select(.databaseId != ${GITHUB_RUN_ID}) | select(.conclusion == \"success\" or .conclusion == \"failure\")][0].updatedAt // empty")
+          if [ -z "$LAST" ]; then
+            echo "직전 배포 기록이 없다 — 바로 진행"
+            exit 0
+          fi
+          ELAPSED=$(( $(date -u +%s) - $(date -u -d "$LAST" +%s) ))
+          if [ "$ELAPSED" -lt "$COOLDOWN_SECONDS" ]; then
+            WAIT=$(( COOLDOWN_SECONDS - ELAPSED ))
+            echo "직전 배포가 ${ELAPSED}초 전에 끝났다 — 함수 갱신 한도를 피하려고 ${WAIT}초 기다린다"
+            sleep "$WAIT"
+          else
+            echo "직전 배포가 ${ELAPSED}초 전에 끝났다 — 바로 진행"
+          fi
+
+      # 함수/규칙을 Hosting보다 먼저 배포한다.
+      # (Hosting 릴리즈가 불안정 네트워크로 오탐 실패해도 핵심 백엔드 변경은 항상 반영되도록)
+      # storage 규칙도 포함한다 — 기관 증빙서류(PII) 접근 규칙이 storage.rules에 있는데
+      # 과거 타겟에 storage가 빠져 있어 storage.rules 변경이 배포되지 않던 갭을 닫는다.
+      # (2026-07-18 보안 재점검 B 후속 — 규칙 변경이 프로덕션에 실제 반영되도록)
+      #
+      # 함수 갱신 한도(Quota Exceeded)에 걸려 실패하면 90초 뒤 한 번 더 배포한다. 두 번째 배포는
+      # 이미 갱신된 함수를 해시가 같아 건너뛰므로, 실패한 함수만 다시 올라간다. 한도가 아닌
+      # 실패(빌드·코드 오류)는 다시 해도 같으므로 재시도하지 않는다. Hosting은 이 스텝이 성공해야
+      # 나간다 — 함수가 진짜 실패했는데 새 화면만 먼저 나가면 옛 서버와 어긋난다.
+      - name: Deploy Functions & Rules
+        run: |
+          # 기본 셸은 `bash -e`라 첫 실패에서 바로 끝난다 — 종료 코드를 받아 재시도를 판정하려고 끈다
+          set +e
+          set -o pipefail
+          export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          LOG=$(mktemp)
+          deploy_backend() {
+            npx --yes "$FIREBASE_TOOLS" deploy --only functions,firestore:rules,storage --force --project "${{ vars.FIREBASE_PROJECT_ID }}" 2>&1 | tee "$LOG"
+          }
+          deploy_backend
+          CODE=$?
+          if [ $CODE -ne 0 ] && grep -qiE "quota|exceeded|resource_exhausted|429" "$LOG"; then
+            echo "::warning::함수 갱신 한도에 걸려 일부 함수가 실패했다 — 90초 뒤 한 번 더 배포한다"
+            sleep 90
+            deploy_backend
+            CODE=$?
+          fi
+          rm -f "$GOOGLE_APPLICATION_CREDENTIALS" "$LOG"
+          exit $CODE
+
+      # 인덱스는 **Hosting보다 먼저** 배포한다. 복합 쿼리를 쓰는 새 화면이 먼저 나가면
+      # 인덱스가 생기기 전까지 그 쿼리가 failed-precondition으로 거부된다
+      # (Phase 139 접속기록 조회 화면에서 실제로 발생 — 화면은 나갔는데 인덱스가 없었다).
+      #
+      # ⚠️ `--force`를 **일부러 붙이지 않는다.** 위 Functions/Rules 스텝과 분리한 이유가 이것이다.
+      # firebase-tools는 `firestore.indexes.json`에 없는 기존 인덱스를 삭제할지 물어보고,
+      # `--force`는 그 질문에 "예"로 답한다 — 콘솔에서 손으로 만든 인덱스가 조용히 지워질 수 있다.
+      # 비대화형(CI, stdin이 TTY 아님)에서 `--force` 없이 실행하면 firebase-tools는
+      # 삭제 대상을 안내만 하고 기본값 '아니오'로 넘어가며(prompt.guard의 default: false),
+      # **없는 인덱스 생성은 그대로 수행하고 배포도 중단되지 않는다**(v15.25.1 lib/firestore/api.js 확인).
+      # 즉 이 스텝은 '추가만' 한다. 파일에서 인덱스를 지웠을 때 프로덕션에서도 지우려면
+      # 로컬에서 목록을 확인한 뒤 수동으로 `--force`를 붙여 실행한다.
+      - name: Deploy Firestore Indexes
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          npx --yes "$FIREBASE_TOOLS" deploy --only firestore:indexes --non-interactive --project "${{ vars.FIREBASE_PROJECT_ID }}"
+          rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
+
+      # 인덱스 배포는 **제출만** 하고 빌드 완료를 기다리지 않는다. 위 스텝 주석의 Phase 139도
+      # 같은 계열 사고였고("화면은 나갔는데 인덱스가 없었다") 그때 **순서**만 고치고 이 절반을
+      # 빠뜨렸다. 그래서 2026-09-09에 `(organizationId, date, status)`가 CREATING인 동안
+      # Hosting이 먼저 나가, 새 번들을 받은 운전자의 `/employee/today`가 약 5분간
+      # "예약 없음"으로 비어 보였다(Sentry JAVASCRIPT-REACT-6C — 실제 사용자 1명).
+      # 실측: Hosting 완료 11:21 → 인덱스 READY 11:25:52 → 서빙까지 약 10초 더.
+      #
+      # 상한 15분을 넘기면 **Hosting을 배포하지 않고 실패시킨다.** 그러면 Functions·Rules만
+      # 나간 부분 배포로 남지만, 조용히 넘어가 같은 사고를 반복하는 것보다 낫다 —
+      # 그 증상은 배포 직후 현장에서만 드러난다. 판정 근거와 실패 조건은
+      # scripts/wait-for-firestore-indexes.ts 주석에 있다.
+      - name: 인덱스 빌드 완료 대기
+        env:
+          WAIT_MINUTES: "15"
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" --quiet
+          rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
+          ACCESS_TOKEN=$(gcloud auth print-access-token) npx tsx scripts/wait-for-firestore-indexes.ts
+
+      # Hosting은 firebase-tools CLI로 직접 배포한다.
+      # action-hosting-deploy는 실패 시 --debug로 재시도하며 functions/.env 시크릿을
+      # 로그에 평문 출력하는 문제가 있어 사용하지 않는다. (--debug 미사용 = 누출 없음)
+      - name: Deploy Hosting
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          set +e
+          OUT=$(npx --yes "$FIREBASE_TOOLS" deploy --only hosting --force --project "${{ vars.FIREBASE_PROJECT_ID }}" 2>&1)
+          CODE=$?
+          echo "$OUT"
+          rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
+          # 불안정 네트워크로 릴리즈 POST를 재시도할 때 첫 호출이 이미 성공해
+          # "is the current active version" 400이 나는 알려진 오탐은 성공으로 간주한다.
+          if [ $CODE -ne 0 ] && echo "$OUT" | grep -q "is the current active version"; then
+            echo "::warning::Hosting 릴리즈가 'current active version' 응답 — 이미 라이브 반영됨으로 간주하고 통과 처리"
+            exit 0
+          fi
+          exit $CODE
+
+      # 토큰 유무를 **스텝 안에서** 판정한다. 잡 레벨 env에 두면 시크릿이 없는 것과
+      # **빈 값으로 등록된 것**이 똑같이 조용한 skip으로 끝나고, 배포는 초록이라
+      # 소스맵이 몇 번이나 누락된 뒤에야 발견된다(2026-08-30~31 배포 4건에서 실제로 발생).
+      # 스텝 env로 받는 시크릿은 값이 확실히 실리는 자리이므로 판정도 여기서 한다.
+      #
+      # 앞 스텝(배포)이 실패하면 이 스텝부터 실행되지 않아 outputs가 비고, 이어지는
+      # Sentry 스텝도 자동으로 건너뛴다 — "성공한 배포만 릴리즈로 남긴다"가 유지된다.
+      - name: Sentry 릴리즈 게이트 판정
+        id: sentry_gate
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -n "$SENTRY_AUTH_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Sentry 릴리즈 건너뜀::SENTRY_AUTH_TOKEN이 비어 있거나 없습니다 — 릴리즈 태깅은 이벤트로 자동 생성되지만 소스맵·커밋 연결이 빠집니다. 저장소 Settings → Secrets and variables → Actions에서 값을 확인하세요."
+          fi
+
+      # 배포가 **성공한 뒤에만** Sentry에 릴리즈를 남긴다. 실패한 배포까지 릴리즈로 잡히면
+      # "이 릴리즈부터 고쳐졌다"는 판단(Resolved in next release)이 어긋난다.
+      #
+      # 이 스텝이 없으면(=토큰 미설정) 이벤트에 실린 release 값으로 Sentry가 릴리즈를
+      # 자동 생성하므로 "다음 릴리즈에서 해결" 자체는 동작한다. 여기서 더 얻는 것은
+      # **소스맵(원본 코드 스택트레이스)**과 **커밋 연결(누가 어떤 변경으로 냈는지)**이다.
+      - name: Sentry 릴리즈 등록 (소스맵·커밋 연결)
+        if: steps.sentry_gate.outputs.enabled == 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG || 'socialprism' }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || 'javascript-react' }}
+          # Functions가 다른 Sentry 프로젝트로 보고한다면 저장소 변수로 지정한다(선택).
+          SENTRY_PROJECT_FUNCTIONS: ${{ vars.SENTRY_PROJECT_FUNCTIONS }}
+        run: |
+          set -e
+          VERSION="$SENTRY_RELEASE_VERSION"
+          CLI="npx --yes $SENTRY_CLI"
+          PROJECTS="-p $SENTRY_PROJECT"
+          if [ -n "$SENTRY_PROJECT_FUNCTIONS" ]; then
+            PROJECTS="$PROJECTS -p $SENTRY_PROJECT_FUNCTIONS"
+          fi
+
+          $CLI releases new "$VERSION" $PROJECTS
+
+          # 커밋 연결은 Sentry의 GitHub 연동이 있어야 한다. 없으면 실패하지만 릴리즈 자체는
+          # 이미 만들어졌으므로 배포를 실패시키지 않는다(경고만 남긴다).
+          $CLI releases set-commits "$VERSION" --auto --ignore-missing \
+            || echo "::warning::Sentry 커밋 연결 실패 — GitHub 연동이 없어도 릴리즈·소스맵은 정상 등록됩니다"
+
+          # 번들 URL은 https://<host>/assets/*.js 이므로 아티팩트 이름을 ~/assets/*로 맞춘다.
+          $CLI sourcemaps upload --release "$VERSION" --url-prefix '~/assets' dist/assets
+
+          $CLI releases finalize "$VERSION"
+          $CLI deploys new -r "$VERSION" -e production

@@ -1,0 +1,263 @@
+rules_version='2'
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // === 헬퍼 함수 (Custom Claims 기반 — get() 호출 없이 빠른 검증) ===
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn()
+        && request.auth.token.role == 'superAdmin';
+    }
+
+    function isOrgMember(orgId) {
+      return isSignedIn()
+        && request.auth.token.orgId == orgId;
+    }
+
+    // 행위자 스탬프(lastEditedByUid) 검증 — 접속기록의 '계정' 항목 (고시 제16조).
+    //
+    // 트리거는 호출자를 알 수 없으므로 클라이언트가 자기 uid를 심고, Rules가 그 값이
+    // 인증 토큰과 일치함을 보장한다. 그래서 **타인 명의로는 위조할 수 없다**.
+    //
+    // "변경될 때만" 검사하는 이유: 모든 update에 스탬프를 요구하면 스탬프를 심지 않는
+    // 경로가 하나라도 남아 있을 때 그 기능이 통째로 permission-denied가 된다
+    // (차량운행일지에서 실제로 겪은 함정이다). 생략은 여전히 가능하지만 그 경우 감사 로그에
+    // actorSource:'unknown'으로 남아 **누락이 조용히 성공으로 위장되지 않는다**.
+    function actorStampValid() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastEditedByUid'])
+             || request.resource.data.lastEditedByUid == request.auth.uid;
+    }
+
+    function isOrgAdmin(orgId) {
+      return isOrgMember(orgId)
+        && request.auth.token.role == 'admin';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function userOrgId() {
+      return request.auth.token.orgId;
+    }
+
+    function belongsToMyOrg() {
+      return isSignedIn() && resource.data.organizationId == userOrgId();
+    }
+
+    function newBelongsToMyOrg() {
+      return isSignedIn() && request.resource.data.organizationId == userOrgId();
+    }
+
+    // === 사용자 ===
+    match /users/{userId} {
+      // 자기 자신 + superAdmin + 같은 기관 멤버만 읽기 가능.
+      // organizationId != null 조건이 없으면 "null == null"이 참이 되어, 기관 미소속
+      // (탈퇴·이동 대기, orgId 클레임 null) 계정끼리 서로의 문서(이메일·이름·연락처)를
+      // 읽을 수 있다 — 미소속 사용자는 어떤 기관의 멤버도 아니므로 본인 외 열람 불가.
+      allow read: if isOwner(userId)
+                  || isSuperAdmin()
+                  || (isSignedIn()
+                      && resource != null
+                      && resource.data.organizationId != null
+                      && resource.data.organizationId == userOrgId());
+      // consent(이용약관 동의 기록)는 joinOrganization(Admin SDK)만 기록한다.
+      // 클라이언트가 심으면 동의하지 않은 계정에 동의 기록이 생겨 입증 자료가 무의미해진다.
+      allow create: if isOwner(userId)
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    && request.resource.data.keys().hasAll(['email'])
+                    && request.resource.data.email is string
+                    && !request.resource.data.keys().hasAny(['role', 'organizationId', 'consent']);
+      // consent 필드는 본인·기관관리자·superAdmin 누구도 값을 바꿀 수 없다.
+      // (문서 자체의 삭제는 아래 allow delete가 superAdmin에게 허용하며,
+      //  Admin SDK 서버 경로는 Rules를 우회하므로 필드 단위 보호로 한정된다.)
+      allow update: if !request.resource.data.diff(resource.data).affectedKeys().hasAny(['consent'])
+                    && actorStampValid()
+                    && (
+                       (isOwner(userId)
+                        && (
+                            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'organizationId', 'status', 'disabledAt'])
+                            || (
+                                // 사용자가 스스로 기관을 탈퇴/초기화하여 '다른 기관으로 가입'하는 행위 허용
+                                request.resource.data.organizationId == null
+                                && request.resource.data.role == 'employee'
+                                && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'disabledAt'])
+                            )
+                        ))
+                    || isSuperAdmin()
+                    // orgAdmin은 소속 기관 사용자만 수정 가능하되, superAdmin 역할 부여 불가.
+                    // organizationId는 불변으로 강제한다 — admin이 자기/타인 문서의 org를 바꿔
+                    // 타 기관 admin 클레임을 획득하는 교차 테넌트 권한상승을 차단(2026-07-04 감사 N1).
+                    // 대상이 superAdmin인 문서는 건드리지 못한다 — addSuperAdmin은 organizationId를
+                    // 지우지 않으므로 기관 소속 superAdmin이 생기고, 이 조건이 없으면 그 기관의
+                    // 관리자가 운영자를 employee로 강등하거나 status를 disabled로 바꿀 수 있었다
+                    // (2026-10-17 규칙 감사 #13). 직원 관리 화면은 superAdmin을 목록에서 빼므로
+                    // 정상 경로는 영향이 없다(useEmployeeManager).
+                    // status·disabledAt(활성/비활성)은 관리자도 직접 못 바꾼다 — Auth 계정 차단과 한 몸이라
+                    // 콜러블(disableUser·enableUser)만 바꾼다. 문서만 'active'로 고치면 목록은 활성인데
+                    // 로그인은 auth/user-disabled로 막히는 반쪽 복구가 된다(2026-11-18 기관 문의).
+                    || (isOrgAdmin(resource.data.organizationId)
+                        && resource.data.get('role', 'employee') != 'superAdmin'
+                        && request.resource.data.role != 'superAdmin'
+                        && request.resource.data.organizationId == resource.data.organizationId
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'disabledAt']))
+                    );
+      allow delete: if isSuperAdmin();
+
+      // 비밀 사용자 데이터 (Google OAuth access/refresh 토큰 등) — Cloud Functions(Admin SDK) 전용.
+      // 과거 users 문서에 googleOauth를 저장해 같은 기관 멤버 누구나 리프레시 토큰을 읽어
+      // 계정을 임퍼소네이션할 수 있었음 (2026-07-10 감사 #4).
+      match /private/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    // === 기관 ===
+    match /organizations/{orgId} {
+      // 소속 멤버, 신청자 본인, superAdmin만 읽기 가능 (초대 코드 검증은 Cloud Function에서 처리)
+      allow read: if isSuperAdmin()
+                  || isOrgMember(orgId)
+                  || (isSignedIn() && resource.data.applicantUid == request.auth.uid);
+      // 기관 생성은 서버(submitOrgApplication, Admin SDK) 또는 superAdmin 전용.
+      // 과거 클라이언트 create는 status:'approved'·inviteCode를 임의 지정해 AI 검증·
+      // superAdmin 승인 절차를 통째로 우회할 수 있었음 (2026-07-10 감사 #2).
+      // create에서도 consent를 심을 수 없다 — 막지 않으면 superAdmin이 클라이언트에서
+      // 임의 동의 기록을 가진 기관을 만들 수 있어 update 차단이 무의미해진다.
+      allow create: if isSuperAdmin() && !('consent' in request.resource.data);
+      // 동의 기록(consent)은 위탁 계약 성립의 입증 자료이므로 어떤 클라이언트도 변경·삭제할 수 없다.
+      // submitOrgApplication(Admin SDK)만 기록하며, 규칙을 우회하는 서버 경로로만 갱신한다.
+      //
+      // 기관관리자는 **서버가 소유한 필드**도 건드릴 수 없다 (2026-09-02 보안 점검).
+      // 종전에는 consent만 막아, 기관관리자가 자기 기관 문서의 나머지 필드를 전부 쓸 수 있었다:
+      //   - inviteCode: 다른 기관의 초대 코드를 자기 기관에 복사하면 joinOrganization이
+      //     `where inviteCode == code limit(1)`로 찍는 기관이 둘이 되어 신규 직원을 가로챌 수 있다.
+      //     재발급은 regenerateInviteCode 콜러블(서버 난수 + 중복 검사)로만 한다.
+      //   - uniqueNumberImagePath·aiVerifyDetail: 값을 바꿀 때마다 autoVerifyDocument가 재발동해
+      //     Gemini 호출과 승인 이메일·알림톡 발송이 상한 없이 반복된다.
+      //   - status·approvedAt·rejectedAt·deletedAt: 승인 상태는 superAdmin과 서버 배치만 바꾼다.
+      //   - applicant*·uniqueNumber: 신청 시 확정된 신원 정보. 알림톡·이메일 수신처가 여기서 나온다.
+      // superAdmin(승인·반려·복구)과 신청자 경로(pending 상태의 본인 신청)는 종전과 같다.
+      allow update: if !request.resource.data.diff(resource.data).affectedKeys().hasAny(['consent'])
+                    && (
+                      isSuperAdmin()
+                      || (isOrgAdmin(orgId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                            'inviteCode', 'status', 'approvedAt', 'rejectedAt', 'deletedAt', 'deletedBy', 'createdAt',
+                            'aiVerified', 'aiVerifyDetail', 'ocrPrescreen',
+                            'uniqueNumber', 'uniqueNumberImagePath', 'uniqueNumberImageUrl',
+                            'applicantUid', 'applicantEmail', 'applicantName', 'applicantPhone'
+                          ]))
+                      || (isSignedIn() && resource.data.status == 'pending' && resource.data.applicantUid == request.auth.uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'role']))
+                    );
+      allow delete: if isSuperAdmin();
+
+      // 직원 사전 등록 (서브컬렉션)
+      match /preRegistered/{preRegId} {
+        allow read: if isOrgMember(orgId) || isSuperAdmin();
+        allow write: if isOrgAdmin(orgId) || isSuperAdmin();
+      }
+
+      // 집계 통계 (서브컬렉션 — Cloud Functions에서 생성/갱신)
+      match /stats/{statId} {
+        allow read: if isOrgMember(orgId) || isSuperAdmin();
+        allow write: if false; // Cloud Functions(admin SDK)에서만 쓰기
+      }
+    }
+
+    // === 알림 ===
+    match /notifications/{notificationId} {
+      allow read: if resource.data.targetUid == request.auth.uid || isSuperAdmin();
+      // 클라이언트 생성은 superAdmin 전용 (승인/반려 알림 화면). 나머지 알림은 전부
+      // Cloud Functions(admin SDK, Rules 우회)가 생성한다.
+      // 과거 isSignedIn() 분기는 targetUid 소속 검증이 없어 임의 사용자가 타 기관
+      // UID로 알림 텍스트를 주입할 수 있었음 (2026-07-03 감사 발견으로 제거).
+      allow create: if isSuperAdmin();
+      allow update: if resource.data.targetUid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'updatedAt']);
+      allow delete: if resource.data.targetUid == request.auth.uid || isSuperAdmin();
+    }
+
+    // === 접속기록/변경 로그 ===
+    // Cloud Functions(Admin SDK) 트리거만 기록하며, 클라이언트는 생성·수정·삭제를 전부
+    // 할 수 없다. 읽기는 점검 주체에게만 연다 — 개인정보처리자는 각 기관이므로
+    // (이용약관 제9조) 기관 관리자가 자기 기관 기록을 점검한다.
+    //
+    // ⚠️ 이 블록이 막는 것은 **클라이언트의** 위조·변조다. Admin SDK는 Rules를 우회하므로
+    // 고시 제16조 ③(위조·변조·도난·분실 방지)을 이것만으로 충족한다고 볼 수 없다. 서버 측
+    // 불변성은 별도 수단(불변 버킷·Cloud Logging 싱크 등)이 필요하며 현재 범위 밖이다.
+    //
+    // organizationId가 '__system__'인 기록(기관 미소속 계정, 주로 superAdmin)은 실재하는
+    // 기관 ID가 아니므로 isOrgAdmin이 성립하지 않아 superAdmin만 읽는다.
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin() || isOrgAdmin(resource.data.organizationId);
+      allow write: if false;
+    }
+
+    // === 전체 공지 발송 이력 ===
+    // sendBroadcastNotice(Admin SDK)만 기록한다. 운영자가 "언제 무엇을 몇 명에게
+    // 보냈는가"를 화면에서 확인하기 위한 기록이므로 읽기도 superAdmin 한정이다.
+    // 본문에 기관·이용자 정보가 담기지 않으나, 발송자 uid가 있어 공개할 이유가 없다.
+    match /broadcasts/{broadcastId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    // === 피드백 ===
+    //
+    // create가 `isSignedIn()` 하나였을 때, 로그인한 누구나 이 컬렉션에 문서를 무제한으로
+    // 밀어 넣을 수 있었다. 그런데 이 컬렉션의 onCreate는 Discord 웹훅을 실행한다(당시에는
+    // 첨부 이미지 다운로드·**Gemini 호출**까지 — AI 초안은 2026-10-16에 없앴다). 즉 클라이언트
+    // 쓰기가 곧 서버 비용·운영 채널 도배였다 (2026-08-14 감사 발견 1).
+    //
+    // 여기서 막는 것은 "한 번의 쓰기가 얼마나 큰 일을 시킬 수 있는가"다(작성자 위조 금지,
+    // 첨부 개수·본문 길이 상한). **호출 횟수 자체의 상한은 Rules로 표현할 수 없으므로**
+    // 트리거(notifyNewFeedback) 안의 일일 쿼터(GLOBAL_BUDGETS.feedbackAlert*)가 짝을 이룬다. 둘 중 하나만
+    // 있으면 반쪽이다.
+    match /feedbacks/{feedbackId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSignedIn()
+                    // 타인 명의로 의견을 심을 수 없다 (서버 경로인 submitPublicFeedback은
+                    // Admin SDK라 Rules를 우회하므로 'public-inquiry' 표기에 영향 없음).
+                    && request.resource.data.authorUid == request.auth.uid
+                    // 본문 길이 — submitPublicFeedback의 상한(5000자)과 같은 기준.
+                    && request.resource.data.get('message', '') is string
+                    && request.resource.data.get('message', '').size() <= 5000
+                    && request.resource.data.get('content', '') is string
+                    && request.resource.data.get('content', '').size() <= 5000
+                    // 첨부는 최대 3개 — 의견 작성 화면의 첨부 상한.
+                    && (!request.resource.data.keys().hasAny(['imageUrls'])
+                        || (request.resource.data.imageUrls is list
+                            && request.resource.data.imageUrls.size() <= 3))
+                    // AI(옛 초안)·답변 필드는 서버(superAdmin)만 채운다. 클라이언트가 미리
+                    // 심으면 답변 이력이 사용자 입력으로 오염된다.
+                    && !request.resource.data.keys().hasAny(['aiDraft', 'aiConfidence', 'reply', 'repliedAt', 'repliedBy']);
+      allow update: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // === 기관 신청 ===
+    //
+    // 클라이언트 경로가 없다. 접수는 **비인증 콜러블** submitOrgApplication(Admin SDK)이
+    // 처리하므로 신청자는 로그인하지 않고, 심사 화면도 이 컬렉션을 읽지 않는다(`src/`
+    // 전수 grep에 사용처 없음).
+    //
+    // 그런데 규칙은 `applicantEmail == request.auth.token.email`로 열려 있었다. 이 조건은
+    // 이메일 클레임이 검증됐다는 전제에 기대고, **토큰에 email이 없으면 null == null로
+    // 통과**한다 — 익명 로그인 제공자가 켜져 있던 동안 실제로 그런 토큰을 발급할 수 있었다.
+    // 쓰지 않는 문을 그 전제 위에 열어 둘 이유가 없다. 2026-08-23 감사 부록 2.
+    match /orgApplications/{appId} {
+      allow read: if isSuperAdmin();
+      allow write: if false; // 접수·심사 모두 Admin SDK 경로다
+    }
+
+    // === 시스템 ===
+    match /system/{document} {
+      allow read: if isSuperAdmin();
+      allow write: if false; // Cloud Functions에서만 쓰기
+    }
+
+  }
+}

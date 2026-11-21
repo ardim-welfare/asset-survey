@@ -1,0 +1,721 @@
+// @vitest-environment node
+import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+// Firebase 에뮬레이터 프로젝트 ID — demo- 접두사는 에뮬레이터 전용(실제 프로젝트에 닿지 않음)임을 보장한다
+const PROJECT_ID = 'demo-asset-survey';
+
+let testEnv: RulesTestEnvironment;
+
+describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
+  beforeAll(async () => {
+    // 에뮬레이터 환경 초기화 (firestore.rules 읽어오기)
+    testEnv = await initializeTestEnvironment({
+      projectId: PROJECT_ID,
+      firestore: {
+        rules: readFileSync(resolve(process.cwd(), 'firestore.rules'), 'utf8'),
+        host: '127.0.0.1',
+        port: 8080,
+      },
+    });
+  });
+
+  beforeEach(async () => {
+    // 각 테스트 단위마다 Firestore 초기화
+    await testEnv.clearFirestore();
+  });
+
+  afterAll(async () => {
+    // 모든 테스트가 끝나면 리소스 정리
+    await testEnv.cleanup();
+  });
+
+  // Mock Contexts
+  const setupContext = (uid: string, token: Record<string, unknown>) => testEnv.authenticatedContext(uid, token);
+  const _unauthContext = () => testEnv.unauthenticatedContext();
+
+  
+
+  it('7. 알림(notifications) 생성은 superAdmin 전용, 조회는 본인 대상만', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('notifications').doc('noti_A').set({
+        targetUid: 'user_A', organizationId: 'org-A', type: 'approval', message: '승인 알림',
+      });
+    });
+
+    const orgAMemberDb = setupContext('user_A', { role: 'member', orgId: 'org-A' }).firestore();
+
+    // 일반 사용자는 같은 조직 UID 대상이라도 알림 생성 불가 (superAdmin 전용 — 알림 주입 차단)
+    await assertFails(orgAMemberDb.collection('notifications').doc('noti_evil').set({
+      targetUid: 'user_A2', organizationId: 'org-A', message: '피싱 텍스트 주입 시도',
+    }));
+
+    // superAdmin은 생성 가능 (승인/반려 알림 화면)
+    const superDb = setupContext('super_1', { role: 'superAdmin' }).firestore();
+    await assertSucceeds(superDb.collection('notifications').doc('noti_ok').set({
+      targetUid: 'user_A', organizationId: 'org-A', message: '기관 승인 완료',
+    }));
+
+    // 본인 대상 알림은 조회 가능, 타인 알림은 차단
+    await assertSucceeds(orgAMemberDb.collection('notifications').doc('noti_A').get());
+    const orgBMemberDb = setupContext('user_B', { role: 'member', orgId: 'org-B' }).firestore();
+    await assertFails(orgBMemberDb.collection('notifications').doc('noti_A').get());
+  });
+
+  // 기대 동작 표 #10 · #12 · #13
+  it('8. 관리자의 organizationId 변경(교차 테넌트 권한상승) 차단', async () => {
+    // given: 기관 A의 admin과 소속 직원 문서 존재
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.collection('users').doc('admin_A').set({
+        email: 'admin_a@x.com', role: 'admin', organizationId: 'org-A',
+      });
+      await db.collection('users').doc('user_A2').set({
+        email: 'user_a2@x.com', role: 'employee', organizationId: 'org-A',
+      });
+    });
+
+    const adminADb = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+
+    // admin이 자기 문서의 org를 타 기관으로 변경(자기 권한상승) → 차단
+    await assertFails(adminADb.collection('users').doc('admin_A').update({
+      organizationId: 'org-B',
+    }));
+
+    // admin이 소속 직원을 타 기관으로 이동 → 차단
+    await assertFails(adminADb.collection('users').doc('user_A2').update({
+      organizationId: 'org-B',
+    }));
+
+    // 정상: admin이 소속 직원 role을 변경(org 불변)하는 것은 허용
+    await assertSucceeds(adminADb.collection('users').doc('user_A2').update({
+      role: 'admin',
+    }));
+  });
+
+  it('10. 기관(organizations) 클라이언트 직접 생성 차단 (승인 절차 우회 방지)', async () => {
+    // 일반 로그인 사용자가 status:approved·inviteCode를 임의 지정해 승인된 기관을 생성 시도 → 차단
+    const memberDb = setupContext('user_X', { role: 'employee' }).firestore();
+    await assertFails(memberDb.collection('organizations').doc('org_evil').set({
+      name: '가짜기관', applicantUid: 'user_X', status: 'approved', inviteCode: 'ABC123',
+    }));
+
+    // superAdmin은 생성 가능
+    const superDb = setupContext('super_1', { role: 'superAdmin' }).firestore();
+    await assertSucceeds(superDb.collection('organizations').doc('org_ok').set({
+      name: '정상기관', applicantUid: 'super_1', status: 'pending',
+    }));
+  });
+
+  it('10-1. 기관 동의 기록(consent) 클라이언트 변경 차단 — 위탁 계약 입증 자료 보호', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('organizations').doc('org-A').set({
+        name: '기관A', applicantUid: 'admin_A', status: 'approved',
+        consent: { terms: true, privacy: true, termsVersion: '2026-08-05', privacyVersion: '2026-08-05' },
+      });
+      // 동의 기록이 없는 레거시 기관 — 클라이언트가 뒤늦게 심는 것도 막아야 한다
+      await context.firestore().collection('organizations').doc('org-legacy').set({
+        name: '레거시기관', applicantUid: 'admin_L', status: 'approved',
+      });
+    });
+
+    const adminADb = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+    const superDb = setupContext('super_1', { role: 'superAdmin' }).firestore();
+    const adminLDb = setupContext('admin_L', { role: 'admin', orgId: 'org-legacy' }).firestore();
+
+    // 기관 관리자·superAdmin 모두 동의 기록 변경·삭제 차단
+    await assertFails(adminADb.collection('organizations').doc('org-A').update({
+      consent: { terms: true, privacy: true, termsVersion: '2099-01-01', privacyVersion: '2099-01-01' },
+    }));
+    await assertFails(superDb.collection('organizations').doc('org-A').update({
+      consent: { terms: false, privacy: false, termsVersion: 'x', privacyVersion: 'x' },
+    }));
+
+    // 레거시 기관에 동의 기록을 클라이언트가 신설하는 것도 차단 (서버 경로만 허용)
+    await assertFails(adminLDb.collection('organizations').doc('org-legacy').update({
+      consent: { terms: true, privacy: true, termsVersion: '2026-08-05', privacyVersion: '2026-08-05' },
+    }));
+
+    // 정상: 동의 기록을 건드리지 않는 다른 필드 수정은 허용
+    await assertSucceeds(adminADb.collection('organizations').doc('org-A').update({ hipassEnabled: false }));
+
+    // 신청자 경로(status:'pending' + 본인 신청)도 consent를 건드리지 않으면 정상 동작해야 한다
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('organizations').doc('org-pending').set({
+        name: '신청중기관', applicantUid: 'applicant_1', status: 'pending',
+      });
+    });
+    const applicantDb = setupContext('applicant_1', { role: 'employee' }).firestore();
+    await assertSucceeds(applicantDb.collection('organizations').doc('org-pending').update({ address: '서울시' }));
+    await assertFails(applicantDb.collection('organizations').doc('org-pending').update({
+      consent: { terms: true, privacy: true, termsVersion: '2026-08-05', privacyVersion: '2026-08-05' },
+    }));
+
+    // create 경로로 임의 동의 기록을 심는 것도 차단 (update만 막으면 우회 가능)
+    await assertFails(superDb.collection('organizations').doc('org_new_evil').set({
+      name: '위조기관', applicantUid: 'super_1', status: 'pending',
+      consent: { terms: true, privacy: true, termsVersion: '2026-08-05', privacyVersion: '2026-08-05' },
+    }));
+    // consent 없는 정상 create는 계속 허용
+    await assertSucceeds(superDb.collection('organizations').doc('org_new_ok').set({
+      name: '정상기관', applicantUid: 'super_1', status: 'pending',
+    }));
+  });
+
+  it('10-3. 기관관리자는 기관 문서의 서버 소유 필드를 쓸 수 없다 — 초대코드 가로채기·AI 재심사 반복 차단', async () => {
+    // 종전 규칙은 consent만 막아 기관관리자가 inviteCode·status·증빙 경로까지 임의로 쓸 수 있었다.
+    // (1) 다른 기관의 초대 코드를 자기 기관에 복사 → joinOrganization이 두 기관 중 하나를 찍어
+    //     신규 직원을 가로챌 수 있었고, (2) 증빙 경로를 바꿀 때마다 autoVerifyDocument가 재발동해
+    //     Gemini·알림톡 비용이 상한 없이 반복됐다. 둘 다 이 규칙 한 줄이 닫는다.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('organizations').doc('org-A').set({
+        name: '기관A', applicantUid: 'admin_A', applicantEmail: 'a@x.com', status: 'approved',
+        inviteCode: 'AAAAAA', aiVerified: true, uniqueNumber: '123-82-00001',
+        uniqueNumberImagePath: 'organizations/org-A/doc.jpg',
+      });
+      await context.firestore().collection('organizations').doc('org-B').set({
+        name: '기관B', applicantUid: 'admin_B', status: 'approved', inviteCode: 'BBBBBB',
+      });
+    });
+
+    const adminADb = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+    const orgA = adminADb.collection('organizations').doc('org-A');
+
+    // 초대 코드 — 타 기관 코드 복사(가로채기)·임의 값 모두 차단. 재발급은 콜러블만 한다
+    await assertFails(orgA.update({ inviteCode: 'BBBBBB' }));
+    await assertFails(orgA.update({ inviteCode: 'ZZZZZZ' }));
+    // 승인 상태·시각
+    await assertFails(orgA.update({ status: 'deleted' }));
+    await assertFails(orgA.update({ approvedAt: new Date() }));
+    // AI 심사 결과·증빙 경로 — 바꾸면 autoVerifyDocument가 재발동한다
+    await assertFails(orgA.update({ aiVerified: false }));
+    await assertFails(orgA.update({ aiVerifyDetail: { rejected: false } }));
+    await assertFails(orgA.update({ uniqueNumberImagePath: 'organizations/org-A/other.jpg' }));
+    // 신청 시 확정된 신원·수신처
+    await assertFails(orgA.update({ uniqueNumber: '999-82-99999' }));
+    await assertFails(orgA.update({ applicantEmail: 'attacker@evil.com' }));
+    await assertFails(orgA.update({ applicantPhone: '010-0000-0000' }));
+    // 허용 필드와 섞어도 차단 (한 필드라도 걸리면 전체 거부)
+    await assertFails(orgA.update({ hipassEnabled: false, inviteCode: 'BBBBBB' }));
+
+    // 정상: 설정 화면이 저장하는 필드는 계속 허용
+    await assertSucceeds(orgA.update({ name: '기관A 수정', phone: '02-000-0000', hipassEnabled: false }));
+    await assertSucceeds(orgA.update({ approvalLine: [{ title: '팀장' }], sites: [] }));
+
+    // superAdmin은 승인·반려·복구 경로가 있으므로 종전대로 쓸 수 있다
+    const superDb = setupContext('super_1', { role: 'superAdmin' }).firestore();
+    await assertSucceeds(superDb.collection('organizations').doc('org-A').update({ inviteCode: 'CCCCCC' }));
+    await assertSucceeds(superDb.collection('organizations').doc('org-A').update({ status: 'rejected', rejectedAt: new Date() }));
+  });
+
+  it('10-2. 직원 이용약관 동의 기록(users.consent) 클라이언트 변경·주입 차단', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.collection('users').doc('user_A').set({
+        email: 'a@example.com', name: '직원A', role: 'employee', organizationId: 'org-A',
+        consent: { terms: true, termsVersion: '2026-08-05' },
+      });
+      // 동의 기록이 없는 레거시 직원
+      await db.collection('users').doc('user_L').set({
+        email: 'l@example.com', name: '직원L', role: 'employee', organizationId: 'org-A',
+      });
+    });
+
+    const ownerDb = setupContext('user_A', { role: 'employee', orgId: 'org-A' }).firestore();
+    const adminDb = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+    const superDb = setupContext('super_1', { role: 'superAdmin' }).firestore();
+    const legacyOwnerDb = setupContext('user_L', { role: 'employee', orgId: 'org-A' }).firestore();
+
+    // 본인·기관관리자·superAdmin 모두 동의 기록 변경 차단
+    await assertFails(ownerDb.collection('users').doc('user_A').update({
+      consent: { terms: true, termsVersion: '2099-01-01' },
+    }));
+    await assertFails(adminDb.collection('users').doc('user_A').update({
+      consent: { terms: false, termsVersion: 'x' },
+    }));
+    await assertFails(superDb.collection('users').doc('user_A').update({
+      consent: { terms: false, termsVersion: 'x' },
+    }));
+
+    // 동의하지 않은 레거시 직원이 스스로 동의 기록을 심는 것도 차단
+    await assertFails(legacyOwnerDb.collection('users').doc('user_L').update({
+      consent: { terms: true, termsVersion: '2026-08-05' },
+    }));
+
+    // 정상: 동의 기록을 건드리지 않는 본인 프로필 수정은 허용
+    await assertSucceeds(ownerDb.collection('users').doc('user_A').update({ phone: '010-1111-2222' }));
+
+    // 신규 가입 시 클라이언트 create로 동의 기록을 심는 것도 차단
+    const newUserDb = setupContext('user_new', { firebase: { sign_in_provider: 'google.com' } }).firestore();
+    await assertFails(newUserDb.collection('users').doc('user_new').set({
+      email: 'new@example.com', consent: { terms: true, termsVersion: '2026-08-05' },
+    }));
+    await assertSucceeds(newUserDb.collection('users').doc('user_new').set({ email: 'new@example.com' }));
+  });
+
+  it('10-3. 접속기록(auditLogs) — 클라이언트 쓰기 전면 차단, 읽기는 점검 주체만', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('auditLogs').doc('log_A').set({
+        organizationId: 'org-A', action: 'update', targetType: 'driveLog',
+        targetId: 'dl_A', actorUid: null, actorSource: 'unknown', subjectUids: ['user_A'],
+      });
+    });
+
+    const adminADb = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+    const employeeADb = setupContext('user_A', { role: 'employee', orgId: 'org-A' }).firestore();
+    const adminBDb = setupContext('admin_B', { role: 'admin', orgId: 'org-B' }).firestore();
+    const superDb = setupContext('super_1', { role: 'superAdmin' }).firestore();
+
+    // 쓰기: 누구도 불가 (Admin SDK 트리거 전용)
+    await assertFails(adminADb.collection('auditLogs').doc('log_new').set({
+      organizationId: 'org-A', action: 'create', targetType: 'driveLog', targetId: 'x',
+    }));
+    await assertFails(superDb.collection('auditLogs').doc('log_new2').set({
+      organizationId: 'org-A', action: 'create', targetType: 'driveLog', targetId: 'x',
+    }));
+    // 기록 인멸 차단 — 수정·삭제 모두 불가
+    await assertFails(adminADb.collection('auditLogs').doc('log_A').update({ action: 'create' }));
+    await assertFails(superDb.collection('auditLogs').doc('log_A').update({ action: 'create' }));
+    await assertFails(adminADb.collection('auditLogs').doc('log_A').delete());
+    await assertFails(superDb.collection('auditLogs').doc('log_A').delete());
+
+    // 읽기: 해당 기관 관리자와 superAdmin만
+    await assertSucceeds(adminADb.collection('auditLogs').doc('log_A').get());
+    await assertSucceeds(superDb.collection('auditLogs').doc('log_A').get());
+    // 일반 직원은 자기 기관 기록도 볼 수 없다 (점검 주체가 아니다)
+    await assertFails(employeeADb.collection('auditLogs').doc('log_A').get());
+    // 타 기관 관리자는 차단 (멀티테넌트 격리)
+    await assertFails(adminBDb.collection('auditLogs').doc('log_A').get());
+
+    // 기관 미소속 계정(superAdmin)의 기록은 __system__으로 남는다 — superAdmin만 읽는다.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('auditLogs').doc('log_sys').set({
+        organizationId: '__system__', action: 'update', targetType: 'user',
+        targetId: 'super_1', actorUid: null, actorSource: 'unknown', subjectUids: ['super_1'],
+        changedFields: ['role'],
+      });
+    });
+    await assertSucceeds(superDb.collection('auditLogs').doc('log_sys').get());
+    await assertFails(adminADb.collection('auditLogs').doc('log_sys').get());
+    await assertFails(adminBDb.collection('auditLogs').doc('log_sys').get());
+  });
+
+  it('10-3b. 접속기록 목록 조회 — 기관 필터가 있어야 통과한다 (점검 화면의 전제)', async () => {
+    // 문서 단건 get이 통과하는 것과 목록 조회(list)가 통과하는 것은 별개다.
+    // 점검 화면(getAuditLogs)은 list로 읽으므로, 기관 필터가 빠진 쿼리가 통째로
+    // 거부되는 것을 여기서 고정한다 — 필터를 지우면 화면이 조용히 비는 대신 이 테스트가 깨진다.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.collection('auditLogs').doc('log_A1').set({
+        organizationId: 'org-A', action: 'login', targetType: 'session',
+        targetId: 'user_A', actorUid: 'user_A', actorSource: 'auth', subjectUids: ['user_A'],
+        at: new Date('2026-08-01T09:00:00Z'),
+      });
+      await db.collection('auditLogs').doc('log_B1').set({
+        organizationId: 'org-B', action: 'login', targetType: 'session',
+        targetId: 'user_B', actorUid: 'user_B', actorSource: 'auth', subjectUids: ['user_B'],
+        at: new Date('2026-08-01T09:00:00Z'),
+      });
+    });
+
+    const adminADb = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+    const employeeADb = setupContext('user_A', { role: 'employee', orgId: 'org-A' }).firestore();
+
+    // 자기 기관 필터 + 최신순 — 화면이 실제로 쓰는 쿼리 형태
+    await assertSucceeds(
+      adminADb.collection('auditLogs').where('organizationId', '==', 'org-A').orderBy('at', 'desc').limit(50).get()
+    );
+    // 유형 필터(action in) 조합도 같은 경계로 통과한다
+    await assertSucceeds(
+      adminADb.collection('auditLogs')
+        .where('organizationId', '==', 'org-A')
+        .where('action', 'in', ['create', 'update', 'delete'])
+        .orderBy('at', 'desc').limit(50).get()
+    );
+    // 기관 필터가 없으면 타 기관 문서가 섞이므로 쿼리 전체가 거부된다
+    await assertFails(adminADb.collection('auditLogs').orderBy('at', 'desc').limit(50).get());
+    // 타 기관을 지목한 조회도 거부
+    await assertFails(adminADb.collection('auditLogs').where('organizationId', '==', 'org-B').get());
+    // 직원은 점검 주체가 아니라 자기 기관 목록도 못 읽는다
+    await assertFails(employeeADb.collection('auditLogs').where('organizationId', '==', 'org-A').get());
+  });
+
+  it('10-5. 전체 공지 이력(broadcasts) — 클라이언트 쓰기 전면 차단, 읽기는 운영자만', async () => {
+    // sendBroadcastNotice(Admin SDK)만 기록한다. 발송자 uid가 담기므로 읽기도 운영자 한정.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('broadcasts').doc('bc_1').set({
+        title: '약관 개정 안내', message: '8월 10일 시행', actorUid: 'sa_1',
+        recipientCount: 812, status: 'sent',
+      });
+    });
+
+    const superAdmin = setupContext('sa_1', { role: 'superAdmin' }).firestore();
+    const adminA = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+    const memberA = setupContext('user_A', { role: 'member', orgId: 'org-A' }).firestore();
+
+    // (1) 운영자만 읽는다
+    await assertSucceeds(superAdmin.collection('broadcasts').doc('bc_1').get());
+    await assertFails(adminA.collection('broadcasts').doc('bc_1').get());
+    await assertFails(memberA.collection('broadcasts').doc('bc_1').get());
+
+    // (2) 운영자조차 쓸 수 없다 — 발송하지 않은 이력을 만들거나 지울 수 없어야 한다
+    await assertFails(superAdmin.collection('broadcasts').doc('bc_2').set({ title: '위조' }));
+    await assertFails(superAdmin.collection('broadcasts').doc('bc_1').update({ recipientCount: 0 }));
+    await assertFails(superAdmin.collection('broadcasts').doc('bc_1').delete());
+  });
+
+  it('11. 비밀 사용자 데이터(users/{uid}/private) — 본인·같은 기관 모두 접근 차단 (Functions 전용)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('users/user_A/private/oauth').set({
+        accessToken: 'a', refreshToken: 'r', expiryDate: 1,
+      });
+    });
+
+    // 본인조차 클라이언트에서 토큰을 읽거나 쓸 수 없다 (Admin SDK 전용)
+    const ownerDb = setupContext('user_A', { role: 'employee', orgId: 'org-A' }).firestore();
+    await assertFails(ownerDb.doc('users/user_A/private/oauth').get());
+    await assertFails(ownerDb.doc('users/user_A/private/oauth').set({ accessToken: 'z' }));
+
+    // 같은 기관 타 멤버도 당연히 차단
+    const mateDb = setupContext('user_A2', { role: 'employee', orgId: 'org-A' }).firestore();
+    await assertFails(mateDb.doc('users/user_A/private/oauth').get());
+  });
+
+  it('11-1. 기관 미소속(orgId null) 사용자 간 PII 상호 열람 차단 — "null == null" 우회 방지', async () => {
+    // 탈퇴·기관 이동 대기 계정은 organizationId가 null로 명시 저장되고
+    // 클레임의 orgId도 null이 된다(setCustomClaims). "같은 기관 멤버" 조건이
+    // null == null로 성립해 미소속 계정끼리 이메일·이름·연락처를 읽을 수 있었다.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.collection('users').doc('orphan_A').set({
+        organizationId: null, name: '미소속A', email: 'a@t.kr', role: 'employee',
+      });
+      await db.collection('users').doc('orphan_B').set({
+        organizationId: null, name: '미소속B', email: 'b@t.kr', role: 'employee',
+      });
+      await db.collection('users').doc('user_C').set({
+        organizationId: 'org-C', name: '직원C', email: 'c@t.kr', role: 'employee',
+      });
+    });
+
+    const orphanADb = setupContext('orphan_A', { role: 'employee', orgId: null }).firestore();
+
+    // (1) 미소속끼리 상호 열람 차단
+    await assertFails(orphanADb.collection('users').doc('orphan_B').get());
+
+    // (2) 미소속 → 기관 소속 사용자 열람도 차단
+    await assertFails(orphanADb.collection('users').doc('user_C').get());
+
+    // (3) 본인 문서는 계속 읽을 수 있다 (회귀 가드 — 재가입 화면의 전제)
+    await assertSucceeds(orphanADb.collection('users').doc('orphan_A').get());
+
+    // (4) 기관 소속 멤버 간 열람은 계속 허용된다 (회귀 가드 — 정당한 접근 경로 보존)
+    const memberCDb = setupContext('user_C2', { role: 'employee', orgId: 'org-C' }).firestore();
+    await assertSucceeds(memberCDb.collection('users').doc('user_C').get());
+  });
+
+  /**
+   * 의견(feedbacks) 생성이 **서버 비용을 부르는 쓰기**라는 점을 규칙으로 못박는다.
+   *
+   * 이 컬렉션의 onCreate(notifyNewFeedback)는 Discord 웹훅을 실행한다(당시에는 첨부 다운로드·
+   * Gemini 호출까지 — AI 초안은 2026-10-16에 없앴다). 규칙이 `isSignedIn()` 하나였을 때는 로그인한 누구나 타인 명의로,
+   * 첨부 개수·본문 길이 제한 없이 그 연쇄를 무제한 유발할 수 있었다 (2026-08-14 감사 발견 1).
+   *
+   * 호출 '횟수' 상한은 Rules로 표현할 수 없어 트리거 안의 일일 쿼터가 맡는다. 여기서는
+   * 한 번의 쓰기가 시킬 수 있는 일의 크기와 명의를 검증한다.
+   */
+  it('11. 의견 생성 — 명의 위조·첨부 과다·AI 필드 선점 차단', async () => {
+    const author = setupContext('user_A', { role: 'member', orgId: 'org-A' }).firestore();
+    const base = {
+      message: '건의드립니다',
+      imageUrls: [] as string[],
+      userEmail: 'a@example.com',
+      userName: '사용자A',
+      organizationId: 'org-A',
+      authorUid: 'user_A',
+      status: 'unread',
+    };
+
+    // (1) 정상 경로(FeedbackForm이 보내는 모양) → 허용. 이게 막히면 의견 기능이 죽는다.
+    await assertSucceeds(author.collection('feedbacks').doc('fb_ok').set(base));
+
+    // (2) 첨부 3개까지 → 허용 (트리거 fetchPromptImages의 maxImages와 같은 값)
+    await assertSucceeds(author.collection('feedbacks').doc('fb_img3').set({
+      ...base, imageUrls: ['https://a/1.jpg', 'https://a/2.jpg', 'https://a/3.jpg'],
+    }));
+
+    // (3) 타인 명의로 심기 → 차단
+    await assertFails(author.collection('feedbacks').doc('fb_forged').set({ ...base, authorUid: 'user_B' }));
+
+    // (4) 첨부 4개 이상 → 차단 (쓰기 1건이 시키는 다운로드·토큰 비용의 상한)
+    await assertFails(author.collection('feedbacks').doc('fb_img4').set({
+      ...base, imageUrls: ['https://a/1.jpg', 'https://a/2.jpg', 'https://a/3.jpg', 'https://a/4.jpg'],
+    }));
+
+    // (5) 본문 길이 상한 초과 → 차단
+    await assertFails(author.collection('feedbacks').doc('fb_long').set({ ...base, message: 'x'.repeat(5001) }));
+
+    // (6) AI·답변 필드 선점 → 차단 (답변 이력이 사용자 입력으로 오염되는 것을 막는다)
+    await assertFails(author.collection('feedbacks').doc('fb_ai').set({ ...base, aiDraft: '내가 쓴 초안' }));
+    await assertFails(author.collection('feedbacks').doc('fb_reply').set({ ...base, reply: '처리 완료' }));
+
+    // (7) 읽기는 여전히 superAdmin 전용 — 작성자 본인도 못 읽는다
+    await assertFails(author.collection('feedbacks').doc('fb_ok').get());
+  });
+
+  it('22. 기관 신청서(orgApplications) — 클라이언트에는 열려 있지 않다', async () => {
+    // 이 컬렉션은 신청자 이메일·연락처가 담긴 개인정보인데, 규칙이
+    // `applicantEmail == request.auth.token.email`이었다. 그 조건은 **토큰에 email이 없으면
+    // null == null로 통과**하고(익명 로그인이 켜져 있던 동안 그런 토큰을 발급할 수 있었다),
+    // 정작 쓰는 곳이 없다 — 접수는 비인증 콜러블(Admin SDK)이 하고 심사 화면도 읽지 않는다.
+    // 그래서 클라이언트 경로를 닫았다. 다시 열리면 이 테스트가 실패한다.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('orgApplications').doc('app_kim').set({
+        applicantEmail: 'kim@a.or.kr',
+        orgName: '가나복지관',
+        phone: '010-1111-2222',
+        status: 'pending',
+      });
+    });
+
+    const kim = setupContext('uid_kim', { email: 'kim@a.or.kr' }).firestore();
+    const noEmail = setupContext('uid_noemail', {}).firestore();
+    const superAdmin = setupContext('uid_root', { role: 'superAdmin' }).firestore();
+
+    // (1) 본인 이메일이 일치해도 읽지 못한다 — 클라이언트가 쓰지 않는 경로다
+    await assertFails(kim.collection('orgApplications').doc('app_kim').get());
+    // (2) email 클레임이 없는 토큰도 못 읽는다 (null == null 통과 경로 차단)
+    await assertFails(noEmail.collection('orgApplications').doc('app_kim').get());
+    // (3) 심사는 superAdmin이 하므로 읽기는 남긴다
+    await assertSucceeds(superAdmin.collection('orgApplications').doc('app_kim').get());
+
+    // (4) 생성은 아무도 못 한다 — 접수는 Admin SDK(submitOrgApplication) 경로뿐이다
+    await assertFails(kim.collection('orgApplications').doc('app_new').set({
+      applicantEmail: 'kim@a.or.kr', orgName: '새복지관', status: 'pending',
+    }));
+    // email 없는 토큰이 applicantEmail을 비워 밀어 넣는 경로도 막힌다
+    await assertFails(noEmail.collection('orgApplications').doc('app_null').set({
+      orgName: '이메일없음', status: 'pending',
+    }));
+
+    // (5) 심사 결과 변경·삭제도 클라이언트에서는 불가 — superAdmin도 Admin SDK로 한다
+    await assertFails(kim.collection('orgApplications').doc('app_kim').update({ status: 'approved' }));
+    await assertFails(superAdmin.collection('orgApplications').doc('app_kim').update({ status: 'approved' }));
+    await assertFails(superAdmin.collection('orgApplications').doc('app_kim').delete());
+  });
+
+  it('23. users/{uid}/private — superAdmin도 예외가 아니다 (11번 보완)', async () => {
+    // 11번이 본인·같은 기관 멤버 차단을 이미 고정한다. 여기서 더하는 것은 **superAdmin**이다 —
+    // 전체 데이터 읽기 권한을 가진 역할이라 "관리자니까 열어 준다"로 뚫리기 쉬운 자리인데,
+    // 이 컬렉션은 Google OAuth 리프레시 토큰이라 열리면 계정 임퍼소네이션이 된다
+    // (2026-07-10 감사 #4). 부모 문서 읽기가 정상임도 함께 고정해, private만 닫힌 것임을 밝힌다.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.collection('users').doc('uid_owner').set({ email: 'o@a.or.kr', organizationId: 'org-A' });
+      await db.collection('users').doc('uid_owner').collection('private').doc('googleOauth').set({
+        refreshToken: 'SECRET',
+      });
+    });
+
+    const owner = setupContext('uid_owner', { orgId: 'org-A' }).firestore();
+    const sameOrg = setupContext('uid_peer', { orgId: 'org-A' }).firestore();
+    const superAdmin = setupContext('uid_root', { role: 'superAdmin' }).firestore();
+
+    const path = (db: typeof owner) =>
+      db.collection('users').doc('uid_owner').collection('private').doc('googleOauth');
+
+    // 본인조차 읽을 수 없다 — 토큰은 서버만 만진다
+    await assertFails(path(owner).get());
+    await assertFails(path(sameOrg).get());
+    await assertFails(path(superAdmin).get());
+
+    // 쓰기도 전면 차단 (본인 명의로도 심을 수 없다)
+    await assertFails(path(owner).set({ refreshToken: 'INJECTED' }));
+    await assertFails(path(superAdmin).set({ refreshToken: 'INJECTED' }));
+
+    // 부모 문서 읽기는 여전히 정상 — private만 닫힌 것이다
+    await assertSucceeds(owner.collection('users').doc('uid_owner').get());
+  });
+
+  // 외부 대여 반납 — 운전자가 기관 구성원이 아니라 driverUid를 비운 운행일지를 관리자가 쓴다.
+  // Rules는 driverUid의 **존재**만 본다(대리 작성 기능과 같은 판단). 이 전제가 바뀌면 반납이 막힌다.
+
+  /**
+   * 기대 동작 표 (2026-10-17 규칙 감사) — 표 번호마다 허용·거부를 함께 고정한다.
+   *
+   * 위 테스트들이 이미 정확히 검증하는 항목(#3·#5·#6a·#17·#18a~c 등)은 여기서 다시 만들지 않고
+   * 해당 테스트에 표 번호 주석만 달았다. 여기에는 빠져 있던 쪽(허용 대조군, 목록 쿼리, 삭제,
+   * 다른 기관 관리자 등)만 둔다.
+   *
+   * 픽스처: 기관 2개 × (직원 2명 + 기관 관리자 1명) + 전체 관리자 1명. 문서 모양은 src/schemas/를 따른다.
+   * 클레임의 직원 역할은 실제 값인 'employee'다(위 테스트의 'member'는 실재하지 않는 값).
+   */
+  describe('기대 동작 표', () => {
+    const ORGS = ['org-A', 'org-B'] as const;
+    const at = new Date('2026-10-01T09:00:00Z');
+
+    const emp = (org: 'A' | 'B', n: 1 | 2) =>
+      setupContext(`emp_${org}${n}`, { role: 'employee', orgId: `org-${org}` }).firestore();
+    const admin = (org: 'A' | 'B') =>
+      setupContext(`admin_${org}`, { role: 'admin', orgId: `org-${org}` }).firestore();
+    const superAdmin = () => setupContext('super_1', { role: 'superAdmin' }).firestore();
+    const anon = () => testEnv.unauthenticatedContext().firestore();
+
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore();
+        for (const orgId of ORGS) {
+          const o = orgId.slice(-1); // 'A' | 'B'
+          await db.collection('organizations').doc(orgId).set({
+            name: `기관${o}`, applicantUid: `admin_${o}`, status: 'approved',
+          });
+          for (const [uid, role] of [[`emp_${o}1`, 'employee'], [`emp_${o}2`, 'employee'], [`admin_${o}`, 'admin']] as const) {
+            await db.collection('users').doc(uid).set({
+              name: uid, email: `${uid}@example.org`, role, organizationId: orgId, status: 'active',
+            });
+          }
+        }
+        await db.collection('users').doc('super_1').set({
+          name: '운영자', email: 'super_1@example.org', role: 'superAdmin', organizationId: null,
+        });
+        // 기관에 소속된 채로 지정된 전체 관리자 — addSuperAdmin은 organizationId를 지우지 않는다
+        await db.collection('users').doc('super_inorg').set({
+          name: '운영자(기관 소속)', email: 'super_inorg@example.org', role: 'superAdmin', organizationId: 'org-A',
+        });
+        // 규칙에 match가 없는 서버 전용 컬렉션 (기본 거부)
+        await db.collection('_health').doc('ping').set({ at });
+        await db.collection('_rateLimits').doc('k1').set({ count: 1 });
+      });
+    });
+
+    it('#1 로그인 안 한 사람은 사용자·기관 문서를 읽지도 쓰지도 못한다', async () => {
+      const db = anon();
+      await assertFails(db.collection('users').doc('emp_A1').get());
+      await assertFails(db.collection('organizations').doc('org-A').get());
+      await assertFails(db.collection('users').where('organizationId', '==', 'org-A').get());
+      await assertFails(db.collection('users').doc('anon_new').set({ email: 'x@example.org' }));
+      await assertFails(db.collection('users').doc('emp_A1').update({ phone: '010-0000-0000' }));
+      await assertFails(db.collection('organizations').doc('org-A').update({ name: '변경' }));
+    });
+
+    it('#4 직원은 같은 기관 사용자만 읽고, 다른 기관 사용자·기관 문서는 읽을 수 없다 (목록 쿼리 포함)', async () => {
+      const db = emp('A', 1);
+      await assertSucceeds(db.collection('users').doc('emp_A2').get());
+      await assertSucceeds(db.collection('users').where('organizationId', '==', 'org-A').get());
+      await assertSucceeds(db.collection('organizations').doc('org-A').get());
+      await assertFails(db.collection('users').doc('emp_B1').get());
+      await assertFails(db.collection('users').where('organizationId', '==', 'org-B').get());
+      await assertFails(db.collection('organizations').doc('org-B').get());
+    });
+
+    it('#12 기관 관리자는 다른 기관의 사용자·기관 문서를 고칠 수 없다', async () => {
+      const db = admin('A');
+      await assertFails(db.collection('users').doc('emp_B1').update({ role: 'admin' }));
+      await assertFails(db.collection('organizations').doc('org-B').update({ name: '침범' }));
+      await assertSucceeds(db.collection('organizations').doc('org-A').update({ name: '기관A 새 이름' }));
+    });
+
+    it('#10 직원·관리자는 자기 문서의 역할을 올리거나 기관을 바꿀 수 없다 (탈퇴·자기 강등은 허용)', async () => {
+      const empDb = emp('A', 1);
+      const self = empDb.collection('users').doc('emp_A1');
+      await assertFails(self.update({ role: 'admin' }));
+      await assertFails(self.update({ role: 'superAdmin' }));
+      await assertFails(self.update({ organizationId: 'org-B' }));
+      await assertFails(self.update({ status: 'disabled' }));
+      // 탈퇴 분기: 기관을 비우고 employee로 — 허용 (clearUserOrganization)
+      await assertSucceeds(self.update({ organizationId: null, role: 'employee' }));
+
+      const adminDb = admin('A');
+      const adminSelf = adminDb.collection('users').doc('admin_A');
+      await assertFails(adminSelf.update({ role: 'superAdmin' }));
+      await assertFails(adminSelf.update({ organizationId: 'org-B' }));
+      // 표 정밀화(b): 관리자는 자기 역할을 낮출 수 있다 — 권한 상승이 아니다
+      await assertSucceeds(adminSelf.update({ role: 'employee' }));
+    });
+
+    it('#13 기관 관리자는 같은 기관 직원의 역할을 admin·employee로만 바꿀 수 있다', async () => {
+      const db = admin('A');
+      await assertSucceeds(db.collection('users').doc('emp_A1').update({ role: 'admin', lastEditedByUid: 'admin_A' }));
+      await assertSucceeds(db.collection('users').doc('emp_A1').update({ role: 'employee', lastEditedByUid: 'admin_A' }));
+      await assertFails(db.collection('users').doc('emp_A2').update({ role: 'superAdmin' }));
+      await assertFails(db.collection('users').doc('emp_A2').update({ organizationId: 'org-B' }));
+    });
+
+    it('#13 기관 관리자도 직원의 활성 상태(status·disabledAt)는 직접 못 바꾼다 — 콜러블 전용', async () => {
+      // 활성/비활성은 Auth 계정 차단과 함께 바뀌어야 한다(disableUser·enableUser).
+      // 문서만 'active'로 고치면 목록은 활성인데 로그인은 auth/user-disabled로 막힌다(2026-11-18).
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('users').doc('emp_A2').update({ status: 'disabled', disabledAt: new Date() });
+      });
+      const db = admin('A');
+      // 비활성 → 활성 (이번 사고의 경로)
+      await assertFails(db.collection('users').doc('emp_A2').update({ status: 'active', disabledAt: null, lastEditedByUid: 'admin_A' }));
+      await assertFails(db.collection('users').doc('emp_A2').update({ disabledAt: null, lastEditedByUid: 'admin_A' }));
+      // 활성 → 비활성
+      await assertFails(db.collection('users').doc('emp_A1').update({ status: 'disabled', lastEditedByUid: 'admin_A' }));
+      await assertFails(db.collection('users').doc('emp_A1').update({ disabledAt: new Date(), lastEditedByUid: 'admin_A' }));
+      // 다른 필드(이름)는 그대로 고칠 수 있다
+      await assertSucceeds(db.collection('users').doc('emp_A1').update({ name: '바뀐이름', lastEditedByUid: 'admin_A' }));
+    });
+
+    it('#13 기관 관리자는 자기 기관에 소속된 전체 관리자를 강등·비활성화할 수 없다', async () => {
+      // addSuperAdmin은 organizationId를 지우지 않아 기관 소속 전체 관리자가 생긴다.
+      // 2단계 분류 (a) 규칙 문제 후보 — users update의 관리자 분기에 대상 역할 조건이 없다.
+      const db = admin('A');
+      await assertFails(db.collection('users').doc('super_inorg').update({ role: 'employee' }));
+      await assertFails(db.collection('users').doc('super_inorg').update({ status: 'disabled' }));
+    });
+
+    it('#21 규칙에 없는 서버 전용 컬렉션(_health·_rateLimits)은 누구도 접근할 수 없다', async () => {
+      for (const db of [emp('A', 1), admin('A'), superAdmin()]) {
+        await assertFails(db.collection('_health').doc('ping').get());
+        await assertFails(db.collection('_rateLimits').doc('k1').get());
+        await assertFails(db.collection('_health').doc('ping').set({ at }));
+        await assertFails(db.collection('_rateLimits').doc('k2').set({ count: 0 }));
+      }
+    });
+  });
+
+  // 직원 화면 더보기 › 기관 나가기 — 문서 삭제는 superAdmin 전용이라 본인은 소속만 비우는 update 분기를 쓴다.
+  // (예전 화면은 deleteDoc을 불러 직원이 항상 permission-denied를 받았다.)
+  it('29. 본인 기관 나가기 — 소속 비우기 update는 허용, users 문서 삭제는 superAdmin만', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.collection('users').doc('emp_A').set({
+        email: 'emp@example.com', name: '직원A', role: 'employee', organizationId: 'org-A', status: 'active',
+      });
+      await db.collection('users').doc('emp_A2').set({
+        email: 'emp2@example.com', name: '직원A2', role: 'employee', organizationId: 'org-A', status: 'active',
+      });
+      await db.collection('users').doc('admin_A').set({
+        email: 'admin@example.com', name: '관리자A', role: 'admin', organizationId: 'org-A',
+      });
+    });
+    const empDb = setupContext('emp_A', { role: 'employee', orgId: 'org-A' }).firestore();
+    const emp2Db = setupContext('emp_A2', { role: 'employee', orgId: 'org-A' }).firestore();
+    const adminDb = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+    const superDb = setupContext('super_1', { role: 'superAdmin' }).firestore();
+    const leave = { organizationId: null, role: 'employee' };
+
+    // 직원은 본인 문서라도 삭제할 수 없다 — 예전 기관 나가기가 실패하던 경로
+    await assertFails(empDb.collection('users').doc('emp_A').delete());
+
+    // 본인 탈퇴 분기에 기대는 우회는 막힌다
+    await assertFails(empDb.collection('users').doc('emp_A').update({ organizationId: 'org-B', role: 'employee' })); // 다른 기관으로 옮겨 타기
+    await assertFails(empDb.collection('users').doc('emp_A').update({ ...leave, status: 'disabled' })); // 상태 필드 동반 변경
+    await assertFails(emp2Db.collection('users').doc('emp_A').update(leave)); // 동료의 소속 비우기
+    await assertFails(empDb.collection('users').doc('emp_A').update({ ...leave, lastEditedByUid: 'emp_A2' })); // 행위자 위조
+
+    // 정상 경로: 본인이 소속을 비운다 (clearUserOrganization과 같은 payload)
+    await assertSucceeds(empDb.collection('users').doc('emp_A').update({ ...leave, lastEditedByUid: 'emp_A' }));
+
+    // 관리자도 같은 분기로 나갈 수 있다 — role은 employee로만 내려간다
+    await assertFails(adminDb.collection('users').doc('admin_A').update({ organizationId: null, role: 'admin' }));
+    await assertSucceeds(adminDb.collection('users').doc('admin_A').update({ ...leave, lastEditedByUid: 'admin_A' }));
+
+    // 대조군: superAdmin의 멤버 제거(문서 삭제)는 허용된다
+    await assertSucceeds(superDb.collection('users').doc('emp_A2').delete());
+  });
+});

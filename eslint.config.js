@@ -1,0 +1,210 @@
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { defineConfig, globalIgnores } from 'eslint/config'
+import jsxA11y from 'eslint-plugin-jsx-a11y'
+import requireOrganizationFilter from './eslint-rules/require-organization-filter.js'
+
+export default defineConfig([
+  // '.claude/worktrees'는 백그라운드 작업이 만드는 저장소 사본이다. 무시하지 않으면 lint가
+  // 그 안의 functions/ 사본까지 훑는데, 경로가 'functions/**'가 아니라
+  // '.claude/worktrees/<이름>/functions/**'라 아래 블록의 ignore에 걸리지 않아
+  // 프론트 규칙(브라우저 전역)으로 검사되면서 no-undef 수백 건이 쏟아진다 —
+  // 작업 중인 코드와 무관한 실패라 pre-push가 막힌다(2026-09-03).
+  // docs/는 기획 참고 자료(다른 기관 앱의 소스 포함)라 린트 대상이 아니다
+  globalIgnores(['dist', 'coverage', 'test-results', 'playwright-report', 'functions/lib', 'functions/coverage', 'scratch', '.claude/worktrees', 'docs']),
+  {
+    files: ['**/*.{js,jsx}'],
+    extends: [
+      js.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+      jsxA11y.flatConfigs.recommended,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      'no-unused-vars': ['error', { varsIgnorePattern: '^_' }],
+      'no-restricted-globals': ['error',
+        { name: 'confirm', message: 'window.confirm 금지 → useConfirm() 훅을 사용하세요.' },
+        { name: 'alert', message: 'window.alert 금지 → useToast() 훅을 사용하세요.' },
+        { name: 'prompt', message: 'window.prompt 금지 → useConfirm() 또는 커스텀 입력 UI를 사용하세요.' },
+      ],
+      // no-restricted-globals는 맨 이름(confirm(...))만 잡고 `window.confirm(...)` 같은 멤버 접근은 놓친다 —
+      // 실제로 ReservationCard가 그 모양으로 6개월간 감지되지 않았다(2026-10-14 감사). 둘을 함께 둔다.
+      'no-restricted-properties': ['error',
+        ...['window', 'globalThis', 'self'].flatMap((object) => [
+          { object, property: 'confirm', message: 'window.confirm 금지 → useConfirm() 훅을 사용하세요.' },
+          { object, property: 'alert', message: 'window.alert 금지 → useToast() 훅을 사용하세요.' },
+          { object, property: 'prompt', message: 'window.prompt 금지 → useConfirm() 또는 커스텀 입력 UI를 사용하세요.' },
+        ]),
+      ],
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'jsx-a11y/label-has-associated-control': 'off',
+    },
+  },
+  {
+    files: ['**/*.{ts,tsx}'],
+    // functions/는 Node 백엔드라 브라우저·React 규칙 대상에서 제외하고 아래 별도 블록에서 린트.
+    ignores: ['functions/**'],
+    extends: [
+      js.configs.recommended,
+      ...tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+      jsxA11y.flatConfigs.recommended,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+      parser: tseslint.parser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      'no-unused-vars': 'off',
+      'no-restricted-globals': ['error',
+        { name: 'confirm', message: 'window.confirm 금지 → useConfirm() 훅을 사용하세요.' },
+        { name: 'alert', message: 'window.alert 금지 → useToast() 훅을 사용하세요.' },
+        { name: 'prompt', message: 'window.prompt 금지 → useConfirm() 또는 커스텀 입력 UI를 사용하세요.' },
+      ],
+      // no-restricted-globals는 맨 이름(confirm(...))만 잡고 `window.confirm(...)` 같은 멤버 접근은 놓친다 —
+      // 실제로 ReservationCard가 그 모양으로 6개월간 감지되지 않았다(2026-10-14 감사). 둘을 함께 둔다.
+      'no-restricted-properties': ['error',
+        ...['window', 'globalThis', 'self'].flatMap((object) => [
+          { object, property: 'confirm', message: 'window.confirm 금지 → useConfirm() 훅을 사용하세요.' },
+          { object, property: 'alert', message: 'window.alert 금지 → useToast() 훅을 사용하세요.' },
+          { object, property: 'prompt', message: 'window.prompt 금지 → useConfirm() 또는 커스텀 입력 UI를 사용하세요.' },
+        ]),
+      ],
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'jsx-a11y/label-has-associated-control': 'off',
+    },
+  },
+  {
+    files: ['scripts/**/*.js', '*.config.js', '*.config.ts'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['**/*.test.{js,jsx,ts,tsx}', '**/__tests__/**/*.{js,jsx,ts,tsx}'],
+    languageOptions: {
+      globals: {
+        vi: 'readonly',
+        jest: 'readonly', // functions 테스트는 Jest 기반
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+      },
+    },
+  },
+  {
+    // Cloud Functions (Node, TypeScript → CommonJS). 루트가 functions 전체를 ignore하던 것을 해제하고
+    // 프론트(브라우저/React) 규칙과 분리된 별도 규칙으로 린트한다. 컴파일 산출물(functions/lib)은
+    // globalIgnores에서 제외된다.
+    files: ['functions/**/*.ts'],
+    extends: [
+      js.configs.recommended,
+      ...tseslint.configs.recommended,
+    ],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.node,
+      parser: tseslint.parser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true }],
+      // Firestore 문서 등 동적 데이터가 많아 any는 경고로만 둔다(점진적 제거 대상, 빌드는 막지 않음).
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      'no-unused-vars': 'off',
+      // firebase-admin 네임스페이스 import 차단.
+      // admin.firestore()·admin.firestore.FieldValue 같은 네임스페이스 접근은 firebase-admin 14가
+      // 제거한다. #253에서 마지막 4곳을 모듈러 API로 옮겨 0건이 됐는데, 다시 스며들면 메이저
+      // 이관이 또 막히므로 그 상태를 정적으로 고정한다.
+      // 서브경로(firebase-admin/app·/firestore·/auth 등)는 정상 경로라 막지 않는다 —
+      // no-restricted-imports의 paths는 정확히 일치하는 specifier만 본다.
+      // 한계: CJS require는 이 규칙이 보지 않는다(소스는 no-require-imports가 이미 막고,
+      // 테스트·스크립트 블록은 그 규칙을 끄므로 거기서는 bare require가 통과한다).
+      'no-restricted-imports': ['error', {
+        paths: [{
+          name: 'firebase-admin',
+          message: "네임스페이스 import 금지 — 'firebase-admin/app'·'firebase-admin/firestore' 등 서브경로 모듈러 API를 쓴다 (firebase-admin 14가 admin.firestore() 네임스페이스 접근을 제거한다).",
+        }],
+      }],
+    },
+  },
+  {
+    // functions 테스트·일회성 스크립트: Jest 모킹/CJS require 패턴이 정당하게 쓰이므로
+    // 해당 규칙만 완화한다(소스 규칙은 위 블록에서 유지). node 런타임 글로벌도 부여.
+    files: [
+      'functions/**/__tests__/**/*.{ts,js}',
+      'functions/**/*.test.{ts,js}',
+      'functions/**/scripts/**/*.{ts,js}',
+      'functions/scripts/**/*.{ts,js}',
+    ],
+    languageOptions: {
+      globals: globals.node,
+    },
+    rules: {
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      // 테스트 모킹·일회성 스크립트에서는 any를 허용한다(과도한 타입화 비용 회피).
+      '@typescript-eslint/no-explicit-any': 'off',
+      'no-undef': 'off',
+    },
+  },
+  {
+    // 멀티테넌트 격리: Firestore 도메인 파일의 query()에 organizationId 필터 강제.
+    // fail-closed — src/lib/firestore/ 아래 모든 파일에 기본 적용하고, 조직 격리 대상이 아닌
+    // 전역 도메인만 ignores로 명시해 뺀다. 새 도메인 파일은 별도 등록 없이 자동으로 검사된다.
+    files: ['src/lib/firestore/**/*.ts'],
+    ignores: [
+      // 전역 도메인 — 컬렉션이 기관 단위가 아니거나(기관·사용자·공휴일·통계·캐시),
+      // 사용자 본인(uid) 또는 superAdmin 범위로 격리된다(broadcasts: superAdmin 전용 전체 공지 이력).
+      'src/lib/firestore/organizations.ts',
+      'src/lib/firestore/users.ts',
+      'src/lib/firestore/favorites.ts',
+      'src/lib/firestore/feedbacks.ts',
+      'src/lib/firestore/notifications.ts',
+      'src/lib/firestore/superAdmin.ts',
+      'src/lib/firestore/statistics.ts',
+      'src/lib/firestore/holidays.ts',
+      'src/lib/firestore/preRegistered.ts',
+      'src/lib/firestore/cache.ts',
+      'src/lib/firestore/broadcasts.ts',
+    ],
+    plugins: {
+      local: { rules: { 'require-organization-filter': requireOrganizationFilter } },
+    },
+    rules: {
+      'local/require-organization-filter': 'error',
+    },
+  },
+])

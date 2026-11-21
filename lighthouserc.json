@@ -1,0 +1,51 @@
+{
+  "//": "Lighthouse CI 설정 — 실행은 .github/workflows/lighthouse.yml(주 1회 + 수동). 근거는 그 워크플로 주석 참고.",
+  "//preset": "모바일 프리셋(느린 4G + 모바일 화면)을 쓴다. 이 앱의 사용자는 현장에서 폰으로 쓰므로 데스크톱 프리셋(현재 점수 0.98)은 회귀가 일어나도 오래 눈치채지 못한다. 단, CPU 스로틀 배수만 아래에서 1로 내린다.",
+  "//thresholds": "아래 값은 목표가 아니라 후퇴 방지선이며, **게이트가 실제로 도는 GitHub 러너의 실측**에서 잡았다(2026-08-24 실행 #6, master cdaafc9): performance 0.73~0.77 / LCP 4270~4750ms / FCP 3802~3852ms / CLS 0. 여기에 러너 변동폭만큼 여유를 더했다. 참고로 같은 빌드를 개발 기기에서 재면 performance 0.96 / LCP 2592~2718ms / FCP 1679~1740ms다 — 네트워크 조건은 같으므로 이 2.2배 차이는 순전히 러너 CPU가 우리 번들을 파싱·실행하는 속도다. 로컬 값으로 임계치를 잡으면 회귀가 없어도 매번 실패한다(그렇게 3회 연속 실패했다).",
+  "//thresholds-history": "이 게이트는 도입 후 3회 연속 실패했고, 원인은 임계치가 아니라 랜딩이 실제로 느렸다는 것이었다. 러너 실측을 근거로 세 가지를 차례로 닫았다: (#216) 측정 조건에서 CPU 4배 증폭 제거 — 효과 없음으로 CPU 가설이 반증됐다. (#217) 폰트 스타일시트를 cdn.jsdelivr.net에서 자체 호스팅으로 — 제3자 렌더 블로킹이 빠지며 FCP 7.5초 → 3.9초. (#218) 유튜브 임베드를 클릭 시 로드로 — 플레이어가 대역폭 경쟁에서 빠지며 LCP 8.1초 → 4.3초, LCP−FCP가 4.2초 → 0.45초. 종합 LCP 11.4초 → 4.3초, performance 0.57 → 0.77.",
+  "//thresholds-remaining": "남은 후보는 랜딩에서 두 번 로드되는 apis.google.com/js/api.js(Firebase Auth의 gapi iframe)다. 이번 재설정에는 반영하지 않았다 — Auth 초기화 경로를 건드리는 일이라 이득이 확인되지 않은 상태에서 로그인 흐름을 위험에 놓지 않는다. 그 정리를 하게 되면 실측을 다시 받아 임계치를 조여야 한다(느슨해진 값을 그대로 두면 그때의 개선이 방지선에 반영되지 않는다).",
+  "//off": "끈 항목들: 정적 파일 서버로 재는 값이라 실제 배포(Firebase Hosting)의 헤더·HTTPS 설정과 무관하거나, 번들 예산 검사(scripts/check-bundle-size.ts)가 이미 담당하는 것들.",
+  "ci": {
+    "collect": {
+      "staticDistDir": "./dist",
+      "//url": "`/index.html`을 직접 요청하면 정적 서버가 `/`로 리다이렉트해 **측정값에 리다이렉트 1회가 통째로 얹힌다**(실측 1061ms). 사용자가 실제로 여는 주소는 `/`이므로 그쪽으로 잰다.",
+      "url": ["http://localhost/"],
+      "numberOfRuns": 3,
+      "//throttling": "네트워크 시뮬레이션(느린 4G)은 프리셋 기본값을 그대로 두고 **CPU 증폭만 4배→1배로** 내린다. 공유 러너의 CPU는 이미 개발 기기보다 느린데(2026-08-23 실측 benchmarkIndex: 로컬 1756) 거기에 4배를 더 곱하면 LCP가 8.5~11.4초까지 벌어져 세 번의 주간 실행이 모두 실패했다. 이 랜딩의 LCP는 텍스트 노드이고 84%가 Render Delay(CSR)라 CPU 배수에 비선형으로 반응한다 — 즉 실패가 우리 코드의 회귀가 아니라 러너 CPU의 잡음이었다. 1배로 두면 러너 자체의 느림은 여전히 측정에 반영되므로 회귀 감지력은 유지된다.",
+      "settings": {
+        "chromeFlags": "--no-sandbox --disable-dev-shm-usage",
+        "throttling": {
+          "cpuSlowdownMultiplier": 1
+        }
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.7 }],
+        "categories:accessibility": ["error", { "minScore": 0.9 }],
+        "categories:best-practices": ["warn", { "minScore": 0.9 }],
+        "categories:seo": ["warn", { "minScore": 0.9 }],
+
+        "largest-contentful-paint": ["error", { "maxNumericValue": 5200 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+        "total-blocking-time": ["error", { "maxNumericValue": 300 }],
+        "first-contentful-paint": ["warn", { "maxNumericValue": 4200 }],
+        "speed-index": ["warn", { "maxNumericValue": 4200 }],
+
+        "unused-javascript": "off",
+        "uses-long-cache-ttl": "off",
+        "csp-xss": "off",
+        "errors-in-console": "off",
+        "is-on-https": "off",
+        "redirects-http": "off",
+        "installable-manifest": "off",
+        "valid-source-maps": "off",
+        "bf-cache": "off"
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": ".lighthouseci"
+    }
+  }
+}

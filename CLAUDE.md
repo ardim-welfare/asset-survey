@@ -1,0 +1,112 @@
+# CLAUDE.md
+
+재물조사(가칭, `asset-survey`) — 사회복지기관·비영리단체가 함께 쓰는 무료 재물조사 PWA. 개요는 [README.md](README.md), 기획은 [기획서.md](기획서.md), 결정은 [결정기록.md](결정기록.md), 운영 준비는 [OPERATIONS.md](OPERATIONS.md), 컨벤션은 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 이 저장소 고유 사항 (먼저 읽기)
+
+- **차량운행일지를 보일러플레이트로 복사해 시작했다**(2026-11-21, `fa069be9`). 코드 주석·`.agent/` 문서에 차량운행일지의 사례(Phase 번호·감사 날짜·차량·예약)가 남아 있다 — 원칙의 근거로 읽고, 차량 기능이 이 저장소에 있다고 가정하지 않는다.
+- **`docs/`는 참고 자료**(다른 기관 재물관리 앱 3종의 소스·문서)다. 린트·테스트 대상이 아니고, 이 프로젝트 문서는 루트에 둔다.
+- **Firebase 프로젝트가 아직 없다.** `.firebaserc` 기본값은 에뮬레이터 전용 `demo-asset-survey`다. 실제 프로젝트를 만들기 전에는 바꾸지 않는다.
+- **도메인을 코드에 박지 않는다.** 프론트는 `APP_URL`(`src/lib/constants.ts`)·`HOSTING_AUTH_DOMAINS`(`src/lib/authDomain.ts`), Functions는 `serviceUrl()`(`functions/src/utils/serviceUrl.ts`)을 쓴다.
+- **의존성 설치·변경은 npm 10**(`npx.cmd -y npm@10 ...`). npm 11이 만든 lockfile은 CI의 `npm ci`를 깬다.
+- 새 기관 단위 컬렉션을 만들면 `functions/src/services/organization/purgeOrganizationData.ts`의 `ORG_SCOPED`에 함께 넣는다(해지 기관 파기 대상).
+
+## 핵심 참조 (반드시 따를 것)
+
+- **에이전트 행동 규칙**: [.agent/agents.md](.agent/agents.md) — 절대 금지 목록(§1), 자동 교정 루프(§2), 작업별 체크리스트(§4), 판단 가이드(§5)
+- **세부 규칙**: [.agent/rules/](.agent/rules/) — coding-conventions, design-system, cloud-functions, firestore-rules 등 도메인별 규칙 파일
+- **스킬 가이드**: [.agent/skills/](.agent/skills/) — 작업별 패턴 가이드 (아래 테이블 참고)
+- **워크플로우**: [.agent/workflows/](.agent/workflows/) — `/deploy`, `/cleanup`, `/rollback` 등 자동화 스크립트
+
+## 스택 & 환경
+
+- React 19 + Vite 7 + TypeScript / TailwindCSS v4 / Zustand
+- Firebase (Auth + Firestore + Functions + Hosting + FCM) / Sentry / Gemini OCR
+- **Node 22 LTS 필수**(CI 기준). 차량운행일지에서는 Node 24로 Rollup 빌드가 실패했다(2026-11-21 이 PC에서는 Node 24 빌드가 통과했지만 기준은 그대로 22). `fnm use 22` 후 작업. fnm이 없는 PC에서는 빌드만 PR CI로 확인하고 lint·타입·테스트는 Node 24로 돌린다 → [agents.md §2.1](.agent/agents.md)
+- Cloud Functions는 Node 22. 소스는 `import`/`export`로 쓰지만 컴파일 결과는 CommonJS다 (`module: "commonjs"`) — ESM 전용 구문 금지. → [cloud-functions.md](.agent/rules/cloud-functions.md) §1
+
+## 명령어
+
+| 명령 | 용도 |
+|---|---|
+| `npm run dev` | 개발 서버 (localhost:5173) |
+| `npm run build` | 프로덕션 빌드 (prebuild: SW 설정, postbuild: 번들 크기 체크) |
+| `npm run type-check` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest 단위 |
+| `npm run test:e2e` | Playwright (chromium · mobile-chrome · mobile-safari) |
+| `npm run test:e2e:all` | Playwright 전체 브라우저 (+ 데스크톱 webkit) |
+| `npm run lighthouse` | Lighthouse CI — LCP/CLS/TBT 회귀 검사 (주간 워크플로와 동일 설정) |
+| `npm run test:rules` | Firestore Rules (에뮬레이터) |
+| `npm run health` | Cloud Functions 상태 점검 |
+| `npm run audit` | 보안 감사 |
+| `npm run check:release-notes` | 업데이트 소식 누락 감지 (사용자 화면 변경이 공지 없이 배포되는 것 차단) |
+| `npm run check:faq` | FAQ 누락 감지 (새 기능 공지가 자주 하는 질문에 실리지 않은 채 배포되는 것 차단) |
+| `npm run verify:harness` | 하네스 Doctor (지침·스킬·워크플로·훅 정합성, CI에서도 실행) |
+| `npm run verify:fast` | 빠른 검증 (Node 확인 + lint + 타입 검사) |
+| `npm run verify:full` | 전체 게이트 (fast + 커버리지 + Functions + 빌드 + Rules + E2E) |
+| `firebase deploy` | **로컬에서 직접 실행 금지** — 배포는 master 푸시 시 CI(Deploy 워크플로)가 수행한다. 로컬 배포를 병행하면 동일 함수 동시 업데이트 충돌이 발생. 긴급 시에만 CI 미실행을 확인하고 Node 22로 실행 |
+
+## 디렉토리 컨벤션
+
+- `src/components/` — 역할별 분리: `auth/`, `superAdmin/`, `admin/`, `employee/`, `common/`. 역할 경계 넘기지 않기.
+- `src/lib/firestore/` — **도메인별 파일 분리**. 컴포넌트에서는 `index.ts`를 통해 import. → [firestore-model-pattern](.agent/skills/firestore-model-pattern/SKILL.md) 참고.
+- `src/schemas/` — **Firestore 문서 모양의 단일 원본**(Zod). `src/types/`의 도메인 타입은 `z.infer<typeof xSchema> & FirestoreDoc`로 파생되므로, 필드 추가·수정은 **스키마에서만** 한다. 스키마에 빠뜨린 필드는 컨버터가 조용히 제거해 저장은 되고 조회는 안 되는 상태가 된다.
+- `src/types/` — 파생 도메인 타입 + 문서가 아닌 화면·폼 타입. 여기서 문서 인터페이스를 새로 선언하지 않는다.
+- `src/hooks/` — 비즈니스 로직을 컴포넌트에서 분리. → [add-hook](.agent/skills/add-hook/SKILL.md) 참고.
+- `src/store/` — Zustand 글로벌 UI 상태. 도메인 데이터는 Zustand에 넣지 않는다.
+- `functions/src/` — Cloud Functions. → [add-cloud-function](.agent/skills/add-cloud-function/SKILL.md) 참고. `index.ts`에서 export 필수.
+- `scripts/` — 일회성/운영 스크립트 (`tsx`로 실행).
+
+## 절대 규칙
+
+1. **`organizationId` 필터 필수** — Firestore 쿼리는 멀티테넌트. 누락 시 다른 기관 데이터가 새거나 권한 거부가 난다. tenant-scoped 도메인 파일(`src/lib/firestore/`)은 커스텀 ESLint 규칙 `local/require-organization-filter`가 정적으로 강제한다(전역 도메인 제외).
+2. **`firestore.indexes.json` 동기화** — 복합 쿼리 추가하면 인덱스도 추가.
+3. **`functions/src/index.ts` 등록** — 새 함수는 여기서 export하지 않으면 배포되지 않는다.
+4. **커밋 메시지는 한국어 + Conventional Commits** — `feat:`, `fix:`, `chore:`, `refactor:`. commitlint로 강제됨.
+5. **민감 정보 금지** — `.env`/`.env.local`은 절대 커밋·노출 금지. API 키는 코드에 하드코딩하지 않는다.
+6. **코드 수정 후 자동 교정 루프** — [agents.md §2](.agent/agents.md) 참고. lint → tsc → build → test 순서로 검증.
+
+## 스킬 참조 테이블
+
+`.agent/skills/`가 단일 원본이며, `scripts/sync-claude-agents.ts`가 이를 `.claude/skills/`(자동 발동 포인터)로 동기화하므로 Claude Code에서는 **아래 스킬이 자동 발동**된다(`npm run sync:agents`). 자동 발동되지 않더라도, 작업이 다음에 해당하면 해당 SKILL.md를 먼저 읽고 진행한다.
+
+| 작업 | 가이드 |
+|---|---|
+| Firestore 함수 추가 · 필드 추가/마이그레이션 · Zod 스키마 | [firestore-model-pattern](.agent/skills/firestore-model-pattern/SKILL.md) (문서 스키마는 `src/schemas/`가 단일 원본, 일괄 마이그레이션은 `scripts/migrate*.ts` 실물 스크립트를 본뜬다) |
+| Cloud Function 추가 (스케줄 포함) · 이메일 알림 | [add-cloud-function](.agent/skills/add-cloud-function/SKILL.md) |
+| 커스텀 훅 추가 | [add-hook](.agent/skills/add-hook/SKILL.md) |
+| 컴포넌트 추가 · 설정 UI · 토글/스위치 등 공용 컨트롤 · 차량 색상 표시 · 다크모드 점검 | [ui-patterns](.agent/skills/ui-patterns/SKILL.md) |
+| PDF/Excel 내보내기 | [data-export-pattern](.agent/skills/data-export-pattern/SKILL.md) |
+| 카카오 알림톡 | `functions/src/services/alimtalk/` 실물 코드를 본뜬다 (Cafe24 프록시 구조) |
+| Firebase 운영 비용 절감 · 쿼리 성능(Reads) 최적화 | [firebase-cost-reduction](.agent/skills/firebase-cost-reduction/SKILL.md) |
+| PWA 기능 추가 | [add-pwa-feature](.agent/skills/add-pwa-feature/SKILL.md) |
+| 테스트 작성 | [write-test](.agent/skills/write-test/SKILL.md) |
+| 배포 문제 진단 | [troubleshoot-deployment](.agent/skills/troubleshoot-deployment/SKILL.md) |
+| Sentry 노이즈 에러 필터 | [sentry-noise-filter](.agent/skills/sentry-noise-filter/SKILL.md) |
+| 업데이트 소식(공지) · FAQ 갱신 | [release-notes](.agent/skills/release-notes/SKILL.md) |
+| Gemini OCR 연동 | [gemini-ocr-integration](.agent/skills/gemini-ocr-integration/SKILL.md) |
+| 배포 전 점검 · 배포 | `/deploy` 워크플로 ([deploy.md](.agent/workflows/deploy.md)) |
+| 코드 정리 (미사용 코드·패키지) | `/cleanup` 워크플로 ([cleanup.md](.agent/workflows/cleanup.md)) |
+
+위 테이블의 스킬은 모두 `.claude/skills/`로 동기화되어 Claude Code에서 자동 발동된다. `.agent/workflows/`도 `.claude/commands/`로 동기화되어 `/deploy`, `/cleanup`, `/rollback` 등 **슬래시 커맨드**로 사용할 수 있다. 두 브리지 모두 `scripts/sync-claude-agents.ts`가 생성하므로 **원본은 항상 `.agent/`에서만 수정**하고 `npm run sync:agents`로 재생성한다 (CI가 `--check`로 강제).
+
+## 테스트 정책
+
+- 단위 테스트(Vitest)는 PR 머지 조건. lint-staged가 변경 파일 관련 테스트 자동 실행.
+- Firestore Rules 변경 시 `npm run test:rules`로 에뮬레이터 검증.
+- Cloud Functions 비즈니스 로직은 `functions/src/__tests__/`에 단위 테스트.
+
+## 에러/로깅
+
+- 프론트엔드 Sentry: [src/lib/sentry.ts](src/lib/sentry.ts) — `ignoreErrors` 리스트 + `beforeSend` 훅. 노이즈 에러는 여기에만 추가.
+- Functions Sentry: [functions/src/core/sentry.ts](functions/src/core/sentry.ts) — `captureError(err, ctx)` 사용. Discord 웹훅 병행.
+- 사용자 메시지 출력은 커스텀 토스트 — 컴포넌트에서는 `useToast().showToast`, 비-React 모듈에서는 `notifyUser`([src/lib/notify.ts](src/lib/notify.ts)). `alert()`·react-hot-toast 금지 (Phase 90에서 패키지 제거).
+
+## 작업 스타일
+
+- 응답은 한국어. 코드 주석도 한국어.
+- 자잘한 정리·리팩토링을 작업에 끼워 넣지 않는다 (사용자가 명시한 변경만).
+- 새 파일·문서 생성 전에 기존 파일 편집으로 끝나는지 먼저 확인.
+- 배포 후 환경 변경(Phase 회고, CHANGELOG, .env.example 등)은 `chore:` 커밋으로 별도 분리.
+- **PR 머지는 GitHub 자동 머지로 한다** — PR을 열면 `gh pr merge <번호> --auto --squash`를 걸어 둔다. 필수 검사가 전부 초록이 되면 GitHub가 머지하고, 머지가 곧 프로덕션 배포이므로 CI 초록은 타협하지 않는다. 미해결 리뷰 지적이 생기면 자동 머지를 풀고(`gh pr merge <번호> --disable-auto`) 고친다. 배포가 연달아 돌아도 Deploy 워크플로가 직전 배포와 간격을 두고 한도 초과를 재시도한다 → [ci-cd.md §2.4](.agent/rules/ci-cd.md). 배포(Deploy 워크플로) 결과는 확인해 보고한다. 사용자가 직접 판단하겠다고 말한 PR에는 자동 머지를 걸지 않는다.

@@ -1,0 +1,121 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# 환경변수 — 모든 변형을 기본 차단하고, 예시(*.example)와 에뮬레이터 설정만 명시 허용한다.
+# (.env.production/.development/.test, functions/.env.<project-id>, .runtimeconfig.json 등)
+.env
+.env.*
+functions/.env
+functions/.env.*
+.runtimeconfig.json
+!.env.example
+!.env.local.example
+!.env.emulator
+!functions/.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Debug / temp files
+func_logs*.txt
+*_test.json
+
+# Build / lint / analysis temp output
+build-*.txt
+build_*.txt
+eslint-errors*
+lint_*.txt
+lint-result.*
+lint-results*
+lint-analysis.*
+lint.json
+lint-text.txt
+git-diff.txt
+git_log*.txt
+reflog.txt
+test-output.txt
+tsc-*.txt
+tsc.log
+# Firebase
+.firebase/
+*-adminsdk-*.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Secrets — never commit these (env 파일은 위 "환경변수" 블록에서 일괄 차단)
+*.pem
+*.key
+# Firebase Admin SDK 서비스계정 키 (스크립트/스킬이 참조하는 파일명 — god-mode 자격증명, 커밋 금지)
+serviceAccountKey.json
+service-account.json
+*service*account*.json
+
+# Functions
+functions/node_modules/
+functions/lib/
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+.lighthouseci/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Scratch scripts & temp files (루트 잔존 방지)
+scripts/find_dark.mjs
+scripts/get_doc.cjs
+scripts/validate_doc.cjs
+scripts/test-zod.ts
+# 복구 스크립트가 쓰기 전에 남기는 원래 값(운행 기록 ID·km) — 되돌리기용, 커밋하지 않는다
+scripts/.backups/
+coverage-output*.txt
+deploy.log
+logs.txt
+npm-audit-report.txt
+
+# Scratch / 일회성 작업 디렉터리
+scratch/
+fix_dark_mode.py
+fix_touch_targets.py
+out.txt
+
+# Agent / AI
+# Claude Code 개인 권한 설정 — 공용 설정은 .claude/settings.json(추적), 개인 오버라이드는 로컬 전용
+.claude/settings.local.json
+# 브라우저 미리보기용 개발 서버 설정 — 도구가 자동 생성하고 포트·경로가 기기마다 다르다.
+# .claude/ 아래 스킬·커맨드 브리지 47개는 추적 대상이므로 디렉터리째 무시하지 않는다.
+.claude/launch.json
+# 일회성 외부 프롬프트 원문 — 작업 판단은 구현이력 Phase 209에 남겼다(원문 자체는 저장소에 둘 것이 아니다)
+docs/2026-09-05-Claude-Opus-개선프롬프트.md
+.gemini/
+.agents/
+.superpowers/
+.worktrees/
+.claude/worktrees/
+progress.md
+
+# 빌드 때 scripts/generate-sw-config.ts가 .env 값으로 만드는 파일 — 저장소에 두지 않는다
+public/firebase-messaging-sw.js

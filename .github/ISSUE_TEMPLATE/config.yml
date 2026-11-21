@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+# 저장소를 만든 뒤 보안 취약점 제보 링크(Security Advisory)를 여기에 단다:
+# contact_links:
+#   - name: 🔒 보안 취약점 제보
+#     url: https://github.com/<owner>/<repo>/security/advisories/new
+#     about: 보안 취약점은 공개 이슈 대신 비공개 Security Advisory로 제보해 주세요.
+contact_links: []
