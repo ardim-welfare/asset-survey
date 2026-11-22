@@ -67,7 +67,7 @@ export default function EmployeeManager() {
     return (
         <div className="max-w-4xl mx-auto animate-fade-in">
             <div className="mb-6">
-                <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">직원 관리</h1>
+                <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">팀·직원 관리</h1>
                 <p className="text-sm text-surface-600 dark:text-surface-400 mt-1" aria-live="polite">
                     총 {stats.total}명
                     {stats.active > 0 && <> · 활성 {stats.active}명</>}

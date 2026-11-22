@@ -73,23 +73,24 @@ export default function useTeams(orgId: string | null | undefined) {
         await save(teams.map((t) => (t.id === team.id ? { ...t, name } : t)), () => updateTeam(team.id, { name }), '팀 이름을 바꾸지 못했습니다.');
     }, [confirm, teams, showToast, save]);
 
-    /** 숨기기 — 팀원이 남아 있으면 막는다(먼저 다른 팀으로 옮기게) */
+    /** 삭제(실제로는 숨김) — 팀원이 남아 있으면 막는다(먼저 다른 팀으로 옮기게).
+     *  공간 담당·사전 등록·지난 기록이 팀을 가리키므로 문서는 지우지 않고 archived로 둔다 */
     const archiveTeam = useCallback(async (team: Team, memberCount: number) => {
         if (memberCount > 0) {
             showToast(`'${team.name}'에 직원 ${memberCount}명이 있습니다. 먼저 다른 팀으로 옮기세요.`, 'warning');
             return;
         }
         const ok = await confirm({
-            title: '팀 숨기기',
-            message: `'${team.name}' 팀을 숨길까요? 숨긴 팀은 고를 수 없지만 지워지지 않습니다.`,
-            confirmText: '숨기기', confirmColor: 'warning',
+            title: `'${team.name}' 팀을 삭제할까요?`,
+            message: '팀 고르는 목록에서 빠집니다. 잘못 지웠으면 [팀 고치기]의 \'삭제한 팀\'에서 되살릴 수 있습니다.',
+            confirmText: '삭제', confirmColor: 'danger',
         });
         if (!ok) return;
-        await save(teams.map((t) => (t.id === team.id ? { ...t, archived: true } : t)), () => updateTeam(team.id, { archived: true }), '팀을 숨기지 못했습니다.');
+        await save(teams.map((t) => (t.id === team.id ? { ...t, archived: true } : t)), () => updateTeam(team.id, { archived: true }), '팀을 삭제하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.');
     }, [confirm, teams, showToast, save]);
 
     const restoreTeam = useCallback(async (team: Team) => {
-        await save(teams.map((t) => (t.id === team.id ? { ...t, archived: false } : t)), () => updateTeam(team.id, { archived: false }), '팀을 다시 꺼내지 못했습니다.');
+        await save(teams.map((t) => (t.id === team.id ? { ...t, archived: false } : t)), () => updateTeam(team.id, { archived: false }), '팀을 되살리지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.');
     }, [teams, save]);
 
     return { teams, activeTeams, archivedTeams, teamName, loading, busy, reload: load, addTeam, renameTeam, archiveTeam, restoreTeam };

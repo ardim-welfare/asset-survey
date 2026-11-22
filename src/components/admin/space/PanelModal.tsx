@@ -18,13 +18,20 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 
 export default function PanelModal({ open, title, titleId, onClose, children }: Props) {
     const ref = useRef<HTMLDivElement>(null);
+    // onClose는 부르는 쪽에서 매번 새로 만들어질 수 있다 — 효과가 다시 돌면 글자를 칠 때마다
+    // 초점이 첫 칸·여는 버튼으로 튀므로, 최신 함수만 ref에 담고 효과는 open에만 묶는다
+    const onCloseRef = useRef(onClose);
+    useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
     useEffect(() => {
         if (!open) return;
         const opener = document.activeElement as HTMLElement | null;
         const timer = setTimeout(() => ref.current?.querySelector<HTMLElement>('input, select, textarea, button:not([data-close])')?.focus(), 50);
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') { onClose(); return; }
+            // 창 안에서 연 확인 창(ConfirmModal)이 초점을 가진 동안은 그쪽에 맡긴다
+            const otherDialog = (document.activeElement as HTMLElement | null)?.closest('[role="dialog"]');
+            if (otherDialog && otherDialog !== ref.current) return;
+            if (e.key === 'Escape') { onCloseRef.current(); return; }
             if (e.key !== 'Tab' || !ref.current) return;
             const items = Array.from(ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
             if (items.length === 0) return;
@@ -39,7 +46,7 @@ export default function PanelModal({ open, title, titleId, onClose, children }: 
             window.removeEventListener('keydown', onKey);
             opener?.focus?.();
         };
-    }, [open, onClose]);
+    }, [open]);
 
     if (!open) return null;
 
