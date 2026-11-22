@@ -59,7 +59,7 @@ import type { ParsedAsset, ParseResult } from '../../../lib/import/parseSheet';
 import type { Asset } from '../../../types/asset';
 
 const row = (code: string, over: Partial<ParsedAsset> = {}): ParsedAsset => ({
-    rowNumber: 4, code, name: 'TV', category: null, spec: null, acquiredAt: null, acquiredQuantity: null, quantity: 1,
+    rowNumber: 4, code, name: 'TV', category: null, spec: null, acquiredAt: null, acquiredQuantity: null, quantity: 1, usefulLife: null,
     status: 'active', statusRaw: null, location: '101호', department: null, usage: null,
     amount: 1000, depreciation: null, residual: null, ...over,
 });

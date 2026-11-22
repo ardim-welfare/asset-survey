@@ -15,7 +15,7 @@ export type HistoryEntry = z.infer<typeof historySchema> & FirestoreDoc;
 
 /** 재물 문서에서 가져오기가 채우는 값 */
 export type AssetFields = Pick<Asset,
-    'code' | 'name' | 'category' | 'spec' | 'acquiredAt' | 'acquiredQuantity' | 'quantity'
+    'code' | 'name' | 'category' | 'spec' | 'acquiredAt' | 'acquiredQuantity' | 'quantity' | 'usefulLife'
     | 'status' | 'statusRaw' | 'locationRaw' | 'spaceId' | 'department' | 'usage'>;
 
 /** 금액 문서에서 가져오기가 채우는 값 */

@@ -10,7 +10,7 @@
  */
 
 export type ImportField =
-    | 'code' | 'name' | 'category' | 'acquiredAt' | 'quantity' | 'acquiredQuantity'
+    | 'code' | 'name' | 'category' | 'acquiredAt' | 'quantity' | 'acquiredQuantity' | 'usefulLife'
     | 'amount' | 'depreciation' | 'residual'
     | 'status' | 'location' | 'department' | 'usage' | 'spec';
 
@@ -41,6 +41,7 @@ export const IMPORT_FIELDS: ImportFieldDef[] = [
     { field: 'status', label: '자산상태', aliases: ['자산상태', '사용상태', '운영상태', '상태'] },
     { field: 'location', label: '위치', aliases: ['자산위치', '현재위치', '설치장소', '설치위치', '사용장소', '보관장소', '소재지', '위치', '장소'] },
     { field: 'department', label: '부서', aliases: ['운영부서', '관리부서', '담당부서', '사용부서', '부서'] },
+    { field: 'usefulLife', label: '내용연수(년)', aliases: ['내용연수', '내용년수', '내구연한', '내구년한', '내구연수', '사용연한', '사용가능연수'] },
     { field: 'usage', label: '용도', aliases: ['용도', '자산명세', '명세', '비고'] },
 ];
 

@@ -22,7 +22,7 @@ export const NO_LOCATION_KEY = '(위치 없음)';
 export const locationKey = (location: string | null): string => location ?? NO_LOCATION_KEY;
 
 export const ASSET_COMPARE_FIELDS = [
-    'name', 'category', 'spec', 'acquiredAt', 'acquiredQuantity', 'quantity',
+    'name', 'category', 'spec', 'acquiredAt', 'acquiredQuantity', 'quantity', 'usefulLife',
     'status', 'statusRaw', 'locationRaw', 'spaceId', 'department', 'usage',
 ] as const satisfies ReadonlyArray<keyof AssetFields>;
 
@@ -33,7 +33,7 @@ export type CompareField = (typeof ASSET_COMPARE_FIELDS)[number] | (typeof ACCOU
 /** 비교·이력에 쓰는 필드 이름 (가져오기 비교 화면·재물 상세 이력이 함께 쓴다) */
 export const COMPARE_FIELD_LABEL: Record<CompareField, string> = {
     name: '품명', category: '분류', spec: '규격', acquiredAt: '취득일자', acquiredQuantity: '취득수량',
-    quantity: '현재수량', status: '상태', statusRaw: '상태(원문)', locationRaw: '위치(원문)', spaceId: '공간',
+    quantity: '현재수량', usefulLife: '내용연수(년)', status: '상태', statusRaw: '상태(원문)', locationRaw: '위치(원문)', spaceId: '공간',
     department: '부서', usage: '용도', amount: '자산금액', depreciation: '감가상각충당금', residual: '잔존가액',
     missingFromSource: '대장에 없음',
 };
@@ -75,6 +75,7 @@ export function toDraft(orgId: string, row: ParsedAsset, locationMap: LocationSp
         fields: {
             code: row.code, name: row.name, category: row.category, spec: row.spec,
             acquiredAt: row.acquiredAt, acquiredQuantity: row.acquiredQuantity, quantity: row.quantity,
+            usefulLife: row.usefulLife,
             status: row.status, statusRaw: row.statusRaw, locationRaw: row.location, spaceId,
             department: row.department, usage: row.usage,
         },

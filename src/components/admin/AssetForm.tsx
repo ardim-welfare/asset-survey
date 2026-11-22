@@ -116,6 +116,11 @@ export default function AssetForm() {
                     <Field id="asset-quantity" label="현재수량">
                         <input id="asset-quantity" type="number" min={0} inputMode="numeric" className="input w-full min-h-[48px]" value={v.quantity} aria-invalid={f.errorField === 'quantity' || undefined} onChange={(e) => f.set('quantity', e.target.value)} />
                     </Field>
+                    <Field id="asset-usefulLife" label="내용연수(년)" hint="쓸 수 있는 햇수. 취득일자와 함께 넣으면 지난 재물을 표시합니다.">
+                        <input id="asset-usefulLife" type="number" min={0} max={100} step="any" inputMode="decimal" className="input w-full min-h-[48px]" value={v.usefulLife}
+                            placeholder="예: 5" aria-describedby="asset-usefulLife-hint" aria-invalid={f.errorField === 'usefulLife' || undefined}
+                            onChange={(e) => f.set('usefulLife', e.target.value)} />
+                    </Field>
                     <Field id="asset-amount" label="자산금액(원)" hint="관리자만 봅니다.">
                         <input id="asset-amount" type="text" inputMode="numeric" className="input w-full min-h-[48px] tabular-nums" value={v.amount}
                             aria-describedby="asset-amount-hint" aria-invalid={f.errorField === 'amount' || undefined} placeholder="예: 250,000" onChange={(e) => f.set('amount', formatAmountInput(e.target.value))} />

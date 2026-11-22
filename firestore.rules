@@ -307,7 +307,7 @@ service cloud.firestore {
     }
     function assetDataValid(d) {
       return d.keys().hasOnly(['organizationId', 'code', 'name', 'category', 'spec', 'acquiredAt',
-                               'acquiredQuantity', 'quantity', 'status', 'statusRaw', 'locationRaw',
+                               'acquiredQuantity', 'quantity', 'usefulLife', 'status', 'statusRaw', 'locationRaw',
                                'spaceId', 'department', 'usage', 'missingFromSource', 'manual', 'lastImportId',
                                'tagId', 'photoUrl', 'photoThumbUrl', 'photoPath', 'photoThumbPath',
                                'lastEditedByUid', 'createdAt', 'updatedAt'])
@@ -316,6 +316,9 @@ service cloud.firestore {
              && nullableString(d.name, 200) && nullableString(d.category, 100) && nullableString(d.spec, 200)
              && nullableString(d.acquiredAt, 10)
              && nullableNumber(d.acquiredQuantity) && nullableNumber(d.quantity)
+             // 내용연수(햇수, 2026-11-22) — 0~100. 예전 문서에는 없다(src/lib/usefulLife.ts USEFUL_LIFE_MAX)
+             && (!('usefulLife' in d) || d.usefulLife == null
+                 || (d.usefulLife is number && d.usefulLife >= 0 && d.usefulLife <= 100))
              && d.status in ['active', 'inactive', 'disposed']
              && nullableString(d.statusRaw, 50) && nullableString(d.locationRaw, 200)
              && nullableString(d.spaceId, 100)

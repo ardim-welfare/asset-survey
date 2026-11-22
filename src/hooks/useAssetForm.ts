@@ -6,6 +6,7 @@
  * (화면이 안내한다).
  */
 import { useCallback, useEffect, useState } from 'react';
+import { USEFUL_LIFE_MAX } from '../lib/usefulLife';
 import { useAuth } from './useAuth';
 import { useToast } from './useToast';
 import {
@@ -25,6 +26,8 @@ export interface AssetFormValues {
     spec: string;
     acquiredAt: string;
     quantity: string;
+    /** 내용연수(햇수) */
+    usefulLife: string;
     status: AssetStatus;
     spaceId: string;
     department: string;
@@ -33,7 +36,7 @@ export interface AssetFormValues {
 }
 
 export const EMPTY_ASSET_FORM: AssetFormValues = {
-    code: '', name: '', category: '', spec: '', acquiredAt: '', quantity: '1', status: 'active',
+    code: '', name: '', category: '', spec: '', acquiredAt: '', quantity: '1', usefulLife: '', status: 'active',
     spaceId: '', department: '', usage: '', amount: '',
 };
 
@@ -57,6 +60,7 @@ export function errorFieldOf(message: string): keyof AssetFormValues | null {
     if (/품명/.test(message)) return 'name';
     if (/취득일자/.test(message)) return 'acquiredAt';
     if (/수량/.test(message)) return 'quantity';
+    if (/내용연수/.test(message)) return 'usefulLife';
     if (/자산금액/.test(message)) return 'amount';
     return null;
 }
@@ -72,6 +76,8 @@ export function validateAssetForm(v: AssetFormValues, isNew: boolean): string | 
     if (v.acquiredAt && !/^\d{4}-\d{2}-\d{2}$/.test(v.acquiredAt)) return '취득일자는 2024-03-15처럼 넣어 주세요.';
     const q = toNumber(v.quantity);
     if (q !== null && (!Number.isInteger(q) || q < 0)) return '수량은 0 이상의 정수로 넣어 주세요.';
+    const life = toNumber(v.usefulLife.replace(/년$/, ''));
+    if (life !== null && (!Number.isFinite(life) || life < 0 || life > USEFUL_LIFE_MAX)) return `내용연수는 0~${USEFUL_LIFE_MAX} 사이 햇수로 넣어 주세요.`;
     const a = toNumber(v.amount);
     if (a !== null && (!Number.isFinite(a) || a < 0)) return '자산금액은 숫자(원)로 넣어 주세요.';
     return null;
@@ -83,7 +89,7 @@ export function toManualFields(v: AssetFormValues): { fields: ManualAssetFields;
     return {
         fields: {
             name: t(v.name), category: t(v.category), spec: t(v.spec), acquiredAt: t(v.acquiredAt),
-            quantity: toNumber(v.quantity), status: v.status, spaceId: v.spaceId || null,
+            quantity: toNumber(v.quantity), usefulLife: toNumber(v.usefulLife.replace(/년$/, '')), status: v.status, spaceId: v.spaceId || null,
             department: t(v.department), usage: t(v.usage),
         },
         amount: toNumber(v.amount),
@@ -94,7 +100,7 @@ function fromAsset(a: Asset, acc: AssetAccounting | null): AssetFormValues {
     const s = (x: string | null) => x ?? '';
     return {
         code: a.code, name: s(a.name), category: s(a.category), spec: s(a.spec), acquiredAt: s(a.acquiredAt),
-        quantity: a.quantity == null ? '' : String(a.quantity), status: a.status, spaceId: a.spaceId ?? '',
+        quantity: a.quantity == null ? '' : String(a.quantity), usefulLife: a.usefulLife == null ? '' : String(a.usefulLife), status: a.status, spaceId: a.spaceId ?? '',
         department: s(a.department), usage: s(a.usage), amount: acc?.amount == null ? '' : formatAmountInput(String(acc.amount)),
     };
 }

@@ -954,6 +954,12 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertSucceeds(db.collection('assets').doc('org-A__m-1').set(assetDoc('A', 'admin_A', { code: 'm-1', manual: true, lastImportId: null })));
       await assertFails(db.collection('assets').doc('org-A__m-2').set(assetDoc('A', 'admin_A', { code: 'm-2', manual: 'yes' })));
       await assertFails(emp('A', 1).collection('assets').doc('org-A__m-3').set(assetDoc('A', 'emp_A1', { code: 'm-3', manual: true })));
+      // 내용연수(2026-11-22)는 0~100 숫자 또는 null, 없어도 된다(예전 문서)
+      await assertSucceeds(db.collection('assets').doc('org-A__u-1').set(assetDoc('A', 'admin_A', { code: 'u-1', usefulLife: 5 })));
+      await assertSucceeds(db.collection('assets').doc('org-A__u-2').set(assetDoc('A', 'admin_A', { code: 'u-2', usefulLife: null })));
+      await assertFails(db.collection('assets').doc('org-A__u-3').set(assetDoc('A', 'admin_A', { code: 'u-3', usefulLife: '5년' })));
+      await assertFails(db.collection('assets').doc('org-A__u-4').set(assetDoc('A', 'admin_A', { code: 'u-4', usefulLife: 101 })));
+      await assertFails(db.collection('assets').doc('org-A__u-5').set(assetDoc('A', 'admin_A', { code: 'u-5', usefulLife: -1 })));
       // 대표 사진 값(2026-11-22)은 글자 또는 null
       await assertSucceeds(db.collection('assets').doc('org-A__p-1').set(assetDoc('A', 'admin_A', {
         code: 'p-1', photoUrl: 'https://x/y.jpg', photoThumbUrl: 'https://x/t.jpg', photoPath: 'organizations/org-A/assets/org-A__p-1/photo-1.jpg', photoThumbPath: null,

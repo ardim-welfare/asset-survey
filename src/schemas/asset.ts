@@ -29,6 +29,8 @@ export const assetSchema = z.object({
     acquiredAt: z.string().nullable().catch(null),
     acquiredQuantity: z.number().nullable().catch(null),
     quantity: z.number().nullable().catch(null),
+    // 내용연수(내구연한, 햇수) — 2026-11-22. 예전 문서에는 없다
+    usefulLife: z.number().nullable().optional().catch(null),
     status: assetStatusSchema.catch('active'),
     statusRaw: z.string().nullable().catch(null),
     locationRaw: z.string().nullable().catch(null),

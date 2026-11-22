@@ -8,7 +8,7 @@ import type { Asset, AssetAccounting } from '../../../types/asset';
 
 const row = (over: Partial<ParsedAsset>): ParsedAsset => ({
     rowNumber: 4, code: '1-1-1', name: 'TV', category: '비품', spec: null, acquiredAt: '2021-03-13',
-    acquiredQuantity: 1, quantity: 1, status: 'active', statusRaw: '운영', location: '101호',
+    acquiredQuantity: 1, quantity: 1, usefulLife: null, status: 'active', statusRaw: '운영', location: '101호',
     department: '지원팀', usage: null, amount: 450000, depreciation: 449000, residual: 1000, ...over,
 });
 

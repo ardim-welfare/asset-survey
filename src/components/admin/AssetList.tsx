@@ -9,7 +9,8 @@ import { Link } from 'react-router-dom';
 import useAssetList, { buildingFilter, floorFilter, checkedAtOf, DEFAULT_FILTERS, type AssetFilters } from '../../hooks/useAssetList';
 import { toLocalDateStr } from '../../lib/dateUtils';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
-import { StatusBadge, MissingBadge } from '../common/AssetBadges';
+import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from '../common/AssetBadges';
+import { isUsefulLifeOver, todayText } from '../../lib/usefulLife';
 import LabelPrintDialog from './LabelPrintDialog';
 import type { Asset } from '../../types/asset';
 import type { Space } from '../../types/space';
@@ -22,6 +23,7 @@ export default function AssetList() {
     const al = useAssetList();
     const [printing, setPrinting] = useState(false);
     const { filters, setFilter } = al;
+    const today = todayText(); // 내용연수 지남 판단 기준일(한 번만 계산)
 
     const where = (a: Asset) => (a.spaceId ? al.spaceName.get(a.spaceId) ?? '(지운 공간)' : null);
     /** 마지막 확인 날짜 — 한 번도 확인하지 않았으면 null */
@@ -122,7 +124,7 @@ export default function AssetList() {
                                                 <td className="p-3 text-surface-900 dark:text-surface-100">
                                                     <span className="flex items-center gap-2">
                                                         <Thumb asset={a} size="w-9 h-9" />
-                                                        <span>{a.name ?? '-'} {a.missingFromSource && <MissingBadge />}</span>
+                                                        <span>{a.name ?? '-'} {a.missingFromSource && <MissingBadge />} {isUsefulLifeOver(a, today) && <UsefulLifeOverBadge />}</span>
                                                     </span>
                                                 </td>
                                                 <td className="p-3 text-surface-600 dark:text-surface-300">{a.category ?? '-'}</td>
@@ -153,6 +155,7 @@ export default function AssetList() {
                                                 <span className="font-mono text-sm font-semibold text-surface-900 dark:text-surface-100">{a.code}</span>
                                                 <StatusBadge status={a.status} />
                                                 {a.missingFromSource && <MissingBadge />}
+                                                {isUsefulLifeOver(a, today) && <UsefulLifeOverBadge />}
                                             </div>
                                             <p className="text-sm text-surface-800 dark:text-surface-200 line-clamp-2 break-keep">{a.name ?? '-'}</p>
                                             <p className={sub}>

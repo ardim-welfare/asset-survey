@@ -9,6 +9,7 @@
  *  - 코드 없는 소계·합계 줄이 섞여 있다 → 재물로 세지 않고, 합계 금액은 대조에 쓴다.
  */
 import type { WorkBook, WorkSheet } from 'xlsx';
+import { parseUsefulLife } from '../usefulLife';
 import { headerScore, type ColumnMap, type ImportField, FIELD_DEF } from './columns';
 import { toText, toNumber, toDateText, toStatus, isTotalRow, type AssetStatus } from './values';
 
@@ -94,6 +95,8 @@ export interface ParsedAsset {
     acquiredAt: string | null;
     acquiredQuantity: number | null;
     quantity: number | null;
+    /** 내용연수(햇수) */
+    usefulLife: number | null;
     status: AssetStatus;
     statusRaw: string | null;
     location: string | null;
@@ -173,6 +176,8 @@ export function parseAssets(table: ImportTable, map: ColumnMap): ParseResult {
             if (invalid) problem(field, `${FIELD_DEF[field].label}을(를) 숫자로 읽지 못해 비워 둡니다`);
             return value;
         };
+        const life = parseUsefulLife(get(cells, 'usefulLife'));
+        if (life.invalid) problem('usefulLife', '내용연수를 햇수(0~100)로 읽지 못해 비워 둡니다');
         const date = toDateText(get(cells, 'acquiredAt'));
         if (date.invalid) problem('acquiredAt', '취득일자를 날짜로 읽지 못해 비워 둡니다');
         const statusRaw = toText(get(cells, 'status'));
@@ -188,6 +193,7 @@ export function parseAssets(table: ImportTable, map: ColumnMap): ParseResult {
             acquiredAt: date.value,
             acquiredQuantity: num('acquiredQuantity'),
             quantity: num('quantity'),
+            usefulLife: life.value,
             status, statusRaw,
             location: toText(get(cells, 'location')),
             department: toText(get(cells, 'department')),

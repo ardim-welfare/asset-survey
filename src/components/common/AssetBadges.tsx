@@ -15,6 +15,11 @@ export function StatusBadge({ status }: { status: AssetStatus }) {
     return <span className={`${STATUS_CLASS[status]} whitespace-nowrap`}>{ASSET_STATUS_LABEL[status]}</span>;
 }
 
+/** 내용연수(내구연한)가 지난 재물 (2026-11-22) — 바꿀 때가 됐는지 살펴볼 대상 */
+export function UsefulLifeOverBadge() {
+    return <span className="badge-warning whitespace-nowrap">내용연수 지남</span>;
+}
+
 /** 마지막 가져오기 파일에 없던 재물 */
 export function MissingBadge() {
     return (

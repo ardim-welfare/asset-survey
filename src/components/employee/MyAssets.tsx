@@ -9,7 +9,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getMySpaces, getAssetsBySpaces } from '../../lib/firestore';
 import { sortAssets, filterAssets, DEFAULT_FILTERS } from '../../hooks/useAssetList';
-import { StatusBadge, MissingBadge } from '../common/AssetBadges';
+import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from '../common/AssetBadges';
+import { isUsefulLifeOver } from '../../lib/usefulLife';
 import type { Asset } from '../../types/asset';
 import type { Space } from '../../types/space';
 
@@ -112,6 +113,7 @@ export default function MyAssets() {
                                             <span className="font-mono text-sm font-semibold text-surface-900 dark:text-surface-100">{a.code}</span>
                                             {a.status !== 'active' && <StatusBadge status={a.status} />}
                                             {a.missingFromSource && <MissingBadge />}
+                                            {isUsefulLifeOver(a) && <UsefulLifeOverBadge />}
                                         </div>
                                         <p className="text-sm text-surface-800 dark:text-surface-200 line-clamp-2 break-keep">{a.name ?? '-'}</p>
                                         {current === 'all' && <p className={sub}>{spaces.find((s) => s.id === a.spaceId)?.name ?? ''}</p>}

@@ -8,7 +8,8 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import useAssetDetail from '../../hooks/useAssetDetail';
-import { StatusBadge, MissingBadge } from './AssetBadges';
+import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from './AssetBadges';
+import { usefulLifeEnd, isUsefulLifeOver } from '../../lib/usefulLife';
 import AssetPhoto from './AssetPhoto';
 import { COMPARE_FIELD_LABEL, type CompareField } from '../../lib/import/diff';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
@@ -95,11 +96,17 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
     }
 
     const a = d.asset;
+    const lifeOver = isUsefulLifeOver(a);
     const rows: Array<[string, string | null]> = [
         ['분류', a.category],
         ['규격', a.spec],
         ['취득일자', a.acquiredAt],
         ['수량', a.quantity == null ? null : `${a.quantity}${a.acquiredQuantity != null && a.acquiredQuantity !== a.quantity ? ` (취득 ${a.acquiredQuantity})` : ''}`],
+        // 내용연수 — 취득일자가 있으면 끝나는 날도 함께(2026-11-22)
+        ['내용연수', a.usefulLife == null ? null : (() => {
+            const end = usefulLifeEnd(a.acquiredAt, a.usefulLife);
+            return `${a.usefulLife}년${end ? ` (${end}까지${lifeOver ? ' · 지났습니다' : ''})` : ''}`;
+        })()],
         ['공간', d.space ? `${d.space.name}${d.space.archived ? ' (숨김)' : ''}` : a.spaceId ? '(지운 공간)' : '미지정'],
         ['대장의 위치', a.locationRaw],
         ['마지막 확인', justChecked ? '방금 (QR)' : checkText(d.check, d.spaces)],
@@ -124,6 +131,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                     <StatusBadge status={a.status} />
                     {a.missingFromSource && <MissingBadge />}
+                    {lifeOver && <UsefulLifeOverBadge />}
                 </div>
                 <h1 className="text-xl font-bold text-surface-900 dark:text-surface-100 break-keep">{a.name ?? '(품명 없음)'}</h1>
                 <p className="font-mono text-surface-700 dark:text-surface-300">{a.code}</p>

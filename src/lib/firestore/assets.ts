@@ -338,11 +338,11 @@ export const commitImport = async (input: CommitImportInput): Promise<string> =>
 
 /** 화면에서 직접 고치는 재물 값 — 자산코드는 등록 때만 정한다(문서 ID라 바꾸지 않는다) */
 export type ManualAssetFields = Pick<Asset,
-    'name' | 'category' | 'spec' | 'acquiredAt' | 'quantity' | 'status' | 'spaceId' | 'department' | 'usage'>;
+    'name' | 'category' | 'spec' | 'acquiredAt' | 'quantity' | 'usefulLife' | 'status' | 'spaceId' | 'department' | 'usage'>;
 
 /** 비교·이력에 쓰는 직접 수정 필드 */
 export const MANUAL_EDIT_FIELDS = [
-    'name', 'category', 'spec', 'acquiredAt', 'quantity', 'status', 'spaceId', 'department', 'usage',
+    'name', 'category', 'spec', 'acquiredAt', 'quantity', 'usefulLife', 'status', 'spaceId', 'department', 'usage',
 ] as const satisfies ReadonlyArray<keyof ManualAssetFields>;
 
 /**

@@ -104,6 +104,22 @@ describe('parseAssets', () => {
         expect(blockingReasons(map, r)).toEqual([expect.stringMatching(/겹치는 줄이 1건/)]);
     });
 
+    it('내용연수(내구연한) 열을 알아보고 "5년"도 햇수로 읽는다 (2026-11-22)', async () => {
+        const [sheet] = await readWorkbook(workbook({ s: [
+            ['자산코드', '품명', '취득일자', '내구연한'],
+            ['B1', '책상', '2021-03-15', '5년'],
+            ['B2', '의자', '2021-03-15', 8],
+            ['B3', '선반', '2021-03-15', '영구'],
+            ['B4', '탁자', '2021-03-15', ''],
+        ] }));
+        const table = toImportTable(sheet)!;
+        const map = autoMapColumns(table.headers);
+        expect(map.usefulLife).toBe('내구연한');
+        const r = parseAssets(table, map);
+        expect(r.assets.map((a) => a.usefulLife)).toEqual([5, 8, null, null]);
+        expect(r.problems.map((p) => [p.rowNumber, p.field])).toEqual([[4, 'usefulLife']]);
+    });
+
     it('필수 열을 고르지 않았거나 가져올 재물이 없으면 확정을 막는다', () => {
         expect(blockingReasons({}, null)).toEqual(['자산코드 열을 골라 주세요.', '품명 열을 골라 주세요.']);
         const empty = parseAssets({ sheetName: 's', headerRowIndex: 0, headers: ['자산코드', '품명'], dataRows: [] }, { code: '자산코드', name: '품명' });
