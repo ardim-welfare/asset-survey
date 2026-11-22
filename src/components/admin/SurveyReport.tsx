@@ -100,7 +100,7 @@ export default function SurveyReport() {
             {overview && overview.rows[0] && (
                 <section className={card} aria-labelledby="overview-title">
                     <h2 id="overview-title" className="font-semibold text-surface-900 dark:text-surface-100 mb-3">종합</h2>
-                    <dl className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+                    <dl className={`grid grid-cols-3 sm:grid-cols-5 gap-2 ${overview.columns.length > 9 ? 'lg:grid-cols-10' : 'lg:grid-cols-9'}`}>
                         {overview.columns.map((c, j) => (
                             <div key={c} className="rounded-xl bg-surface-50 dark:bg-surface-800 p-2.5">
                                 <dt className={`${sub} break-keep`}>{c}</dt>

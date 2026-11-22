@@ -112,12 +112,17 @@ export function buildReportTables(ctx: ReportContext): ReportTable[] {
         const l = hasLocation ? loc(key) : '';
         return l ? `${l} ${spaceName(key)}` : spaceName(key);
     };
+    // 내용연수 지난 대상(조사 끝 날 기준) — 내용연수를 적은 대상이 있는 회차만 종합·표에 더한다(2026-11-22)
+    const hasLife = !!report.aged?.length;
+    const lifeOver = (report.aged ?? []).filter((i) => isUsefulLifeOver(i, ctx.survey.endDate));
 
     return [
         {
             title: '종합',
-            columns: ['대상', '확인', '미발견', '다른 공간', '미등록', '범위 밖', '파손·불용 필요', '라벨 훼손', '직접 입력(재확인)'],
-            rows: [[s.target, s.found, s.missing, s.otherSpace, s.unregistered, s.outOfScope, s.damaged, s.labelDamaged, s.manual]],
+            columns: ['대상', '확인', '미발견', '다른 공간', '미등록', '범위 밖', '파손·불용 필요', '라벨 훼손', '직접 입력(재확인)',
+                ...(hasLife ? ['내용연수 지남'] : [])],
+            rows: [[s.target, s.found, s.missing, s.otherSpace, s.unregistered, s.outOfScope, s.damaged, s.labelDamaged, s.manual,
+                ...(hasLife ? [lifeOver.length] : [])]],
             empty: '',
         },
         ...(hasLocation ? [{
@@ -180,11 +185,10 @@ export function buildReportTables(ctx: ReportContext): ReportTable[] {
         },
         // 내용연수가 지난 대상(2026-11-22) — 조사 끝 날 기준. 내용연수를 적은 재물이 하나도 없으면 표를 빼
         // (쓰지 않는 기관·예전 회차의 보고서는 예전과 같다)
-        ...(report.aged?.length ? [{
+        ...(hasLife ? [{
             title: LIFE_OVER_TABLE_TITLE,
             columns: ['자산코드', '품명', '목록상 공간', '취득일자', '내용연수(년)', '끝난 날', '이번 조사'],
-            rows: report.aged
-                .filter((i) => isUsefulLifeOver(i, ctx.survey.endDate))
+            rows: lifeOver
                 .map((i) => [i.code, i.name ?? '', where(i.spaceKey), i.acquiredAt ?? '', i.usefulLife ?? '',
                     usefulLifeEnd(i.acquiredAt, i.usefulLife) ?? '', i.found ? '확인' : '미발견']),
             empty: `조사 끝 날(${ctx.survey.endDate}) 기준으로 내용연수가 지난 재물이 없습니다.`,

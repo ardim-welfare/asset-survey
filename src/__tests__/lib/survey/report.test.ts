@@ -150,8 +150,13 @@ describe('보고서 표·PDF', () => {
             ['1', '책상', '101호', '2018-01-01', 5, '2023-01-01', '확인'],
             ['6', '서랍', '101호', '2020-12-01', 6, '2026-12-01', '미발견'],
         ]);
-        // 내용연수를 적은 대상이 하나도 없는 회차(예전 회차)는 표를 넣지 않는다
+        // 종합에도 지난 수가 칸으로 붙는다
+        const overview = tables.find((x) => x.title === '종합')!;
+        expect(overview.columns[overview.columns.length - 1]).toBe('내용연수 지남');
+        expect(overview.rows[0][overview.rows[0].length - 1]).toBe(2);
+        // 내용연수를 적은 대상이 하나도 없는 회차(예전 회차)는 표도 종합 칸도 넣지 않는다
         expect(buildReportTables(ctx).map((x) => x.title)).not.toContain('내용연수 지난 재물');
+        expect(buildReportTables(ctx)[0].columns).not.toContain('내용연수 지남');
     });
 
     it('PDF HTML — 기관명·결재란·표를 담고 값은 이스케이프한다', () => {
