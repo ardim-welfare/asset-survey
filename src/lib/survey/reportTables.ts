@@ -5,6 +5,7 @@
  * 사람 이름은 제출·승인한 사람만 담는다(누가 찍었는지는 담지 않는다 — 최소수집).
  */
 import { CONDITION_LABEL, SCAN_RESULT_LABEL } from './judge';
+import { isUsefulLifeOver, usefulLifeEnd } from '../usefulLife';
 import type { SurveyReport, ReportSpace } from './report';
 import type { Survey, Scan } from '../../types/survey';
 
@@ -69,6 +70,9 @@ export function locationSummaryRows(ctx: ReportContext): Array<Array<string | nu
         return [k, v.spaces, v.target, v.found, v.missing, v.elsewhere, v.issues];
     });
 }
+
+/** 내용연수 지난 재물 표 제목 */
+export const LIFE_OVER_TABLE_TITLE = '내용연수 지난 재물';
 
 /** 현장 사진 표 제목 — PDF·화면은 이 표를 주소 대신 사진으로 그린다 */
 export const PHOTO_TABLE_TITLE = '현장 사진';
@@ -174,6 +178,17 @@ export function buildReportTables(ctx: ReportContext): ReportTable[] {
             rows: report.manual.map((x) => scanRow(x, [where(x.spaceId), SCAN_RESULT_LABEL[x.result]])),
             empty: '없음',
         },
+        // 내용연수가 지난 대상(2026-11-22) — 조사 끝 날 기준. 내용연수를 적은 재물이 하나도 없으면 표를 빼
+        // (쓰지 않는 기관·예전 회차의 보고서는 예전과 같다)
+        ...(report.aged?.length ? [{
+            title: LIFE_OVER_TABLE_TITLE,
+            columns: ['자산코드', '품명', '목록상 공간', '취득일자', '내용연수(년)', '끝난 날', '이번 조사'],
+            rows: report.aged
+                .filter((i) => isUsefulLifeOver(i, ctx.survey.endDate))
+                .map((i) => [i.code, i.name ?? '', where(i.spaceKey), i.acquiredAt ?? '', i.usefulLife ?? '',
+                    usefulLifeEnd(i.acquiredAt, i.usefulLife) ?? '', i.found ? '확인' : '미발견']),
+            empty: `조사 끝 날(${ctx.survey.endDate}) 기준으로 내용연수가 지난 재물이 없습니다.`,
+        }] : []),
         ...(ctx.report.photos?.length ? [{
             title: PHOTO_TABLE_TITLE,
             columns: ['자산코드', '품명', '찍은 공간', '물건 상태', '메모', '사진 주소'],

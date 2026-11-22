@@ -132,6 +132,28 @@ describe('보고서 표·PDF', () => {
         expect(buildReportTables(ctx).map((t) => t.title)).not.toContain('현장 사진');
     });
 
+    it('내용연수(2026-11-22) — 조사 끝 날 기준으로 지난 대상만, 찾았는지와 함께. 내용연수 대상이 없으면 표도 없다', () => {
+        const aged: SurveyTarget[] = [{
+            ...target('sp-1', []),
+            items: [
+                { id: 'a1', code: '1', name: '책상', tagId: null, acquiredAt: '2018-01-01', usefulLife: 5 },  // 2023-01-01 끝
+                { id: 'a2', code: '2', name: '의자', tagId: null, acquiredAt: '2024-01-01', usefulLife: 5 },  // 2029년까지
+                { id: 'a3', code: '3', name: '선반', tagId: null },                                           // 내용연수 없음
+                { id: 'a6', code: '6', name: '서랍', tagId: null, acquiredAt: '2020-12-01', usefulLife: 6 }, // 2026-12-01 끝 → 끝 날(12-05) 기준 지남
+            ],
+        }];
+        const r = buildReport(aged, [scan({ assetId: 'a1', code: '1', expectedSpaceId: 'sp-1' })], [], ['sp-1']);
+        expect(r.aged?.map((i) => i.code)).toEqual(['1', '2', '6']);
+        const tables = buildReportTables({ ...ctx, report: r });
+        const t = tables.find((x) => x.title === '내용연수 지난 재물')!;
+        expect(t.rows).toEqual([
+            ['1', '책상', '101호', '2018-01-01', 5, '2023-01-01', '확인'],
+            ['6', '서랍', '101호', '2020-12-01', 6, '2026-12-01', '미발견'],
+        ]);
+        // 내용연수를 적은 대상이 하나도 없는 회차(예전 회차)는 표를 넣지 않는다
+        expect(buildReportTables(ctx).map((x) => x.title)).not.toContain('내용연수 지난 재물');
+    });
+
     it('PDF HTML — 기관명·결재란·표를 담고 값은 이스케이프한다', () => {
         const html = buildSurveyReportHtml({ ...ctx, survey: { ...ctx.survey, name: '<b>조사</b>' } }, '행복복지관', [{ title: '담당' }, { title: '관장' }], new Date(2026, 11, 6));
         expect(html).toContain('재물조사 결과 보고서');

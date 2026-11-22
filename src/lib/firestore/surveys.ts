@@ -124,7 +124,11 @@ export function groupTargets(assets: Asset[], spaceIds: string[], includesUnassi
     for (const a of assets) {
         if (a.status !== 'active') continue;
         const key = a.spaceId ?? NO_SPACE_KEY;
-        groups.get(key)?.push({ id: a.id, code: a.code, name: a.name, tagId: a.tagId });
+        groups.get(key)?.push({
+            id: a.id, code: a.code, name: a.name, tagId: a.tagId,
+            // 내용연수가 있을 때만 — 대상 묶음 문서(최대 3,000건)를 쓸데없이 키우지 않는다
+            ...(a.usefulLife != null ? { acquiredAt: a.acquiredAt, usefulLife: a.usefulLife } : {}),
+        });
     }
     return groups;
 }

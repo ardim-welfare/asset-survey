@@ -66,6 +66,10 @@ export const surveyTargetItemSchema = z.object({
     code: z.string().catch(''),
     name: z.string().nullable().catch(null),
     tagId: z.string().nullable().catch(null),
+    // 내용연수가 있는 재물만 시작 때 함께 남긴다(2026-11-22) — 결과 보고서의 '내용연수 지난 재물' 표.
+    // 예전 회차·내용연수가 없는 재물에는 없다
+    acquiredAt: z.string().nullable().optional().catch(null),
+    usefulLife: z.number().nullable().optional().catch(null),
 });
 
 /**

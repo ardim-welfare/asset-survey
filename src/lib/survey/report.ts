@@ -29,6 +29,13 @@ export interface MissingItem extends SurveyTargetItem {
     spaceKey: string;
 }
 
+/** 내용연수가 적힌 대상(2026-11-22) — 지났는지는 보고서 기준일로 표에서 가린다 */
+export interface AgedItem extends SurveyTargetItem {
+    spaceKey: string;
+    /** 이번 조사에서 찾았는가 */
+    found: boolean;
+}
+
 export interface SurveyReport {
     summary: SurveySummary;
     spaces: ReportSpace[];
@@ -46,6 +53,8 @@ export interface SurveyReport {
     manual: Scan[];
     /** 현장 사진이 붙은 스캔(2026-11-22) */
     photos: Scan[];
+    /** 내용연수가 적힌 대상(2026-11-22). 예전 회차에는 비어 있다 */
+    aged?: AgedItem[];
 }
 
 const byCode = <T extends { code: string }>(a: T, b: T) => a.code.localeCompare(b.code, 'ko', { numeric: true });
@@ -87,6 +96,11 @@ export function buildReport(targets: SurveyTarget[], scans: Scan[], submissions:
     const missing: MissingItem[] = [];
     for (const t of targets) for (const i of t.items) if (!foundScan.has(i.id)) missing.push({ ...i, spaceKey: targetKey(t.spaceId) });
 
+    const aged: AgedItem[] = [];
+    for (const t of targets) {
+        for (const i of t.items) if (i.usefulLife != null) aged.push({ ...i, spaceKey: targetKey(t.spaceId), found: foundScan.has(i.id) });
+    }
+
     const sorted = [...scans].sort(byCode);
     const report: SurveyReport = {
         spaces,
@@ -98,6 +112,7 @@ export function buildReport(targets: SurveyTarget[], scans: Scan[], submissions:
         outOfScope: sorted.filter((s) => s.result === 'outOfScope'),
         manual: sorted.filter((s) => s.method === 'manual'),
         photos: sorted.filter((s) => !!s.photoUrl),
+        aged: aged.sort(byCode),
         summary: { target: 0, found: 0, missing: 0, otherSpace: 0, unregistered: 0, outOfScope: 0, damaged: 0, labelDamaged: 0, manual: 0 },
     };
     report.summary = {

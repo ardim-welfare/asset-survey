@@ -58,6 +58,13 @@ describe('groupTargets', () => {
         expect(g.get('_none')?.[0]).toEqual({ id: 'a3', code: 'a3', name: 'TV', tagId: 'AAAAAAAAA3' });
         expect(groupTargets(ASSETS, ['sp-1'], false).has('_none')).toBe(false);
     });
+    it('내용연수가 있는 재물만 취득일자·내용연수를 함께 남긴다(2026-11-22)', () => {
+        const g = groupTargets([asset('a1', { acquiredAt: '2020-01-01', usefulLife: 5 }), asset('a2')], ['sp-1'], false);
+        expect(g.get('sp-1')).toEqual([
+            expect.objectContaining({ id: 'a1', acquiredAt: '2020-01-01', usefulLife: 5 }),
+            expect.not.objectContaining({ usefulLife: expect.anything() }),
+        ]);
+    });
 });
 
 describe('startSurvey', () => {
