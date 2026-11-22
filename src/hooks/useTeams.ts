@@ -36,21 +36,21 @@ export default function useTeams(orgId: string | null | undefined) {
     const archivedTeams = useMemo(() => teams.filter((t) => t.archived), [teams]);
     const teamName = useCallback((id: string | null | undefined) => teams.find((t) => t.id === id)?.name ?? null, [teams]);
 
-    /** 팀 추가 — 성공하면 true */
-    const addTeam = useCallback(async (raw: string): Promise<boolean> => {
-        if (!orgId) return false;
+    /** 팀 추가 — 성공하면 새 팀 ID, 실패하면 null */
+    const addTeam = useCallback(async (raw: string): Promise<string | null> => {
+        if (!orgId) return null;
         const problem = validateTeamName(raw, teams);
-        if (problem) { showToast(problem, 'warning'); return false; }
+        if (problem) { showToast(problem, 'warning'); return null; }
         const order = activeTeams.length === 0 ? 0 : Math.max(...activeTeams.map((t) => t.order)) + 1;
         setBusy(true);
         try {
             const id = await createTeam(orgId, raw, order);
             setTeams((prev) => sortTeams([...prev, { id, organizationId: orgId, name: normalizeTeamName(raw), order, archived: false }]));
             showToast('팀을 추가했습니다.', 'success');
-            return true;
+            return id;
         } catch {
-            showToast('팀을 추가하지 못했습니다.', 'error');
-            return false;
+            showToast('팀을 추가하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
+            return null;
         } finally {
             setBusy(false);
         }

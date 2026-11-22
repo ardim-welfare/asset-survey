@@ -3,7 +3,7 @@
  *
  * 팀을 먼저 만들고 직원(사전 등록 포함)에 팀을 정한다. 공간 관리에서 담당을 팀으로도 지정할 수 있다.
  */
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import type useTeams from '../../hooks/useTeams';
 import { TEAM_NAME_MAX } from '../../schemas/team';
 
@@ -11,9 +11,11 @@ interface Props {
     t: ReturnType<typeof useTeams>;
     /** 팀 ID → 직원 수(활성) */
     memberCount: (teamId: string) => number;
+    /** 단계 번호 표시(직원 관리 화면의 ① ② ③) */
+    step?: ReactNode;
 }
 
-export default function TeamSection({ t, memberCount }: Props) {
+export default function TeamSection({ t, memberCount, step }: Props) {
     const [name, setName] = useState('');
     const [showArchived, setShowArchived] = useState(false);
 
@@ -24,8 +26,8 @@ export default function TeamSection({ t, memberCount }: Props) {
 
     return (
         <section className="glass-card p-4 mb-6" aria-labelledby="team-section-title">
-            <h2 id="team-section-title" className="font-semibold text-surface-900 dark:text-surface-100">팀</h2>
-            <p className="text-xs text-surface-500 dark:text-surface-400 mb-3">
+            <h2 id="team-section-title" className="flex items-center gap-2 font-semibold text-surface-900 dark:text-surface-100">{step} 팀 만들기</h2>
+            <p className="text-xs text-surface-600 dark:text-surface-400 mt-1 mb-3">
                 팀을 먼저 만들고 직원마다 팀을 정하세요. 공간 관리에서 담당을 팀으로 지정하면 그 팀 직원 모두가 그 공간을 조사합니다.
             </p>
             <form onSubmit={handleAdd} className="flex gap-2">
@@ -37,18 +39,16 @@ export default function TeamSection({ t, memberCount }: Props) {
             {t.activeTeams.length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-2" aria-label="팀 목록">
                     {t.activeTeams.map((team) => (
-                        <li key={team.id} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm">
-                            {team.name}
-                            <span className="text-xs text-primary-600/80 dark:text-primary-300/70">{memberCount(team.id)}명</span>
+                        <li key={team.id} className="flex items-center gap-2 rounded-xl border border-surface-200 dark:border-surface-600 pl-3 pr-1 py-1">
+                            <span className="font-medium text-surface-900 dark:text-surface-100">{team.name}</span>
+                            <span className="text-xs text-surface-600 dark:text-surface-400">{memberCount(team.id)}명</span>
                             <button type="button" onClick={() => void t.renameTeam(team)} disabled={t.busy}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary-100 dark:hover:bg-primary-800/50"
-                                aria-label={`${team.name} 이름 바꾸기`}>
-                                <span aria-hidden="true">✎</span>
+                                className="btn-secondary btn-sm min-h-[44px] px-3" aria-label={`${team.name} 이름 바꾸기`}>
+                                이름
                             </button>
                             <button type="button" onClick={() => void t.archiveTeam(team, memberCount(team.id))} disabled={t.busy}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary-100 dark:hover:bg-primary-800/50"
-                                aria-label={`${team.name} 숨기기`}>
-                                <span aria-hidden="true">✕</span>
+                                className="btn-secondary btn-sm min-h-[44px] px-3" aria-label={`${team.name} 숨기기`}>
+                                숨기기
                             </button>
                         </li>
                     ))}

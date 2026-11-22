@@ -2,7 +2,7 @@
  * Firestore — 사전 등록 직원 (preRegistered) 관련 함수
  */
 import {
-    collection, addDoc, getDocs, deleteDoc, doc,
+    collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
     serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -46,6 +46,16 @@ export const addPreRegisteredEmployee = async (
         });
     } catch (error) {
         captureError(error, { context: 'addPreRegisteredEmployee', orgId });
+        throw error;
+    }
+};
+
+/** 사전 등록 직원의 팀 바꾸기(2026-11-22) — 예전엔 지우고 다시 등록해야 했다 */
+export const updatePreRegisteredTeam = async (orgId: string, preRegId: string, teamId: string | null): Promise<void> => {
+    try {
+        await updateDoc(doc(db, 'organizations', orgId, 'preRegistered', preRegId), { teamId });
+    } catch (error) {
+        captureError(error, { context: 'updatePreRegisteredTeam', orgId });
         throw error;
     }
 };

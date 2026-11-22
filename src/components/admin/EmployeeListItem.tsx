@@ -1,6 +1,12 @@
 /**
- * EmployeeListItem — 직원 목록의 개별 행 컴포넌트
- * EmployeeManager에서 분리된 서브 컴포넌트
+ * EmployeeListItem — 직원 목록의 한 사람 (2026-11-22 다시 짬)
+ *
+ * 휴대폰에서 한 줄에 고르기 칸 두 개와 아이콘 버튼이 몰려 이름이 사라지고 버튼이 카드 밖으로 넘쳤다
+ * (인터페이스 점검·사용자 의견 "휴대폰에서 불편하다"). 그래서
+ * - 1줄: 아바타 + 이름·상태·이메일
+ * - 2줄: 이름표가 붙은 '팀'·'역할' 고르기(넓은 화면에서도 같은 자리)
+ * - 3줄: 글자 버튼(이름 고치기·비활성화 등) — 아이콘만 있던 버튼은 무엇을 하는지 알기 어려웠다
+ * 내 계정 줄에는 바꿀 수 없는 역할·비활성화를 그리지 않고 이유를 적는다(전에는 흐린 아이콘 + 마우스 말풍선뿐).
  */
 import React from 'react';
 import type { User, UserRole, UnifiedMember } from '../../types';
@@ -17,244 +23,130 @@ interface Props {
     onCancelEdit: () => void;
     onDelete: (member: User) => void;
     onChangeRole: (member: User, role: UserRole) => void;
-    /** 팀(2026-11-22) — 활성 직원은 고르고, 가입 대기는 이름만 보인다 */
+    /** 팀 — 활성 직원과 가입 대기 모두 여기서 고른다 */
     teams?: Team[];
     teamName?: (id: string | null | undefined) => string | null;
     onChangeTeam?: (member: User, teamId: string) => void;
+    onChangePendingTeam?: (preRegId: string, teamId: string) => void;
     onDeletePreRegistered: (id: string) => void;
     onRestore: (member: User) => void;
     onDeletePermanently: (member: User) => void;
 }
 
+const smallLabel = 'block text-xs font-medium text-surface-600 dark:text-surface-300 mb-1';
+
 export default function EmployeeListItem({
-    member,
-    selfUid,
-    editingId,
-    editForm,
-    setEditForm,
-    onEdit,
-    onSaveEdit,
-    onCancelEdit,
-    onDelete,
-    onChangeRole,
-    teams = [],
-    teamName,
-    onChangeTeam,
-    onDeletePreRegistered,
-    onRestore,
-    onDeletePermanently,
+    member, selfUid, editingId, editForm, setEditForm, onEdit, onSaveEdit, onCancelEdit, onDelete, onChangeRole,
+    teams = [], onChangeTeam, onChangePendingTeam, onDeletePreRegistered, onRestore, onDeletePermanently,
 }: Props) {
     const isSelf = member.memberStatus === 'active' && !!selfUid && member.id === selfUid;
     const isActive = member.memberStatus === 'active';
     const isPending = member.memberStatus === 'pending';
     const isDisabled = member.memberStatus === 'disabled';
-    const isActionDisabled = !selfUid || isSelf;
+    const loadingSelf = !selfUid;
+    const who = member.name || member.email || '직원';
+    const teamId = (member.original as { teamId?: string | null }).teamId ?? '';
+    const ids = `emp-${member.memberStatus}-${member.id}`;
 
-    const avatarBg = isDisabled
-        ? 'bg-red-50 dark:bg-red-900/30'
+    const avatar = isDisabled
+        ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
         : isPending
-            ? 'bg-amber-50 dark:bg-amber-900/30'
-            : 'bg-primary-100 dark:bg-primary-900/30';
-    const avatarText = isDisabled
-        ? 'text-red-600 dark:text-red-400'
-        : isPending
-            ? 'text-amber-600 dark:text-amber-400'
-            : 'text-primary-700 dark:text-primary-400';
-
+            ? 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+            : 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300';
     const cardBorder = isDisabled
         ? 'border-l-4 border-red-400 dark:border-red-500'
-        : isPending
-            ? 'border-l-4 border-amber-400 dark:border-amber-500'
-            : '';
-    const cardOpacity = isDisabled || isPending ? 'opacity-80' : '';
+        : isPending ? 'border-l-4 border-amber-400 dark:border-amber-500' : '';
+
+    const teamSelect = (onChange: (v: string) => void) => (
+        <div>
+            <label htmlFor={`${ids}-team`} className={smallLabel}>팀</label>
+            <select id={`${ids}-team`} value={teamId} onChange={(e) => onChange(e.target.value)} className="input min-h-[44px] py-2 text-sm">
+                <option value="">팀 없음</option>
+                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+        </div>
+    );
 
     return (
-        <div className={`glass-card p-4 hover:shadow-glass-lg transition-all ${cardBorder} ${cardOpacity}`}>
-            {/* 편집 모드 (활성 직원만) */}
+        <div className={`glass-card p-4 ${cardBorder}`}>
             {isActive && editingId === member.id ? (
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <input
-                        type="text"
-                        value={editForm.name}
-                        onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                        className="input flex-1"
-                        placeholder="이름"
-                    />
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <label htmlFor={`${ids}-name`} className="sr-only">이름</label>
+                    <input id={`${ids}-name`} type="text" value={editForm.name} autoComplete="name"
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="input flex-1 min-h-[48px]" placeholder="이름" />
                     <div className="flex gap-2">
-                        <button onClick={() => onSaveEdit(member.id)} className="btn-primary btn-sm min-h-[48px]">
-                            저장
-                        </button>
-                        <button onClick={onCancelEdit} className="btn-secondary btn-sm min-h-[48px]">
-                            취소
-                        </button>
+                        <button type="button" onClick={() => onSaveEdit(member.id)} className="btn-primary min-h-[48px] px-5 flex-1 sm:flex-none">저장</button>
+                        <button type="button" onClick={onCancelEdit} className="btn-secondary min-h-[48px] px-4 flex-1 sm:flex-none">취소</button>
                     </div>
                 </div>
             ) : (
-                <div className="flex items-center gap-4">
-                    {/* 아바타 */}
-                    <div
-                        className={`w-10 h-10 rounded-full ${avatarBg} flex items-center justify-center ${avatarText} font-bold flex-shrink-0`}
-                    >
-                        {(member.name || member.email || '?')[0]?.toUpperCase()}
+                <>
+                    {/* 1줄: 누구인지 */}
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full ${avatar} flex items-center justify-center font-bold flex-shrink-0`} aria-hidden="true">
+                            {who[0]?.toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-medium text-surface-900 dark:text-surface-100 break-all">{member.name || '(이름 없음)'}</p>
+                                {isActive && <span className={`badge ${member.role === 'admin' ? 'badge-primary' : 'badge-neutral'}`}>{member.role === 'admin' ? '관리자' : '직원'}</span>}
+                                {isPending && <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">가입 대기</span>}
+                                {isDisabled && <span className="badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">비활성</span>}
+                                {isSelf && <span className="badge badge-neutral">나</span>}
+                            </div>
+                            {member.email && <p className="text-sm text-surface-600 dark:text-surface-400 break-all">{member.email}</p>}
+                        </div>
                     </div>
 
-                    {/* 정보 */}
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-surface-900 dark:text-surface-100 truncate">
-                                {member.name || '(이름 없음)'}
-                            </p>
-                            {isActive && (
-                                <span
-                                    className={`badge ${member.role === 'admin' ? 'badge-primary' : 'badge-neutral'}`}
-                                >
-                                    {member.role === 'admin' ? '관리자' : '직원'}
-                                </span>
-                            )}
-                            {isPending && (
-                                <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 text-xs">
-                                    가입 대기
-                                </span>
-                            )}
-                            {isDisabled && (
-                                <span className="badge bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 text-xs">
-                                    비활성
-                                </span>
-                            )}
-                            {isSelf && <span className="badge badge-neutral text-xs">나</span>}
-                            {!isActive && teamName?.((member.original as { teamId?: string | null }).teamId) && (
-                                <span className="badge badge-neutral text-xs">{teamName((member.original as { teamId?: string | null }).teamId)}</span>
+                    {/* 2줄: 팀·역할 */}
+                    {isActive && (
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                            {onChangeTeam && teams.length > 0 ? teamSelect((v) => onChangeTeam(member.original, v)) : <div />}
+                            {!isSelf && (
+                                <div>
+                                    <label htmlFor={`${ids}-role`} className={smallLabel}>역할</label>
+                                    <select id={`${ids}-role`} value={member.role || 'employee'} disabled={loadingSelf}
+                                        onChange={(e) => onChangeRole(member.original, e.target.value as UserRole)} className="input min-h-[44px] py-2 text-sm">
+                                        <option value="employee">직원</option>
+                                        <option value="admin">관리자</option>
+                                    </select>
+                                </div>
                             )}
                         </div>
-                        {member.email && (
-                            <p className="text-sm text-surface-500 dark:text-surface-400 truncate">{member.email}</p>
-                        )}
-                    </div>
+                    )}
+                    {isPending && onChangePendingTeam && teams.length > 0 && (
+                        <div className="grid grid-cols-2 gap-2 mt-3">{teamSelect((v) => onChangePendingTeam(member.id, v))}</div>
+                    )}
 
-                    {/* 액션 버튼 */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                        {/* 활성 직원: 역할 변경 + 편집 + 비활성화 */}
+                    {/* 3줄: 할 일 */}
+                    <div className="flex flex-wrap gap-2 mt-3">
                         {isActive && (
                             <>
-                                {onChangeTeam && teams.length > 0 && (
-                                    <select
-                                        value={(member.original as { teamId?: string | null }).teamId ?? ''}
-                                        onChange={e => onChangeTeam(member.original, e.target.value)}
-                                        aria-label={`${member.name || member.email} 팀`}
-                                        className="text-xs border border-surface-200 dark:border-surface-600 rounded-lg px-2 py-1 min-h-[48px] max-w-[9rem] bg-white dark:bg-surface-800 text-surface-600 dark:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
-                                    >
-                                        <option value="">팀 없음</option>
-                                        {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                    </select>
+                                <button type="button" onClick={() => onEdit(member.original)} className="btn-secondary btn-sm min-h-[44px] px-3">이름 고치기</button>
+                                {!isSelf && (
+                                    <button type="button" onClick={() => onDelete(member.original)} disabled={loadingSelf}
+                                        className="btn-secondary btn-sm min-h-[44px] px-3 text-red-700 dark:text-red-300">비활성화</button>
                                 )}
-                                <select
-                                    value={member.role || 'employee'}
-                                    onChange={e =>
-                                        onChangeRole(member.original, e.target.value as UserRole)
-                                    }
-                                    disabled={isActionDisabled}
-                                    title={!selfUid ? '사용자 정보를 불러오는 중입니다' : isSelf ? '자신의 역할은 변경할 수 없습니다' : ''}
-                                    className={`text-xs border border-surface-200 dark:border-surface-600 rounded-lg px-2 py-1 min-h-[48px] bg-white dark:bg-surface-800 text-surface-600 dark:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 ${isActionDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                >
-                                    <option value="employee">직원</option>
-                                    <option value="admin">관리자</option>
-                                </select>
-                                <button
-                                    onClick={() => onEdit(member.original)}
-                                    className="btn-icon btn-sm text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 min-h-[48px] min-w-[48px]"
-                                >
-                                    <svg
-                                        className="w-4 h-4"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        strokeWidth={1.5}
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"
-                                        />
-                                    </svg>
-                                </button>
-                                <button
-                                    onClick={() => onDelete(member.original)}
-                                    disabled={isActionDisabled}
-                                    title={!selfUid ? '사용자 정보를 불러오는 중입니다' : isSelf ? '자기 자신은 비활성화할 수 없습니다' : ''}
-                                    className={`btn-icon btn-sm min-h-[48px] min-w-[48px] ${isActionDisabled ? 'text-surface-200 dark:text-surface-700 cursor-not-allowed' : 'text-surface-500 dark:text-surface-400 hover:text-red-500 dark:hover:text-red-400'}`}
-                                >
-                                    <svg
-                                        className="w-4 h-4"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        strokeWidth={1.5}
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                                        />
-                                    </svg>
-                                </button>
+                                {isSelf && <p className="text-xs text-surface-600 dark:text-surface-400 self-center">내 역할과 비활성화는 다른 관리자가 바꿀 수 있어요.</p>}
                             </>
                         )}
-
-                        {/* 가입 대기: 삭제만 */}
                         {isPending && (
-                            <button
-                                onClick={() => onDeletePreRegistered(member.id)}
-                                className="btn-icon btn-sm text-surface-500 dark:text-surface-400 hover:text-red-500 dark:hover:text-red-400 min-h-[48px] min-w-[48px]"
-                                title="사전 등록 취소"
-                            >
-                                <svg
-                                    className="w-4 h-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    strokeWidth={1.5}
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                                    />
-                                </svg>
+                            <button type="button" onClick={() => onDeletePreRegistered(member.id)}
+                                className="btn-secondary btn-sm min-h-[44px] px-3 text-red-700 dark:text-red-300" aria-label={`${who} 사전 등록 취소`}>
+                                등록 취소
                             </button>
                         )}
-
-                        {/* 비활성: 활성화 + 완전 삭제 */}
                         {isDisabled && (
                             <>
-                                <button
-                                    onClick={() => onRestore(member.original)}
-                                    className="btn-sm text-xs px-3 py-1.5 bg-accent-50 text-accent-700 hover:bg-accent-100 dark:bg-accent-900/30 dark:text-accent-400 dark:hover:bg-accent-900/50 rounded-lg font-medium transition-colors min-h-[48px]"
-                                >
-                                    활성화
-                                </button>
-                                <button
-                                    onClick={() => onDeletePermanently(member.original)}
-                                    title="계정을 영구 삭제합니다 (조사 기록은 보존)"
-                                    className="btn-icon btn-sm text-surface-500 dark:text-surface-400 hover:text-red-500 dark:hover:text-red-400 min-h-[48px] min-w-[48px]"
-                                >
-                                    <svg
-                                        className="w-4 h-4"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        strokeWidth={1.5}
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                                        />
-                                    </svg>
+                                <button type="button" onClick={() => onRestore(member.original)} className="btn-secondary btn-sm min-h-[44px] px-3">다시 활성화</button>
+                                <button type="button" onClick={() => onDeletePermanently(member.original)}
+                                    className="btn-secondary btn-sm min-h-[44px] px-3 text-red-700 dark:text-red-300" aria-label={`${who} 계정 영구 삭제(조사 기록은 남음)`}>
+                                    영구 삭제
                                 </button>
                             </>
                         )}
                     </div>
-                </div>
+                </>
             )}
         </div>
     );

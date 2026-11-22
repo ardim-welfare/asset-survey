@@ -7,7 +7,7 @@ import { useAuth } from './useAuth';
 import { useToast } from './useToast';
 import { useConfirm } from './useConfirm';
 import useRetry from './useRetry';
-import { getOrganizationMembers, getOrganization, regenerateInviteCode, updateUser, getPreRegisteredEmployees, addPreRegisteredEmployee, deletePreRegisteredEmployee, recheckDeniedTarget } from '../lib/firestore';
+import { getOrganizationMembers, getOrganization, regenerateInviteCode, updateUser, getPreRegisteredEmployees, addPreRegisteredEmployee, deletePreRegisteredEmployee, updatePreRegisteredTeam, recheckDeniedTarget } from '../lib/firestore';
 import { invalidateCache } from '../lib/firestore/cache';
 import type { User, UserRole, MemberStatus, UnifiedMember } from '../types/user';
 import type { Organization } from '../types/organization';
@@ -115,6 +115,8 @@ export default function useEmployeeManager() {
             await navigator.clipboard.writeText(textToCopy);
             setCopiedType(type);
             setTimeout(() => setCopiedType('none'), 2000);
+            // '복사됨' 글자는 2초 뒤 사라지고 화면 낭독기에도 알려지지 않아 알림을 함께 띄운다
+            showToast(type === 'link' ? '초대 링크를 복사했어요. 직원에게 보내 주세요.' : '기관 코드를 복사했어요.', 'success');
         } catch {
             const textArea = document.createElement('textarea');
             textArea.value = textToCopy;
@@ -285,6 +287,15 @@ export default function useEmployeeManager() {
                 return;
             }
         }
+        // 휴대폰에서 잘못 눌러 관리자 권한이 생기지 않게 올릴 때는 묻는다(2026-11-22)
+        if (newRole === 'admin' && emp.role !== 'admin') {
+            const ok = await confirm({
+                title: '관리자로 바꿀까요?',
+                message: `${emp.name || emp.email || '이 직원'}님이 재물·직원·조사를 모두 관리할 수 있게 됩니다.`,
+                confirmText: '관리자로 바꾸기', confirmColor: 'warning',
+            });
+            if (!ok) { await fetchData(); return; }
+        }
         await runWithRetry(`change-role-${emp.id}`, async () => {
             await updateUser(emp.id, { role: newRole });
             await fetchData();
@@ -296,7 +307,18 @@ export default function useEmployeeManager() {
         await runWithRetry(`change-team-${emp.id}`, async () => {
             await updateUser(emp.id, { teamId: teamId || null });
             setEmployees((prev) => prev.map((e) => (e.id === emp.id ? { ...e, teamId: teamId || null } : e)));
+            showToast('팀을 바꿨습니다.', 'success');
         }, { errorMessage: '팀을 바꾸지 못했습니다.', ...staleRowGuard() });
+    };
+
+    /** 가입 대기(사전 등록) 직원의 팀 바꾸기 — 가입하면 이 팀으로 들어간다 */
+    const handleChangePendingTeam = async (preRegId: string, teamId: string) => {
+        if (!orgId) return;
+        await runWithRetry(`change-preteam-${preRegId}`, async () => {
+            await updatePreRegisteredTeam(orgId, preRegId, teamId || null);
+            setPreRegisteredEmployees((prev) => prev.map((p) => (p.id === preRegId ? { ...p, teamId: teamId || null } : p)));
+            showToast('팀을 바꿨습니다. 가입하면 이 팀으로 들어갑니다.', 'success');
+        }, { errorMessage: '팀을 바꾸지 못했습니다.' });
     };
 
     const handleDeletePreRegistered = async (preRegId: string) => {
@@ -381,6 +403,6 @@ export default function useEmployeeManager() {
         unifiedList, filteredUnifiedList, stats,
         handleAddEmployee, handleCopyInviteCode, handleRegenerateCode,
         handleEditEmployee, handleSaveEdit, handleDeleteEmployee, handleChangeRole,
-        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently, handleChangeTeam,
+        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently, handleChangeTeam, handleChangePendingTeam,
     };
 }

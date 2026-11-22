@@ -23,6 +23,7 @@ export {
     getPreRegisteredEmployees,
     addPreRegisteredEmployee,
     deletePreRegisteredEmployee,
+    updatePreRegisteredTeam,
 } from './preRegistered';
 
 // 기관 (Organizations)

@@ -1,33 +1,56 @@
 /**
- * EmployeeManager — 직원 관리 페이지
- * 로직은 useEmployeeManager 훅 사용
- * Phase 29: 활성/가입대기/비활성 직원을 하나의 통합 목록으로 표시
+ * EmployeeManager — 직원 관리 (2026-11-22 흐름대로 다시 짬)
+ *
+ * 사용자 의견("팀 등록하고 직원 등록하는 과정이 마음에 들지 않는다")과 인터페이스 점검에 따라 화면을
+ * 하는 순서대로 놓는다: ① 팀 만들기 → ② 직원 등록(미리 등록하거나 초대 링크 보내기) → ③ 직원 목록.
+ * - 사전 등록 창은 제대로 된 대화상자(PanelModal: Esc·첫 칸 초점·aria)이고, 창 안에서 바로 새 팀을 만들 수 있다.
+ * - 가입 대기 직원의 팀도 목록에서 바꾼다(예전엔 지우고 다시 등록해야 했다).
+ * - 복사 버튼은 글자 링크가 아니라 버튼 모양, 복사하면 알림.
+ * 로직은 useEmployeeManager·useTeams.
  */
+import { useState, type FormEvent } from 'react';
 import useEmployeeManager from '../../hooks/useEmployeeManager';
 import { useAuth } from '../../hooks/useAuth';
 import { APP_URL } from '../../lib/constants';
 import { SkeletonList, SkeletonBox } from '../common/Skeleton';
 import EmployeeListItem from './EmployeeListItem';
 import TeamSection from './TeamSection';
+import PanelModal from './space/PanelModal';
 import useTeams from '../../hooks/useTeams';
+import { TEAM_NAME_MAX } from '../../schemas/team';
+
+const NEW_TEAM = '__new__';
+const stepTitle = 'flex items-center gap-2 font-semibold text-surface-900 dark:text-surface-100';
+const stepNum = 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-600 text-white text-xs font-bold';
 
 export default function EmployeeManager() {
     const {
         organization, loading,
         showAddForm, setShowAddForm,
         newEmployee, setNewEmployee,
-        copiedType, regenerating,
+        regenerating,
         editingId, setEditingId, editForm, setEditForm,
         searchQuery, setSearchQuery, teamFilter, setTeamFilter,
         filteredUnifiedList, stats, employees,
         handleAddEmployee, handleCopyInviteCode, handleRegenerateCode,
         handleEditEmployee, handleSaveEdit, handleDeleteEmployee, handleChangeRole,
-        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently, handleChangeTeam,
+        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently, handleChangeTeam, handleChangePendingTeam,
     } = useEmployeeManager();
     const { userData } = useAuth();
     const selfUid = userData?.id;
     const teams = useTeams(userData?.organizationId);
     const memberCount = (teamId: string) => employees.filter((e) => e.teamId === teamId).length;
+    // 사전 등록 창에서 바로 새 팀 만들기
+    const [creatingTeam, setCreatingTeam] = useState(false);
+    const [newTeamName, setNewTeamName] = useState('');
+
+    const closeAdd = () => { setShowAddForm(false); setCreatingTeam(false); setNewTeamName(''); };
+    const createTeamInDialog = async () => {
+        const id = await teams.addTeam(newTeamName);
+        if (id) { setNewEmployee({ ...newEmployee, teamId: id }); setCreatingTeam(false); setNewTeamName(''); }
+    };
+    const submitAdd = async (e: FormEvent<HTMLFormElement>) => { await handleAddEmployee(e); setCreatingTeam(false); };
+    const filtering = searchQuery.trim() !== '' || teamFilter !== 'all';
 
     if (loading) {
         return (
@@ -39,148 +62,102 @@ export default function EmployeeManager() {
         );
     }
 
+    const inviteLink = `${APP_URL}?code=${organization?.inviteCode || '------'}`;
+
     return (
         <div className="max-w-4xl mx-auto animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">직원 관리</h1>
-                    <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-                        총 {stats.total}명
-                        {stats.active > 0 && <> · 활성 {stats.active}명</>}
-                        {stats.pending > 0 && <> · <span className="text-amber-600 dark:text-amber-400">가입 대기 {stats.pending}명</span></>}
-                        {stats.disabled > 0 && <> · <span className="text-red-500 dark:text-red-400">비활성 {stats.disabled}명</span></>}
-                    </p>
-                </div>
-                <button onClick={() => setShowAddForm(true)} className="btn-primary btn-sm min-h-[48px]">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    직원 사전 등록
-                </button>
+            <div className="mb-6">
+                <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">직원 관리</h1>
+                <p className="text-sm text-surface-600 dark:text-surface-400 mt-1" aria-live="polite">
+                    총 {stats.total}명
+                    {stats.active > 0 && <> · 활성 {stats.active}명</>}
+                    {stats.pending > 0 && <> · <span className="text-amber-700 dark:text-amber-300">가입 대기 {stats.pending}명</span></>}
+                    {stats.disabled > 0 && <> · <span className="text-red-700 dark:text-red-300">비활성 {stats.disabled}명</span></>}
+                </p>
             </div>
 
-            {/* 초대 링크 섹션 */}
-            <div className="glass-card p-5 mb-6">
-                <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-surface-600 dark:text-surface-400">직원 초대</h3>
-                        <button onClick={handleRegenerateCode} disabled={regenerating} className="btn-ghost btn-sm text-surface-500 dark:text-surface-400 hover:text-amber-600 min-h-[48px] min-w-[48px]" title="초대 코드 재발급">
-                            <svg className={`w-5 h-5 ${regenerating ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
-                            </svg>
+            {/* ① 팀 만들기 */}
+            <TeamSection t={teams} memberCount={memberCount} step={<span className={stepNum} aria-hidden="true">1</span>} />
+
+            {/* ② 직원 등록 — 미리 등록하거나 초대 링크를 보낸다 */}
+            <section className="glass-card p-4 mb-6" aria-labelledby="add-staff-title">
+                <h2 id="add-staff-title" className={stepTitle}><span className={stepNum} aria-hidden="true">2</span> 직원 등록</h2>
+                <p className="text-xs text-surface-600 dark:text-surface-400 mt-1 mb-3">
+                    이름·이메일·팀을 미리 등록해 두면, 직원이 초대 링크로 가입할 때 이름과 팀이 저절로 들어갑니다.
+                </p>
+                <button type="button" onClick={() => setShowAddForm(true)} className="btn-primary min-h-[48px] px-5 w-full sm:w-auto">
+                    + 직원 미리 등록하기
+                </button>
+
+                <div className="mt-4 pt-4 border-t border-surface-100 dark:border-surface-700">
+                    <p className="text-sm font-medium text-surface-800 dark:text-surface-200 mb-2">초대 링크 보내기</p>
+                    <p className="font-mono text-sm text-surface-700 dark:text-surface-300 break-all bg-surface-50 dark:bg-surface-800/60 rounded-lg p-3 select-all">{inviteLink}</p>
+                    <p className="text-sm text-surface-700 dark:text-surface-300 mt-2">
+                        기관 코드 <span className="font-mono text-lg font-bold text-primary-700 dark:text-primary-300 select-all">{organization?.inviteCode || '------'}</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        <button type="button" onClick={() => void handleCopyInviteCode('link')} className="btn-secondary btn-sm min-h-[44px] px-4">링크 복사</button>
+                        <button type="button" onClick={() => void handleCopyInviteCode('code')} className="btn-secondary btn-sm min-h-[44px] px-4">코드 복사</button>
+                        <button type="button" onClick={() => void handleRegenerateCode()} disabled={regenerating} className="btn-secondary btn-sm min-h-[44px] px-4">
+                            {regenerating ? '새로 만드는 중…' : '코드 새로 만들기'}
                         </button>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
-                        {/* 초대 링크 */}
-                        <div className="sm:col-span-2 bg-surface-50 dark:bg-surface-800/50 rounded-lg border border-surface-200 dark:border-surface-700/50 p-3.5 flex flex-col justify-center relative group overflow-hidden">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs font-semibold text-surface-500 dark:text-surface-400">초대 링크</span>
-                                <button onClick={() => handleCopyInviteCode('link')} className={`text-xs flex items-center gap-1 transition-colors min-h-[48px] py-2 px-2 rounded-lg ${copiedType === 'link' ? 'text-accent-600 dark:text-accent-400 font-medium bg-accent-50 dark:bg-accent-900/20' : 'text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700'}`}>
-                                    {copiedType === 'link' ? (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
-                                            복사됨
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
-                                            링크 복사
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                            <div className="font-mono text-sm text-surface-700 dark:text-surface-300 break-all select-all pr-2">
-                                {APP_URL}?code={organization?.inviteCode || '------'}
-                            </div>
-                        </div>
-
-                        {/* 초대 코드 */}
-                        <div className="bg-surface-50 dark:bg-surface-800/50 rounded-lg border border-surface-200 dark:border-surface-700/50 p-3.5 flex flex-col justify-center">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs font-semibold text-surface-500 dark:text-surface-400">기관 코드</span>
-                                <button onClick={() => handleCopyInviteCode('code')} className={`text-xs flex items-center gap-1 transition-colors min-h-[48px] py-2 px-2 rounded-lg ${copiedType === 'code' ? 'text-accent-600 dark:text-accent-400 font-medium bg-accent-50 dark:bg-accent-900/20' : 'text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700'}`}>
-                                    {copiedType === 'code' ? (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
-                                            복사됨
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" /></svg>
-                                            코드 복사
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                            <div className="font-mono text-lg font-bold text-primary-600 dark:text-primary-400 select-all">
-                                {organization?.inviteCode || '------'}
-                            </div>
-                        </div>
-                    </div>
-                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">이 링크 또는 기관 코드를 소속 직원에게 공유해 주세요. 직원 가입 시 자동으로 연결됩니다.</p>
+                    <p className="text-xs text-surface-600 dark:text-surface-400 mt-2">코드를 새로 만들면 예전 링크·코드로는 가입할 수 없습니다.</p>
                 </div>
-            </div>
+            </section>
 
-            {/* 팀 (2026-11-22) — 팀을 먼저 만들고 직원에 팀을 정한다 */}
-            <TeamSection t={teams} memberCount={memberCount} />
-
-            {/* 직원 사전 등록 폼 모달 */}
-            {showAddForm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-                    <div className="glass-card p-6 w-full max-w-md animate-scale-in">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">직원 사전 등록</h3>
-                            <button
-                                type="button"
-                                onClick={() => setShowAddForm(false)}
-                                className="p-3 rounded-lg text-surface-500 dark:text-surface-400 hover:text-surface-600 hover:bg-surface-100 dark:hover:text-surface-300 dark:hover:bg-surface-700 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
-                                aria-label="닫기"
-                            >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <p className="text-sm text-surface-500 dark:text-surface-400 mb-4">
-                            직원 이름과 이메일을 미리 등록하면, 초대 코드로 가입 시 자동으로 이름이 설정됩니다.
-                        </p>
-                        <form onSubmit={handleAddEmployee} className="space-y-4">
-                            <div>
-                                <label className="label">이름 <span className="text-red-500">*</span></label>
-                                <input type="text" value={newEmployee.name} onChange={e => setNewEmployee({ ...newEmployee, name: e.target.value })} className="input" placeholder="홍길동" required />
-                            </div>
-                            <div>
-                                <label className="label">이메일 <span className="text-red-500">*</span></label>
-                                <input type="email" value={newEmployee.email} onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })} className="input" placeholder="example@gmail.com" required />
-                            </div>
-                            <div>
-                                <label htmlFor="new-employee-team" className="label">팀</label>
-                                <select id="new-employee-team" value={newEmployee.teamId} onChange={e => setNewEmployee({ ...newEmployee, teamId: e.target.value })} className="input min-h-[48px]">
-                                    <option value="">팀 없음</option>
-                                    {teams.activeTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                </select>
-                                {teams.activeTeams.length === 0 && <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">위 '팀' 칸에서 팀을 먼저 만들면 고를 수 있어요.</p>}
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={() => setShowAddForm(false)} className="btn-secondary flex-1 min-h-[48px]">취소</button>
-                                <button type="submit" className="btn-primary flex-1 min-h-[48px]">등록</button>
-                            </div>
-                        </form>
+            {/* 직원 미리 등록 창 */}
+            <PanelModal open={showAddForm} title="직원 미리 등록" titleId="add-employee-title" onClose={closeAdd}>
+                <form onSubmit={(e) => void submitAdd(e)} className="space-y-4">
+                    <div>
+                        <label htmlFor="new-employee-name" className="label">이름 <span className="text-red-700 dark:text-red-300">*</span></label>
+                        <input id="new-employee-name" type="text" autoComplete="name" required aria-required="true" value={newEmployee.name}
+                            onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} className="input min-h-[48px]" placeholder="홍길동" />
                     </div>
-                </div>
-            )}
+                    <div>
+                        <label htmlFor="new-employee-email" className="label">이메일(구글 계정) <span className="text-red-700 dark:text-red-300">*</span></label>
+                        <input id="new-employee-email" type="email" autoComplete="email" inputMode="email" required aria-required="true" value={newEmployee.email}
+                            onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })} className="input min-h-[48px]" placeholder="example@gmail.com" />
+                    </div>
+                    <div>
+                        <label htmlFor="new-employee-team" className="label">팀</label>
+                        {creatingTeam ? (
+                            <div className="flex gap-2">
+                                <input id="new-employee-team" type="text" value={newTeamName} maxLength={TEAM_NAME_MAX} placeholder="새 팀 이름 (예: 행정지원팀)"
+                                    onChange={(e) => setNewTeamName(e.target.value)} className="input flex-1 min-h-[48px]" />
+                                <button type="button" className="btn-secondary min-h-[48px] px-3 flex-shrink-0" disabled={teams.busy || !newTeamName.trim()} onClick={() => void createTeamInDialog()}>만들기</button>
+                            </div>
+                        ) : (
+                            <select id="new-employee-team" value={newEmployee.teamId} className="input min-h-[48px]"
+                                onChange={(e) => {
+                                    if (e.target.value === NEW_TEAM) { setCreatingTeam(true); return; }
+                                    setNewEmployee({ ...newEmployee, teamId: e.target.value });
+                                }}>
+                                <option value="">팀 없음</option>
+                                {teams.activeTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                <option value={NEW_TEAM}>+ 새 팀 만들기…</option>
+                            </select>
+                        )}
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                        <button type="button" onClick={closeAdd} className="btn-secondary flex-1 min-h-[48px]">닫기</button>
+                        <button type="submit" className="btn-primary flex-1 min-h-[48px]">등록</button>
+                    </div>
+                    <p className="text-xs text-surface-600 dark:text-surface-400">등록하면 창이 닫힙니다. 같은 팀 직원을 이어서 넣을 때는 팀이 그대로 남아 있어요.</p>
+                </form>
+            </PanelModal>
 
-            {/* 검색 */}
+            {/* ③ 직원 목록 */}
+            <h2 className={`${stepTitle} mb-3`}><span className={stepNum} aria-hidden="true">3</span> 직원 목록</h2>
             {stats.total > 0 && (
-                <div className="mb-4">
-                    <div className="relative">
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 dark:text-surface-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                        </svg>
-                        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input pl-10" placeholder="이름, 이메일 검색" />
+                <div className="grid gap-2 sm:grid-cols-[1fr_12rem] mb-4">
+                    <div>
+                        <label htmlFor="employee-search" className="sr-only">직원 검색</label>
+                        <input id="employee-search" type="search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                            className="input min-h-[48px]" placeholder="이름, 이메일 검색" />
                     </div>
                     {teams.activeTeams.length > 0 && (
-                        <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} className="input mt-2 min-h-[48px]" aria-label="팀으로 거르기">
+                        <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} className="input min-h-[48px]" aria-label="팀으로 거르기">
                             <option value="all">전체 팀</option>
                             <option value="none">팀 없음</option>
                             {teams.activeTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -189,19 +166,20 @@ export default function EmployeeManager() {
                 </div>
             )}
 
-            {/* 통합 직원 목록 */}
             {stats.total === 0 ? (
-                <div className="glass-card p-12 text-center">
-                    <svg className="w-16 h-16 mx-auto text-surface-200 dark:text-surface-700 mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
-                    </svg>
-                    <p className="text-surface-500 dark:text-surface-400 text-lg font-medium">등록된 직원이 없습니다</p>
-                    <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">초대 링크를 직원들에게 공유하세요</p>
+                <div className="glass-card p-8 text-center">
+                    <div className="text-4xl mb-3" aria-hidden="true">👥</div>
+                    <p className="text-surface-800 dark:text-surface-200 font-medium">아직 등록한 직원이 없습니다</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">위 ② 에서 직원을 미리 등록하거나 초대 링크를 보내세요.</p>
                 </div>
             ) : filteredUnifiedList.length === 0 ? (
-                <div className="glass-card p-12 text-center">
-                    <div className="text-4xl mb-3">🔍</div>
-                    <p className="text-surface-500 dark:text-surface-400 font-medium">검색 결과가 없습니다</p>
+                <div className="glass-card p-8 text-center" aria-live="polite">
+                    <p className="text-surface-800 dark:text-surface-200 font-medium">조건에 맞는 직원이 없습니다</p>
+                    {filtering && (
+                        <button type="button" className="btn-secondary min-h-[44px] px-4 mt-3" onClick={() => { setSearchQuery(''); setTeamFilter('all'); }}>
+                            검색·거르기 지우기
+                        </button>
+                    )}
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -221,6 +199,7 @@ export default function EmployeeManager() {
                             teams={teams.activeTeams}
                             teamName={teams.teamName}
                             onChangeTeam={handleChangeTeam}
+                            onChangePendingTeam={(id, teamId) => void handleChangePendingTeam(id, teamId)}
                             onDeletePreRegistered={handleDeletePreRegistered}
                             onRestore={handleRestoreEmployee}
                             onDeletePermanently={handleDeletePermanently}
