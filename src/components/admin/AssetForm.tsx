@@ -116,6 +116,12 @@ export default function AssetForm() {
                     {text('department', '부서')}
                 </div>
                 {text('usage', '용도', '쓰는 곳·메모')}
+                {f.isNew && (
+                    <Field id="asset-photo" label="사진" hint="선택 — 등록할 때 함께 올립니다. 나중에 재물 화면에서 올리거나 바꿀 수도 있어요.">
+                        <input id="asset-photo" key={f.photo ? "picked" : "empty"} type="file" accept="image/*" className="block w-full text-sm min-h-[48px]"
+                            onChange={(e) => f.setPhoto(e.target.files?.[0] ?? null)} />
+                    </Field>
+                )}
 
                 {f.error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{f.error}</p>}
 

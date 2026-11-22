@@ -9,6 +9,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import useAssetDetail from '../../hooks/useAssetDetail';
 import { StatusBadge, MissingBadge } from './AssetBadges';
+import AssetPhoto from './AssetPhoto';
 import { COMPARE_FIELD_LABEL, type CompareField } from '../../lib/import/diff';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
 import { toDateOrNull, toLocalDateStr } from '../../lib/dateUtils';
@@ -116,6 +117,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
             </div>
 
             <section className="glass-card p-5">
+                <AssetPhoto asset={a} admin={admin} onChanged={d.applyPhoto} />
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                     <StatusBadge status={a.status} />
                     {a.missingFromSource && <MissingBadge />}
@@ -185,7 +187,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
                                     <ul className="mt-1 space-y-0.5 text-surface-700 dark:text-surface-300">
                                         {Object.entries(h.changes).map(([f, ch]) => (
                                             <li key={f}>
-                                                {COMPARE_FIELD_LABEL[f as CompareField] ?? f}: {showValue(f, ch.before, d.spaces)} → {showValue(f, ch.after, d.spaces)}
+                                                {COMPARE_FIELD_LABEL[f as CompareField] ?? (f === 'photo' ? '사진' : f)}: {showValue(f, ch.before, d.spaces)} → {showValue(f, ch.after, d.spaces)}
                                             </li>
                                         ))}
                                     </ul>

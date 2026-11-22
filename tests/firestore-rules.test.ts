@@ -954,6 +954,11 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertSucceeds(db.collection('assets').doc('org-A__m-1').set(assetDoc('A', 'admin_A', { code: 'm-1', manual: true, lastImportId: null })));
       await assertFails(db.collection('assets').doc('org-A__m-2').set(assetDoc('A', 'admin_A', { code: 'm-2', manual: 'yes' })));
       await assertFails(emp('A', 1).collection('assets').doc('org-A__m-3').set(assetDoc('A', 'emp_A1', { code: 'm-3', manual: true })));
+      // 대표 사진 값(2026-11-22)은 글자 또는 null
+      await assertSucceeds(db.collection('assets').doc('org-A__p-1').set(assetDoc('A', 'admin_A', {
+        code: 'p-1', photoUrl: 'https://x/y.jpg', photoThumbUrl: 'https://x/t.jpg', photoPath: 'organizations/org-A/assets/org-A__p-1/photo-1.jpg', photoThumbPath: null,
+      })));
+      await assertFails(db.collection('assets').doc('org-A__p-2').set(assetDoc('A', 'admin_A', { code: 'p-2', photoUrl: 123 })));
       await assertFails(emp('A', 1).collection('history').doc('h1').get());
     });
 

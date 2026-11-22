@@ -8,6 +8,13 @@ function isSuperAdmin() {
 // 업로드 허용 이미지 형식 — 래스터 형식만 허용한다. 'image/.*'는 image/svg+xml(스크립트 삽입 가능)까지
 // 통과시키므로 쓰지 않는다. 앱은 JPEG(피드백 첨부)·WebP(OCR 신고)로 압축해 올리고, 압축이 실패하면
 // 카메라 원본(JPEG/PNG/HEIC 등)을 그대로 올리므로 흔한 카메라·갤러리 형식은 남겨 둔다.
+function isOrgMember(orgId) {
+  return request.auth != null && request.auth.token.orgId == orgId;
+}
+function isOrgAdmin(orgId) {
+  return isOrgMember(orgId) && request.auth.token.role == 'admin';
+}
+
 function isAllowedImage() {
   return request.resource.contentType.matches('image/(jpeg|png|webp|gif|heic|heif|avif)');
 }
@@ -22,6 +29,20 @@ service firebase.storage {
     match /organizations/{orgId}/{fileName} {
       allow read: if isSuperAdmin();
       allow write: if false;
+    }
+
+    // 재물 대표 사진(2026-11-22) — 같은 기관이 보고, 그 기관 관리자만 올리고 지운다.
+    // 앱이 브라우저에서 줄여(긴 변 1280px JPEG) 올리므로 2MB면 넉넉하다. 고쳐 쓰지 않고 새 이름으로 올린다.
+    // 재물 폴더 이름은 재물 문서 ID(`기관ID__자산코드`)라 접두사로 다른 기관 자리를 막는다.
+    // 기관 해지 파기가 organizations/{기관}/ 아래를 통째로 지운다.
+    match /organizations/{orgId}/assets/{assetId}/{fileName} {
+      allow read: if isOrgMember(orgId) || isSuperAdmin();
+      allow create: if isOrgAdmin(orgId)
+                    && assetId.matches(orgId + '__.+')
+                    && request.resource.size < 2 * 1024 * 1024
+                    && isAllowedImage();
+      allow delete: if isOrgAdmin(orgId) || isSuperAdmin();
+      allow update: if false;
     }
 
     // 일반 피드백 이미지 업로드 (본인 폴더만)

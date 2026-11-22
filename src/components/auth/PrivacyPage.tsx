@@ -295,6 +295,7 @@ export default function PrivacyPage() {
                                     <li>조사 기간이 아니어도 라벨 QR을 찍어 재물을 열면 그 재물의 <strong>마지막 확인(계정·시각)</strong>이 재물마다 한 건 남습니다(오래 확인하지 못한 재물을 찾는 용도). 새로 찍으면 이전 확인은 덮어씁니다.</li>
                                     <li>결과 보고서에는 <strong>제출·승인한 사람의 이름만</strong> 담고, 누가 찍었는지는 담지 않습니다.</li>
                                     <li>재물 금액은 기관 관리자만 볼 수 있습니다.</li>
+                                    <li>재물 사진은 기관 관리자가 물건을 알아보려고 올리는 사진입니다. <strong>사람이 찍히지 않게</strong> 물건만 찍어 주세요. 같은 기관 구성원이 볼 수 있고, 기관을 삭제하면 함께 파기됩니다.</li>
                                 </ul>
                             </div>
                         </div>
@@ -404,7 +405,7 @@ export default function PrivacyPage() {
                                     </li>
                                     {/* 버킷 리전은 Firebase 프로젝트를 만들 때 정한다 — 다르게 만들면 여기를 고친다(OPERATIONS.md) */}
                                     <li>
-                                        비영리 증빙서류 사본은 Google Cloud Storage의 <strong>미국(us-east1) 리전</strong>에 보관됩니다.
+                                        비영리 증빙서류 사본과 재물 사진은 Google Cloud Storage의 <strong>미국(us-east1) 리전</strong>에 보관됩니다.
                                     </li>
                                 </ul>
                             </div>

@@ -102,6 +102,10 @@ export type { SpaceLocation } from './spaces';
 // 팀 (2026-11-22) — 직원 소속 팀, 공간 담당 팀
 export { getTeams, createTeam, updateTeam, sortTeams, validateTeamName, normalizeTeamName } from './teams';
 
+// 재물 사진 (2026-11-22)
+export { uploadAssetPhoto, removeAssetPhoto, PHOTO_SOURCE_MAX_BYTES } from './assetPhotos';
+export type { AssetPhotoFields } from './assetPhotos';
+
 // 재물 직접 등록·수정 (2026-11-22)
 export {
     createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, MANUAL_EDIT_FIELDS,

@@ -120,7 +120,10 @@ export default function AssetList() {
                                                     <Link to={detailPath(a)} className="text-primary-600 dark:text-primary-400 underline-offset-2 hover:underline">{a.code}</Link>
                                                 </td>
                                                 <td className="p-3 text-surface-900 dark:text-surface-100">
-                                                    {a.name ?? '-'} {a.missingFromSource && <MissingBadge />}
+                                                    <span className="flex items-center gap-2">
+                                                        <Thumb asset={a} size="w-9 h-9" />
+                                                        <span>{a.name ?? '-'} {a.missingFromSource && <MissingBadge />}</span>
+                                                    </span>
                                                 </td>
                                                 <td className="p-3 text-surface-600 dark:text-surface-300">{a.category ?? '-'}</td>
                                                 <td className="p-3 text-surface-700 dark:text-surface-300">
@@ -140,6 +143,7 @@ export default function AssetList() {
                                 {al.visible.map((a) => (
                                     <li key={a.id} className="glass-card p-3 flex items-start gap-3">
                                         <input type="checkbox" className="w-5 h-5 mt-1 flex-shrink-0" aria-label={`${a.code} 고르기`} checked={al.selected.has(a.id)} onChange={() => al.toggle(a.id)} />
+                                        <Thumb asset={a} size="w-12 h-12" />
                                         <Link to={detailPath(a)} className="min-w-0 flex-1 block">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="font-mono text-sm font-semibold text-surface-900 dark:text-surface-100">{a.code}</span>
@@ -269,4 +273,11 @@ function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProp
             </div>
         </div>
     );
+}
+
+/** 목록용 작은 사진(2026-11-22) — 없으면 같은 크기의 빈 칸으로 줄을 맞춘다 */
+function Thumb({ asset, size }: { asset: Asset; size: string }) {
+    return asset.photoThumbUrl
+        ? <img src={asset.photoThumbUrl} alt="" loading="lazy" className={`${size} rounded-lg object-cover flex-shrink-0 bg-surface-100 dark:bg-surface-800`} />
+        : <span aria-hidden="true" className={`${size} rounded-lg flex-shrink-0 bg-surface-100 dark:bg-surface-800`} />;
 }

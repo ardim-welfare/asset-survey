@@ -309,7 +309,8 @@ service cloud.firestore {
       return d.keys().hasOnly(['organizationId', 'code', 'name', 'category', 'spec', 'acquiredAt',
                                'acquiredQuantity', 'quantity', 'status', 'statusRaw', 'locationRaw',
                                'spaceId', 'department', 'usage', 'missingFromSource', 'manual', 'lastImportId',
-                               'tagId', 'lastEditedByUid', 'createdAt', 'updatedAt'])
+                               'tagId', 'photoUrl', 'photoThumbUrl', 'photoPath', 'photoThumbPath',
+                               'lastEditedByUid', 'createdAt', 'updatedAt'])
              && d.organizationId is string
              && d.code is string && d.code.size() > 0 && d.code.size() <= 100
              && nullableString(d.name, 200) && nullableString(d.category, 100) && nullableString(d.spec, 200)
@@ -322,6 +323,11 @@ service cloud.firestore {
              && d.missingFromSource is bool
              // 앱에서 직접 등록한 재물 표시(2026-11-22) — 예전 문서에는 없다
              && (!('manual' in d) || d.manual is bool)
+             // 대표 사진(2026-11-22) — 주소·경로 글자. 예전 문서에는 없다
+             && (!('photoUrl' in d) || nullableString(d.photoUrl, 2000))
+             && (!('photoThumbUrl' in d) || nullableString(d.photoThumbUrl, 2000))
+             && (!('photoPath' in d) || nullableString(d.photoPath, 500))
+             && (!('photoThumbPath' in d) || nullableString(d.photoThumbPath, 500))
              && nullableString(d.lastImportId, 100)
              // QR 태그 ID(기획서 F09) — 헷갈리는 글자(I·L·O·U)를 뺀 대문자·숫자 10자. 없으면 null
              && (d.get('tagId', null) == null || (d.tagId is string && d.tagId.matches('^[0-9A-HJKMNP-TV-Z]{10}$')))

@@ -141,3 +141,39 @@ describe('Storage Security Rules — 피드백 이미지 업로드 형식 제한
     );
   });
 });
+
+// 재물 대표 사진 (2026-11-22) — 같은 기관이 보고, 그 기관 관리자만 올리고 지운다
+describe('Storage Security Rules — 재물 사진', () => {
+  let env: RulesTestEnvironment;
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+  const PATH = 'organizations/org-A/assets/org-A__1/photo-1.jpg';
+
+  beforeAll(async () => {
+    env = await initializeTestEnvironment({
+      projectId: PROJECT_ID,
+      storage: { rules: readFileSync(resolve(process.cwd(), 'storage.rules'), 'utf8'), host: '127.0.0.1', port: 9199 },
+    });
+  });
+  beforeEach(async () => { await env.clearStorage(); });
+  afterAll(async () => { await env.cleanup(); });
+
+  const as = (uid: string, role: string, orgId: string) => env.authenticatedContext(uid, { role, orgId }).storage();
+
+  it('기관 관리자는 자기 기관 재물 폴더에 JPEG를 올리고, 같은 기관 직원은 본다', async () => {
+    await assertSucceeds(uploadBytes(ref(as('admin_A', 'admin', 'org-A'), PATH), jpg, { contentType: 'image/jpeg' }));
+    await assertSucceeds(getBytes(ref(as('emp_A1', 'employee', 'org-A'), PATH)));
+    await assertFails(getBytes(ref(as('emp_B1', 'employee', 'org-B'), PATH)));
+  });
+
+  it('직원·다른 기관 관리자·다른 기관 재물 폴더·이미지가 아닌 파일은 막힌다', async () => {
+    await assertFails(uploadBytes(ref(as('emp_A1', 'employee', 'org-A'), PATH), jpg, { contentType: 'image/jpeg' }));
+    await assertFails(uploadBytes(ref(as('admin_B', 'admin', 'org-B'), PATH), jpg, { contentType: 'image/jpeg' }));
+    await assertFails(uploadBytes(ref(as('admin_A', 'admin', 'org-A'), 'organizations/org-A/assets/org-B__1/photo-1.jpg'), jpg, { contentType: 'image/jpeg' }));
+    await assertFails(uploadBytes(ref(as('admin_A', 'admin', 'org-A'), PATH), jpg, { contentType: 'text/html' }));
+  });
+
+  it('너무 큰 파일(2MB 이상)은 막힌다', async () => {
+    const big = new Uint8Array(2 * 1024 * 1024 + 1);
+    await assertFails(uploadBytes(ref(as('admin_A', 'admin', 'org-A'), PATH), big, { contentType: 'image/jpeg' }));
+  });
+});

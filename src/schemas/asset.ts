@@ -43,6 +43,14 @@ export const assetSchema = z.object({
      * 기관·물건 정보를 담지 않은 무작위 글자다. 한 번 정하면 바꾸지 않는다(이미 붙인 라벨이 있으므로) — Rules가 막는다.
      */
     tagId: z.string().nullable().catch(null),
+    /**
+     * 대표 사진(2026-11-22) — 내려받기 주소(사진·목록용 작은 사진)와 Storage 경로. 없으면 null.
+     * 올리기·지우기는 lib/firestore/assetPhotos.ts. 다시 가져오기는 이 값을 건드리지 않는다.
+     */
+    photoUrl: z.string().nullable().optional().catch(null),
+    photoThumbUrl: z.string().nullable().optional().catch(null),
+    photoPath: z.string().nullable().optional().catch(null),
+    photoThumbPath: z.string().nullable().optional().catch(null),
     lastEditedByUid: z.string().optional().catch(undefined),
     createdAt: timestampSchema.optional().catch(undefined),
     updatedAt: timestampSchema.optional().catch(undefined),

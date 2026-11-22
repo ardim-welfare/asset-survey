@@ -10,7 +10,7 @@ import { useAuth } from './useAuth';
 import { useToast } from './useToast';
 import {
     getAsset, getAssets, getAssetAccounting, getSpaces, getBuildings,
-    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError,
+    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, uploadAssetPhoto,
     type ManualAssetFields,
 } from '../lib/firestore';
 import type { Asset, AssetAccounting, AssetStatus } from '../types/asset';
@@ -98,6 +98,8 @@ export default function useAssetForm(assetId: string | undefined) {
     const [loadError, setLoadError] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    /** 새로 등록할 때 함께 올릴 사진(선택, 2026-11-22) — 고칠 때는 재물 화면에서 바꾼다 */
+    const [photo, setPhoto] = useState<File | null>(null);
 
     const load = useCallback(async () => {
         if (!orgId) { setLoading(false); return; }
@@ -151,6 +153,15 @@ export default function useAssetForm(assetId: string | undefined) {
                 const id = await createAssetManually({ orgId, code, fields, amount });
                 setCodes((prev) => [...prev, code]);
                 showToast(`'${fields.name}'을(를) 등록했습니다.`, 'success');
+                if (photo) {
+                    // 사진은 등록 뒤에 올린다 — 실패해도 재물은 등록됐으니 재물 화면에서 다시 올리게 안내한다
+                    try {
+                        await uploadAssetPhoto({ id, organizationId: orgId, code }, photo);
+                    } catch {
+                        showToast('사진은 올리지 못했습니다. 재물 화면에서 다시 올려 주세요.', 'warning');
+                    }
+                    setPhoto(null);
+                }
                 if (keepGoing) setValues((prev) => ({ ...EMPTY_ASSET_FORM, spaceId: prev.spaceId, category: prev.category, status: prev.status }));
                 return id;
             }
@@ -166,10 +177,10 @@ export default function useAssetForm(assetId: string | undefined) {
         } finally {
             setSaving(false);
         }
-    }, [orgId, saving, values, isNew, codes, asset, accounting, showToast]);
+    }, [orgId, saving, values, isNew, codes, asset, accounting, photo, showToast]);
 
     return {
-        isNew, values, set, autoCode, save, saving, error,
+        isNew, values, set, autoCode, save, saving, error, photo, setPhoto,
         asset, spaces, buildings, loading, loadError, reload: load,
         /** 대장에서 온 재물 — 고쳐도 다음 가져오기 때 대장 값으로 바뀐다 */
         fromLedger: !!asset && !asset.manual,

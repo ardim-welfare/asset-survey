@@ -64,5 +64,10 @@ export default function useAssetDetail(assetId: string | undefined, { admin }: {
         setAsset((prev) => (prev && !prev.tagId && tags.has(prev.id) ? { ...prev, tagId: tags.get(prev.id) ?? null } : prev));
     }, []);
 
-    return { orgId, asset, space, spaces, accounting, history, check, loading, error, notFound, reload: load, applyTags };
+    /** 사진을 올리거나 지우면 화면에 바로 반영한다 */
+    const applyPhoto = useCallback((fields: Partial<Asset>) => {
+        setAsset((prev) => (prev ? { ...prev, ...fields } : prev));
+    }, []);
+
+    return { orgId, asset, space, spaces, accounting, history, check, applyPhoto, loading, error, notFound, reload: load, applyTags };
 }
