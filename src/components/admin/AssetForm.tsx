@@ -5,9 +5,9 @@
  * /admin/assets/:assetId/edit — 고치기(자산코드는 바꿀 수 없다 — 문서 ID·라벨과 묶여 있다)
  * 상태와 저장은 useAssetForm이 맡는다.
  */
-import { type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import useAssetForm, { ASSET_LIMITS, type AssetFormValues } from '../../hooks/useAssetForm';
+import useAssetForm, { ASSET_LIMITS, formatAmountInput, type AssetFormValues } from '../../hooks/useAssetForm';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
 import type { AssetStatus } from '../../types/asset';
@@ -111,9 +111,9 @@ export default function AssetForm() {
                         <input id="asset-quantity" type="number" min={0} inputMode="numeric" className="input w-full min-h-[48px]" value={v.quantity} onChange={(e) => f.set('quantity', e.target.value)} />
                     </Field>
                     <Field id="asset-amount" label="자산금액(원)" hint="관리자만 봅니다.">
-                        <input id="asset-amount" type="text" inputMode="numeric" className="input w-full min-h-[48px]" value={v.amount} placeholder="예: 250000" onChange={(e) => f.set('amount', e.target.value)} />
+                        <input id="asset-amount" type="text" inputMode="numeric" className="input w-full min-h-[48px]" value={v.amount} placeholder="예: 250,000" onChange={(e) => f.set('amount', formatAmountInput(e.target.value))} />
                     </Field>
-                    {text('department', '부서')}
+                    <DepartmentField value={v.department} options={f.departments} onChange={(d) => f.set('department', d)} />
                 </div>
                 {text('usage', '용도', '쓰는 곳·메모')}
                 {f.isNew && (
@@ -149,5 +149,39 @@ function Field({ id, label, required, hint, children }: { id: string; label: str
             {children}
             {hint && <p className={`${sub} mt-1`}>{hint}</p>}
         </div>
+    );
+}
+
+const DIRECT = '__direct__';
+
+/**
+ * 부서 고르기(2026-11-22) — 팀 이름과 이미 쓰인 부서 이름 중에서 고르고, 없으면 [직접 입력]으로 적는다.
+ * 목록에 없는 값이 이미 들어 있으면(대장에서 가져온 값) 처음부터 직접 입력 칸으로 보인다.
+ */
+function DepartmentField({ value, options, onChange }: { value: string; options: string[]; onChange: (v: string) => void }) {
+    const [direct, setDirect] = useState(() => value !== '' && !options.includes(value));
+    const inList = options.includes(value);
+    return (
+        <Field id="asset-department" label="부서" hint={options.length === 0 ? '직원 관리에서 팀을 만들면 여기서 고를 수 있어요.' : undefined}>
+            {!direct && options.length > 0 ? (
+                <select id="asset-department" className="input w-full min-h-[48px]" value={inList ? value : ''}
+                    onChange={(e) => {
+                        if (e.target.value === DIRECT) { setDirect(true); onChange(''); return; }
+                        onChange(e.target.value);
+                    }}>
+                    <option value="">부서 없음</option>
+                    {options.map((o) => <option key={o} value={o}>{o}</option>)}
+                    <option value={DIRECT}>직접 입력…</option>
+                </select>
+            ) : (
+                <div className="flex gap-2">
+                    <input id="asset-department" type="text" className="input flex-1 min-h-[48px]" value={value} maxLength={ASSET_LIMITS.department}
+                        placeholder="부서 이름" onChange={(e) => onChange(e.target.value)} />
+                    {options.length > 0 && (
+                        <button type="button" className="btn-secondary min-h-[48px] px-3 flex-shrink-0" onClick={() => { setDirect(false); onChange(''); }}>목록에서 고르기</button>
+                    )}
+                </div>
+            )}
+        </Field>
     );
 }

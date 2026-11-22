@@ -10,7 +10,7 @@ import { useAuth } from './useAuth';
 import { useToast } from './useToast';
 import {
     getAsset, getAssets, getAssetAccounting, getSpaces, getBuildings,
-    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, uploadAssetPhoto,
+    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, uploadAssetPhoto, getTeams,
     type ManualAssetFields,
 } from '../lib/firestore';
 import type { Asset, AssetAccounting, AssetStatus } from '../types/asset';
@@ -44,6 +44,12 @@ const toNumber = (s: string): number | null => {
     const t = s.replace(/[,\s원]/g, '');
     return t === '' ? null : Number(t);
 };
+
+/** 금액 칸 글자 — 숫자만 남겨 천 단위 쉼표를 붙인다("250000" → "250,000"). 저장 때는 toNumber가 쉼표를 뗀다 */
+export function formatAmountInput(raw: string): string {
+    const digits = raw.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+    return digits === '' ? '' : Number(digits).toLocaleString('ko-KR');
+}
 
 /** 입력 검사 — 문제가 있으면 안내 문구 */
 export function validateAssetForm(v: AssetFormValues, isNew: boolean): string | null {
@@ -79,7 +85,7 @@ function fromAsset(a: Asset, acc: AssetAccounting | null): AssetFormValues {
     return {
         code: a.code, name: s(a.name), category: s(a.category), spec: s(a.spec), acquiredAt: s(a.acquiredAt),
         quantity: a.quantity == null ? '' : String(a.quantity), status: a.status, spaceId: a.spaceId ?? '',
-        department: s(a.department), usage: s(a.usage), amount: acc?.amount == null ? '' : String(acc.amount),
+        department: s(a.department), usage: s(a.usage), amount: acc?.amount == null ? '' : formatAmountInput(String(acc.amount)),
     };
 }
 
@@ -92,6 +98,8 @@ export default function useAssetForm(assetId: string | undefined) {
     const [asset, setAsset] = useState<Asset | null>(null);
     const [accounting, setAccounting] = useState<AssetAccounting | null>(null);
     const [codes, setCodes] = useState<string[]>([]);
+    /** 부서 고르기 목록(2026-11-22) — 팀 이름 + 이미 재물에 쓰인 부서 이름, 가나다순 */
+    const [departments, setDepartments] = useState<string[]>([]);
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [buildings, setBuildings] = useState<Building[]>([]);
     const [loading, setLoading] = useState(true);
@@ -106,9 +114,19 @@ export default function useAssetForm(assetId: string | undefined) {
         setLoading(true);
         setLoadError(false);
         try {
-            const [sp, bd] = await Promise.all([getSpaces(orgId), getBuildings(orgId)]);
+            const [sp, bd, all, teams] = await Promise.all([
+                getSpaces(orgId), getBuildings(orgId), getAssets(orgId),
+                getTeams(orgId).catch(() => []),
+            ]);
             setSpaces(sp);
             setBuildings(bd);
+            // 자동 번호·겹침 확인용 코드 목록과 부서 고르기 목록
+            setCodes(all.map((a) => a.code));
+            const names = new Set<string>([
+                ...teams.filter((t) => !t.archived).map((t) => t.name),
+                ...all.map((a) => a.department?.trim() ?? '').filter(Boolean),
+            ]);
+            setDepartments([...names].sort((a, b) => a.localeCompare(b, 'ko')));
             if (assetId) {
                 const found = await getAsset(assetId);
                 if (!found || found.organizationId !== orgId) { setLoadError(true); return; }
@@ -116,9 +134,6 @@ export default function useAssetForm(assetId: string | undefined) {
                 setAsset(found);
                 setAccounting(acc);
                 setValues(fromAsset(found, acc));
-            } else {
-                // 자동 번호·겹침 확인용 — 기관 재물 코드 목록
-                setCodes((await getAssets(orgId)).map((a) => a.code));
             }
         } catch {
             setLoadError(true);
@@ -180,7 +195,7 @@ export default function useAssetForm(assetId: string | undefined) {
     }, [orgId, saving, values, isNew, codes, asset, accounting, photo, showToast]);
 
     return {
-        isNew, values, set, autoCode, save, saving, error, photo, setPhoto,
+        isNew, values, set, autoCode, save, saving, error, photo, setPhoto, departments,
         asset, spaces, buildings, loading, loadError, reload: load,
         /** 대장에서 온 재물 — 고쳐도 다음 가져오기 때 대장 값으로 바뀐다 */
         fromLedger: !!asset && !asset.manual,

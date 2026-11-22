@@ -2,7 +2,7 @@
  * useAssetForm — 재물 직접 등록 입력 검사·값 바꾸기 (2026-11-22)
  */
 import { describe, it, expect } from 'vitest';
-import { validateAssetForm, toManualFields, EMPTY_ASSET_FORM } from '../../hooks/useAssetForm';
+import { validateAssetForm, toManualFields, EMPTY_ASSET_FORM, formatAmountInput } from '../../hooks/useAssetForm';
 
 const form = (over: Partial<typeof EMPTY_ASSET_FORM> = {}) => ({ ...EMPTY_ASSET_FORM, code: 'A-1', name: '책상', ...over });
 
@@ -29,5 +29,15 @@ describe('toManualFields', () => {
         const { fields, amount } = toManualFields(form({ category: '  ', quantity: '', amount: '1,200원', spaceId: '' }));
         expect(fields).toMatchObject({ name: '책상', category: null, quantity: null, spaceId: null, status: 'active' });
         expect(amount).toBe(1200);
+    });
+});
+
+describe('formatAmountInput', () => {
+    it('숫자만 남겨 천 단위 쉼표를 붙이고, 저장 값은 쉼표 없는 숫자다', () => {
+        expect(formatAmountInput('200000')).toBe('200,000');
+        expect(formatAmountInput('1,234,5678원')).toBe('12,345,678');
+        expect(formatAmountInput('00012')).toBe('12');
+        expect(formatAmountInput('')).toBe('');
+        expect(toManualFields(form({ amount: formatAmountInput('250000') })).amount).toBe(250000);
     });
 });
