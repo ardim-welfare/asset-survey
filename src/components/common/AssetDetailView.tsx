@@ -107,7 +107,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
             const end = usefulLifeEnd(a.acquiredAt, a.usefulLife);
             return `${a.usefulLife}년${end ? ` (${end}까지${lifeOver ? ' · 지났습니다' : ''})` : ''}`;
         })()],
-        ['공간', d.space ? `${d.space.name}${d.space.archived ? ' (숨김)' : ''}` : a.spaceId ? '(지운 공간)' : '미지정'],
+        ['공간', d.space ? `${d.spaceLocation ? `${d.spaceLocation} ` : ''}${d.space.name}${d.space.archived ? ' (삭제한 공간)' : ''}` : a.spaceId ? '(지운 공간)' : '미지정'],
         ['대장의 위치', a.locationRaw],
         ['마지막 확인', justChecked ? '방금 (QR)' : checkText(d.check, d.spaces)],
         ['대장의 상태', a.statusRaw],

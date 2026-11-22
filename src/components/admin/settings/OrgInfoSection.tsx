@@ -37,7 +37,7 @@ export default function OrgInfoSection({
                             value={form.address}
                             onChange={e => setForm({ ...form, address: e.target.value })}
                             className="input min-h-[48px]"
-                            placeholder="AI가 주소를 읽지 못한 경우 직접 입력해주세요"
+                            placeholder="예: 서울시 ○○구 ○○로 12"
                         />
                     )}
                     <div className="flex flex-wrap items-center gap-2 mt-2">

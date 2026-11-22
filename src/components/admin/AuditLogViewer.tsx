@@ -50,7 +50,7 @@ function SegmentButton({ active, onClick, children }: { active: boolean; onClick
             className={`flex-1 min-h-[48px] px-3 rounded-xl text-sm font-medium transition-colors ${
                 active
                     ? 'bg-primary-600 text-white shadow-md'
-                    : 'bg-surface-100 text-surface-600 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-300 dark:hover:bg-surface-600'
+                    : 'bg-white text-surface-800 border border-surface-300 hover:bg-surface-50 dark:bg-surface-800 dark:text-surface-200 dark:border-surface-600 dark:hover:bg-surface-700'
             }`}
         >
             {children}

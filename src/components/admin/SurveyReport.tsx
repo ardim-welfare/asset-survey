@@ -27,6 +27,15 @@ const EVENT_LABEL: Record<SurveyEvent['type'], string> = {
     'sync-done': '반영 완료 표시', 'sync-undone': '반영 완료 해제',
 };
 
+/**
+ * 표 칸 줄바꿈 — 휴대폰에서 칸이 좁아지면 "본관 1/층", "행정/사무/실"처럼 글자 단위로 꺾였다(2026-11-22 화면 점검).
+ * 짧은 값은 한 줄로 두고(표가 옆으로 밀린다), 긴 값(메모·긴 품명)은 칸 폭을 잡고 낱말 단위로 꺾는다.
+ */
+function cellWrap(v: string | number): string {
+    if (typeof v === 'number') return 'whitespace-nowrap';
+    return v.length <= 14 ? 'whitespace-nowrap' : 'min-w-[12rem] break-keep';
+}
+
 function when(ts: unknown): string {
     const d = toDateOrNull((ts ?? null) as Parameters<typeof toDateOrNull>[0]);
     if (!d) return '-';
@@ -38,13 +47,17 @@ export default function SurveyReport() {
     const { surveyId } = useParams<{ surveyId: string }>();
     const r = useSurveyReport(surveyId);
     const [showLog, setShowLog] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     if (r.loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
     if (r.notFound || r.error || !r.ctx || !r.survey) {
         return (
             <div className="max-w-3xl mx-auto glass-card p-6 text-center">
-                <p className="text-surface-700 dark:text-surface-300 mb-4">{r.notFound ? '이 기관에 없는 조사입니다.' : '보고서를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 열어 주세요.'}</p>
-                <Link to="/admin/surveys" className="btn-primary min-h-[48px] px-5">재물조사로</Link>
+                <p className="text-surface-700 dark:text-surface-300 mb-4" role={r.notFound ? undefined : 'alert'}>{r.notFound ? '이 기관에 없는 조사입니다.' : '보고서를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 불러오세요.'}</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                    {!r.notFound && <button type="button" className="btn-primary min-h-[48px] px-5" onClick={() => void r.reload()}>다시 불러오기</button>}
+                    <Link to="/admin/surveys" className={`${r.notFound ? 'btn-primary' : 'btn-secondary'} min-h-[48px] px-5`}>재물조사로</Link>
+                </div>
             </div>
         );
     }
@@ -55,6 +68,14 @@ export default function SurveyReport() {
     const photos = reportPhotos(ctx);
     const closed = r.survey.status === 'closed';
     const doneCount = r.tasks.filter((t) => t.done).length;
+    // 종합은 숫자 9개짜리 한 줄 표라 휴대폰에서 옆으로 밀어야 했다 — 숫자 칸으로 보여 준다(2026-11-22 점검)
+    const overview = tables.find((t) => t.title === '종합');
+    const detailTables = tables.filter((t) => t.title !== '종합');
+    const sectionId = (i: number) => `report-section-${i}`;
+    const handleExcel = async () => {
+        setExporting(true);
+        try { await r.downloadExcel(); } finally { setExporting(false); }
+    };
 
     return (
         <div className="max-w-5xl mx-auto animate-fade-in">
@@ -64,13 +85,48 @@ export default function SurveyReport() {
             <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
                 <div>
                     <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">{closed ? '결과 보고서' : '중간 보고서'}</h1>
-                    <p className="text-sm text-surface-600 dark:text-surface-400">{reportHeader(ctx).map(([k, v]) => `${k} ${v}`).join(' · ')}</p>
+                    {/* 항목마다 한 덩어리로 — 휴대폰에서 날짜가 "2025-/11-30"처럼 꺾였다 */}
+                    <p className="text-sm text-surface-600 dark:text-surface-400 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {reportHeader(ctx).map(([k, v]) => <span key={k} className="whitespace-nowrap">{k} <span className="text-surface-800 dark:text-surface-200">{v}</span></span>)}
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={r.printPdf}>PDF(인쇄)</button>
-                    <button type="button" className="btn-primary min-h-[48px] px-4" onClick={() => void r.downloadExcel()}>엑셀 내려받기</button>
+                    <button type="button" className="btn-primary min-h-[48px] px-4" onClick={() => void handleExcel()} disabled={exporting}>
+                        {exporting ? '만드는 중…' : '엑셀 내려받기'}
+                    </button>
                 </div>
             </div>
+            {overview && overview.rows[0] && (
+                <section className={card} aria-labelledby="overview-title">
+                    <h2 id="overview-title" className="font-semibold text-surface-900 dark:text-surface-100 mb-3">종합</h2>
+                    <dl className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+                        {overview.columns.map((c, j) => (
+                            <div key={c} className="rounded-xl bg-surface-50 dark:bg-surface-800 p-2.5">
+                                <dt className={`${sub} break-keep`}>{c}</dt>
+                                <dd className="text-lg font-bold tabular-nums text-surface-900 dark:text-surface-100">{Number(overview.rows[0][j]).toLocaleString('ko-KR')}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                    {/* 보고서가 길다 — 표마다 건수와 함께 바로 가는 길을 둔다 */}
+                    <nav aria-label="보고서 바로 가기" className="mt-4">
+                        <p className={`${sub} mb-1`}>바로 가기</p>
+                        <ul className="flex flex-wrap gap-2">
+                            {detailTables.map((t, i) => (
+                                <li key={t.title}>
+                                    <a href={`#${sectionId(i)}`} className="btn-secondary btn-sm min-h-[44px] px-3">
+                                        {t.title}{!['건물·층별', '공간별'].includes(t.title) && <span className="tabular-nums"> {t.rows.length}</span>}
+                                    </a>
+                                </li>
+                            ))}
+                            {photos.length > 0 && (
+                                <li><a href="#photo-title" className="btn-secondary btn-sm min-h-[44px] px-3">{PHOTO_TABLE_TITLE} <span className="tabular-nums">{photos.length}</span></a></li>
+                            )}
+                        </ul>
+                    </nav>
+                </section>
+            )}
+
             {!closed && (
                 <p className="mb-4 text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
                     아직 진행 중인 조사입니다. 지금까지 찍은 것으로 계산했고, 마감하면 희망이음 반영 목록이 만들어집니다.
@@ -101,10 +157,10 @@ export default function SurveyReport() {
                 </section>
             )}
 
-            {tables.map((t) => (
-                <section key={t.title} className={card}>
-                    <h2 className="font-semibold text-surface-900 dark:text-surface-100 mb-2">
-                        {t.title}{t.title !== '종합' && t.rows.length > 0 && <span className={`${sub} font-normal`}> {t.rows.length}건</span>}
+            {detailTables.map((t, i) => (
+                <section key={t.title} id={sectionId(i)} className={`${card} scroll-mt-20`} aria-labelledby={`${sectionId(i)}-title`}>
+                    <h2 id={`${sectionId(i)}-title`} className="font-semibold text-surface-900 dark:text-surface-100 mb-2">
+                        {t.title}{t.rows.length > 0 && <span className={`${sub} font-normal`}> {t.rows.length}건</span>}
                     </h2>
                     {t.rows.length === 0 ? <p className="text-sm text-surface-600 dark:text-surface-300">{t.empty}</p> : (
                         <>
@@ -117,7 +173,7 @@ export default function SurveyReport() {
                                 </thead>
                                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
                                     {t.rows.map((row, i) => (
-                                        <tr key={i}>{row.map((v, j) => <td key={j} className={`py-2 pr-3 text-surface-800 dark:text-surface-200 ${typeof v === 'number' ? 'text-right tabular-nums' : ''} ${j === 0 ? 'sticky left-0 bg-white dark:bg-surface-800' : ''}`}>{typeof v === 'number' ? v.toLocaleString('ko-KR') : v}</td>)}</tr>
+                                        <tr key={i}>{row.map((v, j) => <td key={j} className={`py-2 pr-3 text-surface-800 dark:text-surface-200 ${cellWrap(v)} ${typeof v === 'number' ? 'text-right tabular-nums' : ''} ${j === 0 ? 'sticky left-0 bg-white dark:bg-surface-800' : ''}`}>{typeof v === 'number' ? v.toLocaleString('ko-KR') : v}</td>)}</tr>
                                     ))}
                                 </tbody>
                             </table>
@@ -128,7 +184,7 @@ export default function SurveyReport() {
             ))}
 
             {photos.length > 0 && (
-                <section className={card} aria-labelledby="photo-title">
+                <section className={`${card} scroll-mt-20`} aria-labelledby="photo-title">
                     <h2 id="photo-title" className="font-semibold text-surface-900 dark:text-surface-100 mb-2">
                         {PHOTO_TABLE_TITLE} <span className={`${sub} font-normal`}>{photos.length}건</span>
                     </h2>
@@ -173,7 +229,7 @@ function TaskRow({ task, spaceName, onToggle }: { task: SyncTask; spaceName: (ke
     return (
         <li>
             <label className="flex items-start gap-3 py-2 min-h-[44px] text-sm cursor-pointer">
-                <input type="checkbox" className="w-5 h-5 mt-0.5 flex-shrink-0" checked={task.done} onChange={onToggle} />
+                <input type="checkbox" className="w-5 h-5 mt-0.5 flex-shrink-0 accent-primary-600" checked={task.done} onChange={onToggle} />
                 <span className={task.done ? 'line-through text-surface-500 dark:text-surface-400' : 'text-surface-800 dark:text-surface-200'}>
                     <span className="font-mono">{task.code}</span> {task.name ?? ''}
                     <span className="block text-xs text-surface-600 dark:text-surface-400">{where}{task.memo ? ` · ${task.memo}` : ''}</span>

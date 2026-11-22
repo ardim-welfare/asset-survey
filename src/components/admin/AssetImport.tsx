@@ -357,7 +357,7 @@ function CompareSection({ im }: { im: Im }) {
                                         {spaceGroups ? spaceGroups.filter((g) => g.count > 0).map((g) => (
                                             <optgroup key={g.buildingId ?? 'none'} label={g.label}>
                                                 {g.floors.flatMap((f) => f.spaces.map((s) => (
-                                                    <option key={s.id} value={s.id}>{g.buildingId && f.floor ? `${f.label} ${s.name}` : s.name}</option>
+                                                    <option key={s.id} value={s.id}>{g.buildingId ? `${g.label}${f.floor ? ` ${f.label}` : ""} ${s.name}` : s.name}</option>
                                                 )))}
                                             </optgroup>
                                         )) : activeSpaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

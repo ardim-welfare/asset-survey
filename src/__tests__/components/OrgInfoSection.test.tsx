@@ -39,7 +39,7 @@ describe('OrgInfoSection', () => {
     it('주소가 비어 있으면 입력 가능하고 변경 시 setForm 호출', () => {
         const props = baseProps();
         render(<OrgInfoSection {...props} />);
-        const addrInput = screen.getByPlaceholderText(/AI가 주소를 읽지 못한/);
+        const addrInput = screen.getByPlaceholderText(/서울시/);
         fireEvent.change(addrInput, { target: { value: '서울시 중구' } });
         expect(props.setForm).toHaveBeenCalled();
     });

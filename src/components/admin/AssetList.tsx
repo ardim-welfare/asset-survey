@@ -103,13 +103,13 @@ export default function AssetList() {
                                                 <input type="checkbox" className="w-5 h-5 accent-primary-600" aria-label="이 화면의 재물 모두 고르기" checked={allVisibleSelected}
                                                     onChange={() => al.setMany(al.visible.map((a) => a.id), !allVisibleSelected)} />
                                             </th>
-                                            <th className="p-3 font-medium">자산코드</th>
-                                            <th className="p-3 font-medium">품명</th>
-                                            <th className="p-3 font-medium">분류</th>
-                                            <th className="p-3 font-medium">공간</th>
-                                            <th className="p-3 font-medium">상태</th>
-                                            <th className="p-3 font-medium">라벨</th>
-                                            <th className="p-3 font-medium">마지막 확인</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">자산코드</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">품명</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">분류</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">공간</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">상태</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">라벨</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">마지막 확인</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
@@ -124,15 +124,15 @@ export default function AssetList() {
                                                 <td className="p-3 text-surface-900 dark:text-surface-100">
                                                     <span className="flex items-center gap-2">
                                                         <Thumb asset={a} size="w-9 h-9" />
-                                                        <span>{a.name ?? '-'} {a.missingFromSource && <MissingBadge />} {isUsefulLifeOver(a, today) && <UsefulLifeOverBadge />}</span>
+                                                        <span className="break-keep">{a.name ?? '-'} {a.missingFromSource && <MissingBadge />} {isUsefulLifeOver(a, today) && <UsefulLifeOverBadge />}</span>
                                                     </span>
                                                 </td>
-                                                <td className="p-3 text-surface-600 dark:text-surface-300">{a.category ?? '-'}</td>
-                                                <td className="p-3 text-surface-700 dark:text-surface-300">
+                                                <td className="p-3 text-surface-600 dark:text-surface-300 whitespace-nowrap">{a.category ?? '-'}</td>
+                                                <td className="p-3 text-surface-700 dark:text-surface-300 break-keep min-w-[10rem]">
                                                     {where(a) ?? <span className={sub}>미지정{a.locationRaw ? ` · ${a.locationRaw}` : ''}</span>}
                                                 </td>
                                                 <td className="p-3"><StatusBadge status={a.status} /></td>
-                                                <td className="p-3">{a.tagId ? <span className="text-surface-700 dark:text-surface-300">있음</span> : <span className={sub}>없음</span>}</td>
+                                                <td className="p-3 whitespace-nowrap">{a.tagId ? <span className="text-surface-700 dark:text-surface-300">있음</span> : <span className={sub}>없음</span>}</td>
                                                 <td className="p-3 whitespace-nowrap">{checked(a) ?? <span className={sub}>없음</span>}</td>
                                             </tr>
                                         ))}

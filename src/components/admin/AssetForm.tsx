@@ -97,7 +97,7 @@ export default function AssetForm() {
                             {groups ? groups.filter((g) => g.count > 0).map((g) => (
                                 <optgroup key={g.buildingId ?? 'none'} label={g.label}>
                                     {g.floors.flatMap((fl) => fl.spaces.map((s) => (
-                                        <option key={s.id} value={s.id}>{g.buildingId && fl.floor ? `${fl.label} ${s.name}` : s.name}</option>
+                                        <option key={s.id} value={s.id}>{g.buildingId ? `${g.label}${fl.floor ? ` ${fl.label}` : ""} ${s.name}` : s.name}</option>
                                     )))}
                                 </optgroup>
                             )) : activeSpaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

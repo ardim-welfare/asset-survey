@@ -6,7 +6,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './useAuth';
-import { getAsset, getAssetAccounting, getAssetHistory, getSpaces, getAssetCheck } from '../lib/firestore';
+import { getAsset, getAssetAccounting, getAssetHistory, getSpaces, getAssetCheck, getBuildings } from '../lib/firestore';
+import { spaceLocationText } from '../lib/spaceGroups';
 import type { Asset, AssetAccounting, HistoryEntry } from '../types/asset';
 import type { AssetCheck } from '../types/assetCheck';
 import type { Space } from '../types/space';
@@ -20,6 +21,8 @@ export default function useAssetDetail(assetId: string | undefined, { admin }: {
     const [history, setHistory] = useState<HistoryEntry[]>([]);
     const [check, setCheck] = useState<AssetCheck | null>(null);
     const [spaces, setSpaces] = useState<Space[]>([]);
+    /** 공간의 건물·층("본관 2층") — 건물을 등록하지 않았으면 빈 글자 */
+    const [spaceLocation, setSpaceLocation] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [notFound, setNotFound] = useState(false);
@@ -38,16 +41,20 @@ export default function useAssetDetail(assetId: string | undefined, { admin }: {
                 return;
             }
             setAsset(found);
-            const [list, acc, hist, chk] = await Promise.all([
+            const [list, acc, hist, chk, blds] = await Promise.all([
                 getSpaces(orgId),
                 admin ? getAssetAccounting(assetId) : Promise.resolve(null),
                 admin ? getAssetHistory(orgId, assetId) : Promise.resolve([] as HistoryEntry[]),
                 // 마지막 확인은 못 읽어도 화면은 연다
                 getAssetCheck(assetId).catch(() => null),
+                // 공간의 건물·층 표시용 — 못 읽어도 공간 이름만 보인다
+                getBuildings(orgId).catch(() => []),
             ]);
             setCheck(chk);
             setSpaces(list);
-            setSpace(list.find((s) => s.id === found.spaceId) ?? null);
+            const sp = list.find((s) => s.id === found.spaceId) ?? null;
+            setSpace(sp);
+            setSpaceLocation(sp ? spaceLocationText(sp, blds) : '');
             setAccounting(acc);
             setHistory(hist);
         } catch {
@@ -69,5 +76,5 @@ export default function useAssetDetail(assetId: string | undefined, { admin }: {
         setAsset((prev) => (prev ? { ...prev, ...fields } : prev));
     }, []);
 
-    return { orgId, asset, space, spaces, accounting, history, check, applyPhoto, loading, error, notFound, reload: load, applyTags };
+    return { orgId, asset, space, spaceLocation, spaces, accounting, history, check, applyPhoto, loading, error, notFound, reload: load, applyTags };
 }
