@@ -23,8 +23,8 @@ test.describe('부팅 실패 처리', () => {
 
         await page.goto('/', { waitUntil: 'commit' });
 
-        await expect(page.getByText('앱을 불러오지 못했습니다')).toBeVisible({ timeout: 15000 });
-        await expect(page.getByRole('button', { name: '다시 시도' })).toBeVisible();
+        await expect(page.getByText('새 버전이 나왔어요 🎉')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('button', { name: '지금 업데이트' })).toBeVisible();
         // 로딩 스피너가 남아 있으면 "멈춘 화면"과 구분이 안 된다
         await expect(page.getByText('로딩 중...')).toHaveCount(0);
     });
@@ -93,14 +93,14 @@ test.describe('부팅 실패 처리', () => {
         ]);
 
         await page.goto('/', { waitUntil: 'commit' });
-        await expect(page.getByText('앱을 불러오지 못했습니다')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByText('새 버전이 나왔어요 🎉')).toBeVisible({ timeout: 15000 });
 
         // 회선 복구 — 서버가 이 토큰을 무시하게 만든다(위 주석 참고). 쿠키도 지워
         // 실제 복구 상황(더 이상 아무 표식이 없는 평범한 요청)에 가깝게 둔다.
         await page.request.get(`/__e2e/outage/off?token=${outageToken}`);
         await context.clearCookies();
 
-        await page.getByRole('button', { name: '다시 시도' }).click();
+        await page.getByRole('button', { name: '지금 업데이트' }).click();
 
         // 버튼이 실제로 리로드를 일으키는지 — 모든 브라우저에서 확인한다
         await expect.poll(() => navigations.length, { timeout: 15000 }).toBeGreaterThan(1);
@@ -135,7 +135,7 @@ test.describe('부팅 실패 처리', () => {
                 + `  원래 오류: ${(err as Error).message}`,
             );
         }
-        await expect(page.getByText('앱을 불러오지 못했습니다')).toHaveCount(0);
+        await expect(page.getByText('새 버전이 나왔어요 🎉')).toHaveCount(0);
     });
 
     test('정상 회선에서는 실패 화면이 뜨지 않는다', async ({ page }) => {
@@ -143,6 +143,6 @@ test.describe('부팅 실패 처리', () => {
         await page.goto('/', { waitUntil: 'commit' });
 
         await expect(page.locator('nav[aria-label]').first()).toBeAttached({ timeout: 15000 });
-        await expect(page.getByText('앱을 불러오지 못했습니다')).toHaveCount(0);
+        await expect(page.getByText('새 버전이 나왔어요 🎉')).toHaveCount(0);
     });
 });

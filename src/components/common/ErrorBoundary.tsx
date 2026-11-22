@@ -1,4 +1,5 @@
 import { Component, ReactNode, ErrorInfo } from 'react';
+import { isChunkLoadError, isOffline, updateAndReload } from '../../lib/appUpdate';
 import { captureError } from '../../lib/sentry';
 
 interface Props {
@@ -44,6 +45,24 @@ export default class ErrorBoundary extends Component<Props, State> {
     };
 
     render() {
+        // 옛 앱 파일을 못 받은 경우(대개 새 버전 배포 직후)는 오류가 아니라 새 버전 안내로 보여 준다 (2026-11-22)
+        if (this.state.hasError && isChunkLoadError(this.state.error) && !isOffline()) {
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-surface-950 p-6">
+                    <div className="text-center max-w-md">
+                        <div className="text-6xl mb-4" aria-hidden="true">🎉</div>
+                        <h2 className="text-xl font-bold text-gray-800 dark:text-surface-100 mb-2">새 버전이 나왔어요</h2>
+                        <p className="text-gray-500 dark:text-surface-400 mb-6 text-sm">더 나아진 재물조사로 바꿀게요. 아래 버튼을 누르면 바로 업데이트됩니다.</p>
+                        <button
+                            onClick={() => void updateAndReload()}
+                            className="px-6 py-2.5 bg-blue-600 dark:bg-blue-700 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors font-medium min-h-[48px]"
+                        >
+                            지금 업데이트
+                        </button>
+                    </div>
+                </div>
+            );
+        }
         if (this.state.hasError) {
             return (
                 <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-surface-950 p-6">

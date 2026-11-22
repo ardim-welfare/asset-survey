@@ -15,6 +15,7 @@ import { auth, authReady } from './lib/firebaseAuth';
 import { readReturningHint, writeReturningHint, noteUnauthenticatedBoot } from './lib/sessionBoot';
 import { captureInviteCodeFromUrl } from './lib/inviteCodeCapture';
 import { capturePendingTag } from './lib/pendingTag';
+import { isOffline, updateAndReload } from './lib/appUpdate';
 import './index.css';
 
 // 초대 링크의 ?code=를 **어느 화면으로 시작하든** 먼저 보관한다. 비로그인 경량 화면에서
@@ -54,24 +55,33 @@ root.innerHTML = `
  * 시점에 진행 중인 네비게이션을 가로챈다.** 사용자 화면에서도 같은 일이 일어날 수 있어
  * (막 누른 링크가 취소된다) 되돌렸다. 원인을 못 가린 채로 리로드를 심는 대신, **문구를
  * 사실대로** 고쳐 사용자가 한 번 누르면 낫게 했다.
+ *
+ * ## "새 버전이 나왔어요"로 안내한다 (2026-11-22, 사용자 의견)
+ * "앱을 불러오지 못했습니다"는 고장처럼 보였다. 가장 흔한 원인이 배포이므로, 인터넷이 끊긴 경우가
+ * 아니면 새 버전 안내와 [지금 업데이트]를 보여 준다(lib/appUpdate.ts). 끊긴 경우만 연결 안내를 한다.
  */
 function showBootError(err: unknown) {
     console.error('앱 로드 실패:', err);
+    const offline = isOffline();
+    const title = offline ? '인터넷 연결이 끊겼어요' : '새 버전이 나왔어요 🎉';
+    const body = offline
+        ? '연결을 확인한 뒤 아래 버튼을 눌러 주세요.'
+        : '더 나아진 재물조사로 바꿀게요.<br />아래 버튼을 누르면 바로 업데이트됩니다.';
+    const label = offline ? '다시 시도' : '지금 업데이트';
     root.innerHTML = `
-  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#4f46e5 0%,#3730a3 100%);padding:24px">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);padding:24px">
     <div style="text-align:center;font-family:system-ui,sans-serif;max-width:320px">
-      <p style="color:#fff;font-size:16px;font-weight:600;margin:0 0 8px">앱을 불러오지 못했습니다</p>
-      <p style="color:rgba(255,255,255,.75);font-size:14px;line-height:1.6;margin:0 0 20px">
-        앱이 새 버전으로 바뀌었거나 연결이 잠시 끊겼을 수 있습니다.<br />
-        아래 버튼을 누르면 다시 불러옵니다.
-      </p>
-      <button id="boot-retry" style="min-height:48px;padding:0 24px;border:0;border-radius:12px;background:#fff;color:#3730a3;font-size:14px;font-weight:600;cursor:pointer">
-        다시 시도
+      <p style="color:#fff;font-size:18px;font-weight:700;margin:0 0 8px">${title}</p>
+      <p style="color:rgba(255,255,255,.85);font-size:14px;line-height:1.6;margin:0 0 20px">${body}</p>
+      <button id="boot-retry" style="min-height:48px;padding:0 28px;border:0;border-radius:12px;background:#fff;color:#1d4ed8;font-size:15px;font-weight:700;cursor:pointer">
+        ${label}
       </button>
     </div>
   </div>
 `;
-    document.getElementById('boot-retry')?.addEventListener('click', () => window.location.reload());
+    document.getElementById('boot-retry')?.addEventListener('click', () => {
+        if (offline) window.location.reload(); else void updateAndReload();
+    });
 }
 
 // 기존 SW가 있으면 즉시 업데이트 체크 (구버전 캐시 방지)
