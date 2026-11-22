@@ -9,7 +9,8 @@ import { APP_URL } from '../../lib/constants';
 
 // 전용 도메인이 정해지기 전에는 APP_URL(지금 연 주소의 origin)을 쓴다
 const BASE_URL = APP_URL;
-const DEFAULT_OG_IMAGE = `${BASE_URL}/icons/icon-512.png`;
+// 링크 미리보기 그림(1200×630) — scripts/generate-og-image.ts가 만든다
+const DEFAULT_OG_IMAGE = `${BASE_URL}/og-image.jpg`;
 const SITE_NAME = '재물조사';
 
 interface SEOHeadProps {
@@ -41,7 +42,10 @@ export default function SEOHead({ title, description, path, jsonLd, isHome }: SE
       <meta property="og:url" content={canonicalUrl} />
       <meta property="og:type" content="website" />
       <meta property="og:image" content={DEFAULT_OG_IMAGE} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
       <meta property="og:site_name" content={SITE_NAME} />
+      <meta name="twitter:card" content="summary_large_image" />
 
       {/* JSON-LD 구조화 데이터 */}
       {jsonLd && (

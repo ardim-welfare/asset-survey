@@ -27,8 +27,8 @@ messaging.onBackgroundMessage((payload) => {
     const data = payload.data || {};
     const options = {
         body: data.body || '새로운 알림이 있습니다.',
-        icon: data.icon || '/icons/icon-512.png',
-        badge: '/icons/icon-192.png',
+        icon: data.icon || '/icons/app-icon-512.png',
+        badge: '/icons/app-icon-192.png',
         // 서버가 webpush.notification으로 넘기던 옵션을 여기로 옮겼다
         requireInteraction: true,
         vibrate: [200, 100, 200],

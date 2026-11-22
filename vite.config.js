@@ -69,6 +69,28 @@ function e2eEntryOutage() {
   }
 }
 
+/**
+ * index.html의 %PUBLIC_ORIGIN%을 공개 주소로 채운다 (오픈 그래프 og:image는 절대 주소여야 한다)
+ *
+ * 카카오톡·페이스북 미리보기 수집기는 자바스크립트를 돌리지 않아 SEOHead(APP_URL)가 닿지 않는다.
+ * 전용 도메인이 생기면 VITE_APP_URL만 넣으면 되고, 비어 있으면 Firebase 기본 도메인을 쓴다.
+ * 미리보기 채널에서도 그림 주소는 운영 도메인을 가리키지만 같은 그림이라 문제없다.
+ */
+const DEFAULT_PUBLIC_ORIGIN = 'https://asset-survey-sp.web.app'
+
+function publicOriginHtml() {
+  let origin = DEFAULT_PUBLIC_ORIGIN
+  return {
+    name: 'public-origin-html',
+    configResolved(config) {
+      origin = (config.env.VITE_APP_URL || DEFAULT_PUBLIC_ORIGIN).replace(/\/+$/, '')
+    },
+    transformIndexHtml(html) {
+      return html.replaceAll('%PUBLIC_ORIGIN%', origin)
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   resolve: {
@@ -81,9 +103,10 @@ export default defineConfig({
     tailwindcss(),
     react(),
     e2eEntryOutage(),
+    publicOriginHtml(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon-512.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'icons/app-icon.svg', 'icons/app-icon-192.png', 'icons/app-icon-512.png'],
       manifest: false, // public/manifest.json 직접 사용
       strategies: 'injectManifest',
       srcDir: 'src',

@@ -14,13 +14,12 @@
     (실측·판단 근거는 src/lib/webFont.ts). 공개 랜딩은 폴백 서체로 띄우고, 로그인한
     사용자용 앱(appEntry)에서만 자체 호스팅 폰트를 붙인다.
   -->
-  <link rel="icon"
-    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>" />
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="description" content="엑셀 대장 가져오기, QR 라벨, 휴대폰 조사, 승인, 결과 보고서까지. 사회복지기관·비영리단체를 위한 무료 재물조사 서비스." />
   <meta name="theme-color" content="#f8fafc" />
-  <!-- canonical·og:url·og:image는 전용 도메인이 정해지면 넣는다 (SEOHead가 페이지마다 APP_URL 기준으로 다시 단다) -->
   <script>
     // React 마운트 전 theme-color 초기화 (FOUC 방지)
     (function(){
@@ -33,34 +32,22 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="manifest" href="/manifest.json" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png" />
-  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
-  <!-- iOS 스플래시 스크린 (주요 아이폰 해상도) -->
-  <link rel="apple-touch-startup-image"
-    media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)"
-    href="/icons/icon-512.png" />
-  <link rel="apple-touch-startup-image"
-    media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)"
-    href="/icons/icon-512.png" />
-  <link rel="apple-touch-startup-image"
-    media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
-    href="/icons/icon-512.png" />
-  <link rel="apple-touch-startup-image"
-    media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)"
-    href="/icons/icon-512.png" />
-  <link rel="apple-touch-startup-image"
-    media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)"
-    href="/icons/icon-512.png" />
-  <link rel="apple-touch-startup-image"
-    media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)"
-    href="/icons/icon-512.png" />
-  <link rel="apple-touch-startup-image"
-    media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)"
-    href="/icons/icon-512.png" />
-  <!-- Open Graph (카카오톡, 페이스북 등 링크 미리보기) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+  <!--
+    Open Graph (카카오톡·페이스북 등 링크 미리보기)
+    미리보기 수집기는 자바스크립트를 실행하지 않으므로 여기 정적 태그만 읽는다(SEOHead는 검색엔진용).
+    절대 주소가 필요해서 %PUBLIC_ORIGIN%은 vite.config.js가 빌드 때 채운다.
+  -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="재물조사" />
+  <meta property="og:site_name" content="재물조사" />
+  <meta property="og:locale" content="ko_KR" />
+  <meta property="og:title" content="재물조사 — QR 찍고 끝내는 우리 기관 재물조사" />
   <meta property="og:description" content="엑셀 대장 가져오기, QR 라벨, 휴대폰 조사, 승인, 결과 보고서까지. 사회복지기관·비영리단체를 위한 무료 재물조사 서비스." />
+  <meta property="og:image" content="%PUBLIC_ORIGIN%/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="휴대폰으로 비품의 QR 라벨을 찍어 재물조사하는 그림" />
+  <meta name="twitter:card" content="summary_large_image" />
   <title>재물조사</title>
   <!-- 서비스 워커 강제 퍼지 (외부 스크립트) -->
   <script src="/sw-purge.js" defer></script>
