@@ -29,7 +29,38 @@ function showValue(field: CompareField, value: unknown, spaces: Space[]): string
 
 const card = 'glass-card p-5 mb-4';
 const h2 = 'text-lg font-semibold text-surface-900 dark:text-surface-100 mb-1';
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
+
+/** 단계 표시 — 몇 단계 중 어디인지 몰라 '다음'을 누를 때마다 무엇이 나올지 알 수 없었다(2026-11-22 점검) */
+const STEPS = [
+    { key: 'pick', label: '파일 고르기' },
+    { key: 'map', label: '열 연결·검사' },
+    { key: 'compare', label: '공간·바뀌는 내용' },
+    { key: 'done', label: '저장' },
+] as const;
+
+function StepIndicator({ step }: { step: string }) {
+    const current = step === 'saving' ? 3 : Math.max(0, STEPS.findIndex((x) => x.key === step));
+    return (
+        <ol className="flex gap-1 mb-5" aria-label="가져오기 단계">
+            {STEPS.map((x, i) => {
+                const state = i < current ? 'done' : i === current ? 'current' : 'todo';
+                return (
+                    <li key={x.key} aria-current={state === 'current' ? 'step' : undefined}
+                        className={`flex-1 min-w-0 rounded-lg px-2 py-1.5 text-xs font-medium border ${state === 'current'
+                            ? 'bg-primary-600 border-primary-600 text-white'
+                            : state === 'done'
+                                ? 'bg-primary-50 border-primary-200 text-primary-800 dark:bg-primary-900/30 dark:border-primary-800 dark:text-primary-200'
+                                : 'bg-white border-surface-300 text-surface-600 dark:bg-surface-800 dark:border-surface-600 dark:text-surface-400'}`}>
+                        <span className="tabular-nums">{state === 'done' ? '✓' : i + 1}</span>
+                        <span className="hidden sm:inline"> {x.label}</span>
+                        <span className="sr-only sm:hidden"> {x.label}{state === 'done' ? ' (마침)' : ''}</span>
+                    </li>
+                );
+            })}
+        </ol>
+    );
+}
 
 export default function AssetImport() {
     const navigate = useNavigate();
@@ -53,9 +84,15 @@ export default function AssetImport() {
     return (
         <div className="max-w-3xl mx-auto animate-fade-in">
             <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-2">재물 가져오기</h1>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mb-6">
+            <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
                 희망이음에서 내려받은 고정자산대장이나 기관이 쓰는 재물 대장 엑셀을 올립니다. 파일은 서버로 보내지 않고
                 이 브라우저에서 읽으며, 확인을 마친 값만 저장합니다. 다시 올리면 바뀐 것만 반영합니다.
+            </p>
+
+            <StepIndicator step={im.step} />
+            {/* 휴대폰에서는 단계 이름을 숨겨 칸만 보이므로 지금 단계 이름을 따로 적는다 */}
+            <p className="sm:hidden -mt-3 mb-4 text-sm font-medium text-primary-700 dark:text-primary-300" aria-hidden="true">
+                {STEPS[im.step === 'saving' ? 3 : Math.max(0, STEPS.findIndex((x) => x.key === im.step))].label}
             </p>
 
             {im.error && (
@@ -94,6 +131,9 @@ export default function AssetImport() {
                 <HeaderRowPicker im={im} />
             )}
 
+            {im.step === 'map' && im.blockers.length > 0 && (
+                <p className="text-sm text-red-700 dark:text-red-300 text-right mb-2">위 &lsquo;검사 결과&rsquo;의 빨간 문제를 고쳐야 다음으로 갈 수 있습니다.</p>
+            )}
             {im.step === 'map' && (
                 <div className="flex flex-col sm:flex-row gap-2 justify-end mb-8">
                     <button type="button" onClick={im.reset} className="btn-secondary min-h-[48px] px-4">다른 파일 고르기</button>
@@ -110,8 +150,9 @@ export default function AssetImport() {
                 <div className={card} aria-live="polite">
                     <h2 className={h2}>저장하는 중</h2>
                     <p className={sub}>창을 닫지 마세요. {im.progress && im.progress.total > 0 ? `${im.progress.done} / ${im.progress.total}건` : ''}</p>
-                    <div className="mt-3 h-2 rounded-full bg-surface-100 dark:bg-surface-700 overflow-hidden">
-                        <div className="h-full bg-primary-500 transition-all"
+                    <div className="mt-3 h-2 rounded-full bg-surface-100 dark:bg-surface-700 overflow-hidden"
+                        role="progressbar" aria-label="저장 진행" aria-valuemin={0} aria-valuemax={im.progress?.total || 100} aria-valuenow={im.progress?.done ?? 0}>
+                        <div className="h-full bg-primary-600 dark:bg-primary-400 transition-all"
                             style={{ width: `${im.progress && im.progress.total > 0 ? Math.round((im.progress.done / im.progress.total) * 100) : 5}%` }} />
                     </div>
                 </div>
@@ -121,12 +162,13 @@ export default function AssetImport() {
                 <div className={card}>
                     <div className="text-4xl mb-2" aria-hidden="true">✅</div>
                     <h2 className={h2}>가져오기를 마쳤습니다</h2>
-                    <p className="text-sm text-surface-700 dark:text-surface-300">
+                    <p className="text-sm text-surface-700 dark:text-surface-300 tabular-nums">
                         새로 등록 {im.result.added}건 · 바뀜 {im.result.changed}건 · 그대로 {im.result.unchanged}건
                         {im.result.missing > 0 && ` · 대장에 없음 표시 ${im.result.missing}건`}
                     </p>
+                    <p className={`${sub} mt-2`}>재물 목록에서 공간으로 거른 뒤 &lsquo;모두 고르기&rsquo; → [라벨 인쇄]로 QR 라벨을 뽑을 수 있습니다.</p>
                     <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                        <button type="button" onClick={() => navigate('/admin/dashboard')} className="btn-primary min-h-[48px] px-4">대시보드로</button>
+                        <button type="button" onClick={() => navigate('/admin/assets')} className="btn-primary min-h-[48px] px-4">재물 목록 보기</button>
                         <button type="button" onClick={im.reset} className="btn-secondary min-h-[48px] px-4">다른 파일 가져오기</button>
                     </div>
                 </div>
@@ -143,7 +185,7 @@ function HeaderRowPicker({ im }: { im: Im }) {
         <div className={card}>
             <h2 className={h2}>머리글 줄 고르기</h2>
             <p className={`${sub} mb-3`}>자산코드·품명 같은 열 이름이 적힌 줄 번호를 엑셀에서 확인해 적어 주세요.</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
                 <label htmlFor="header-row" className="sr-only">머리글 줄 번호</label>
                 <input id="header-row" type="number" min={1} value={row} onChange={(e) => setRow(e.target.value)} className="input w-28 min-h-[48px]" />
                 <button type="button" onClick={() => im.selectHeaderRow(Number(row) || 1)} className="btn-secondary min-h-[48px] px-4">이 줄로</button>
@@ -196,7 +238,7 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
 
             <div className={card}>
                 <h2 className={h2}>열 연결</h2>
-                <p className={`${sub} mb-3`}>엑셀의 어느 열을 무엇으로 쓸지 정합니다. 정한 연결은 다음 가져오기 때 다시 씁니다. 금액은 관리자만 봅니다.</p>
+                <p className={`${sub} mb-3`}>엑셀의 어느 열을 무엇으로 쓸지 정합니다. <span className="text-red-700 dark:text-red-300">*</span> 표시는 꼭 연결해야 하는 칸입니다. 정한 연결은 다음 가져오기 때 다시 씁니다. 금액은 관리자만 봅니다.</p>
                 <ul className="divide-y divide-surface-100 dark:divide-surface-700">
                     {IMPORT_FIELDS.map((def) => {
                         const header = im.columnMap[def.field];
@@ -204,7 +246,7 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                         return (
                             <li key={def.field} className="py-2 grid grid-cols-1 sm:grid-cols-[9rem_1fr_9rem] gap-1 sm:gap-3 sm:items-center">
                                 <label htmlFor={id} className="text-sm font-medium text-surface-800 dark:text-surface-200">
-                                    {def.label}{def.required && <span className="text-red-700 dark:text-red-300"> *</span>}
+                                    {def.label}{def.required && <><span className="text-red-700 dark:text-red-300" aria-hidden="true"> *</span><span className="sr-only"> (필수)</span></>}
                                     {def.accounting && <span className={`${sub} ml-1`}>(관리자만)</span>}
                                 </label>
                                 <select id={id} value={header ?? ''} disabled={locked}
@@ -213,7 +255,7 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                                     <option value="">(가져오지 않음)</option>
                                     {table.headers.map((h) => <option key={h} value={h}>{h}</option>)}
                                 </select>
-                                <span className={`${sub} truncate`} title={sample(header)}>{sample(header) && `예: ${sample(header)}`}</span>
+                                <span className={`${sub} line-clamp-2 break-all`}>{sample(header) && `예: ${sample(header)}`}</span>
                             </li>
                         );
                     })}
@@ -230,7 +272,7 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                         {([['전체', parsed.counts.total], ['운영', parsed.counts.active], ['불용', parsed.counts.inactive], ['폐기', parsed.counts.disposed]] as const).map(([label, n]) => (
                             <div key={label} className="rounded-xl bg-surface-50 dark:bg-surface-800 p-3">
                                 <dt className={sub}>{label}</dt>
-                                <dd className="text-lg font-bold text-surface-900 dark:text-surface-100">{n.toLocaleString('ko-KR')}건</dd>
+                                <dd className="text-lg font-bold text-surface-900 dark:text-surface-100 tabular-nums">{n.toLocaleString('ko-KR')}건</dd>
                             </div>
                         ))}
                     </dl>
@@ -238,7 +280,7 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                         자산금액 합 {won(parsed.amountTotals.all)} (운영 {won(parsed.amountTotals.active)})
                     </p>
                     {totalMatches != null && (
-                        <p className={`text-sm mt-1 ${totalMatches ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                        <p className={`text-sm mt-1 ${totalMatches ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-300'}`}>
                             {totalMatches
                                 ? `✓ 대장 합계 줄(${won(im.reportedTotal)})과 같습니다.`
                                 : `⚠ 대장 합계 줄은 ${won(im.reportedTotal)}입니다. 차이 ${won(Math.abs((im.reportedTotal ?? 0) - parsed.amountTotals.all))} — 빠진 줄이나 금액을 읽지 못한 칸이 있는지 확인해 주세요.`}
@@ -256,6 +298,7 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                             <p className="font-medium">자산코드가 겹칩니다 — 엑셀에서 고친 뒤 다시 올려 주세요.</p>
                             <ul className="list-disc pl-5">
                                 {parsed.duplicates.slice(0, 10).map((d) => <li key={d.code}>{d.code}: {d.rowNumbers.join(', ')}번째 줄</li>)}
+                                {parsed.duplicates.length > 10 && <li>…외 {parsed.duplicates.length - 10}개 코드</li>}
                             </ul>
                         </div>
                     )}
@@ -321,7 +364,7 @@ function CompareSection({ im }: { im: Im }) {
                                     </select>
                                     {loc.location && !im.locationMap[loc.key] && (
                                         <button type="button" onClick={() => im.createSpaceFor(loc.key, loc.location)} disabled={im.working}
-                                            className="btn-secondary min-h-[48px] px-3 text-xs flex-shrink-0" aria-label={`${loc.location} 이름으로 공간 만들기`}>
+                                            className="btn-secondary min-h-[48px] px-3 text-sm flex-shrink-0" aria-label={`${loc.location} 이름으로 공간 만들기`}>
                                             공간 만들기
                                         </button>
                                     )}
@@ -338,7 +381,7 @@ function CompareSection({ im }: { im: Im }) {
                     {([['새로 등록', diff.added.length], ['바뀜', diff.changed.length], ['대장에 없음', diff.missing.length], ['그대로', diff.unchanged]] as const).map(([label, n]) => (
                         <div key={label} className="rounded-xl bg-surface-50 dark:bg-surface-800 p-3">
                             <dt className={sub}>{label}</dt>
-                            <dd className="text-lg font-bold text-surface-900 dark:text-surface-100">{n.toLocaleString('ko-KR')}건</dd>
+                            <dd className="text-lg font-bold text-surface-900 dark:text-surface-100 tabular-nums">{n.toLocaleString('ko-KR')}건</dd>
                         </div>
                     ))}
                 </dl>
@@ -348,12 +391,12 @@ function CompareSection({ im }: { im: Im }) {
                             className="btn-secondary btn-sm min-h-[44px]">
                             <span aria-hidden="true">{showChanged ? '▾' : '▸'}</span> 바뀌는 재물 보기
                         </button>
-                        {showChanged && <ChangedList items={diff.changed} spaces={im.spaces} />}
+                        {showChanged && <div className="mt-2"><ChangedList items={diff.changed} spaces={im.spaces} /></div>}
                     </div>
                 )}
                 {diff.missing.length > 0 && (
                     <div>
-                        <p className="text-sm text-amber-700 dark:text-amber-400">
+                        <p className="text-sm text-amber-800 dark:text-amber-300">
                             이번 파일에 없는 재물 {diff.missing.length}건은 지우지 않고 &lsquo;대장에 없음&rsquo;으로 표시합니다.
                         </p>
                         <button type="button" onClick={() => setShowMissing((v) => !v)} aria-expanded={showMissing}
@@ -361,7 +404,7 @@ function CompareSection({ im }: { im: Im }) {
                             <span aria-hidden="true">{showMissing ? '▾' : '▸'}</span> 대장에 없는 재물 보기
                         </button>
                         {showMissing && (
-                            <ul className={`${sub} space-y-1`}>
+                            <ul className={`${sub} space-y-1 mt-2`}>
                                 {diff.missing.slice(0, 100).map((a) => <li key={a.id}>{a.code} · {a.name ?? '(품명 없음)'}</li>)}
                                 {diff.missing.length > 100 && <li>…외 {diff.missing.length - 100}건</li>}
                             </ul>
