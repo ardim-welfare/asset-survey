@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import useAssetList, { buildingFilter, floorFilter, checkedAtOf, type AssetFilters } from '../../hooks/useAssetList';
+import useAssetList, { buildingFilter, floorFilter, checkedAtOf, DEFAULT_FILTERS, type AssetFilters } from '../../hooks/useAssetList';
 import { toLocalDateStr } from '../../lib/dateUtils';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { StatusBadge, MissingBadge } from '../common/AssetBadges';
@@ -15,7 +15,7 @@ import type { Asset } from '../../types/asset';
 import type { Space } from '../../types/space';
 import type { Building } from '../../types/building';
 
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
 const detailPath = (a: Asset) => `/admin/assets/${encodeURIComponent(a.id)}`;
 
 export default function AssetList() {
@@ -35,7 +35,7 @@ export default function AssetList() {
     if (al.error) {
         return (
             <div className="max-w-3xl mx-auto glass-card p-6 text-center">
-                <p className="text-red-600 dark:text-red-400 mb-3">재물 목록을 불러오지 못했습니다.</p>
+                <p className="text-red-700 dark:text-red-300 mb-3" role="alert">재물 목록을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 불러오세요.</p>
                 <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={() => void al.reload()}>다시 불러오기</button>
             </div>
         );
@@ -86,19 +86,19 @@ export default function AssetList() {
                     </div>
 
                     {al.filtered.length === 0 ? (
-                        <div className="glass-card p-6 text-center text-sm text-surface-500 dark:text-surface-400">
-                            조건에 맞는 재물이 없습니다.{' '}
-                            <button type="button" className="underline underline-offset-2 text-primary-600 dark:text-primary-400 min-h-[44px]" onClick={al.resetFilters}>조건 초기화</button>
+                        <div className="glass-card p-6 text-center">
+                            <p className="text-sm text-surface-700 dark:text-surface-300 mb-3">조건에 맞는 재물이 없습니다.</p>
+                            <button type="button" className="btn-secondary min-h-[48px] px-5" onClick={al.resetFilters}>거르기 조건 초기화</button>
                         </div>
                     ) : (
                         <>
                             {/* 넓은 화면: 표 */}
                             <div className="hidden md:block glass-card overflow-x-auto">
                                 <table className="w-full text-sm">
-                                    <thead className="text-left text-surface-500 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
+                                    <thead className="text-left text-surface-600 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
                                         <tr>
                                             <th className="p-3 w-10">
-                                                <input type="checkbox" className="w-4 h-4" aria-label="이 화면의 재물 모두 고르기" checked={allVisibleSelected}
+                                                <input type="checkbox" className="w-5 h-5 accent-primary-600" aria-label="이 화면의 재물 모두 고르기" checked={allVisibleSelected}
                                                     onChange={() => al.setMany(al.visible.map((a) => a.id), !allVisibleSelected)} />
                                             </th>
                                             <th className="p-3 font-medium">자산코드</th>
@@ -114,10 +114,10 @@ export default function AssetList() {
                                         {al.visible.map((a) => (
                                             <tr key={a.id} className="hover:bg-surface-50 dark:hover:bg-surface-800/60">
                                                 <td className="p-3">
-                                                    <input type="checkbox" className="w-4 h-4" aria-label={`${a.code} 고르기`} checked={al.selected.has(a.id)} onChange={() => al.toggle(a.id)} />
+                                                    <input type="checkbox" className="w-5 h-5 accent-primary-600" aria-label={`${a.code} 고르기`} checked={al.selected.has(a.id)} onChange={() => al.toggle(a.id)} />
                                                 </td>
                                                 <td className="p-3 font-mono whitespace-nowrap">
-                                                    <Link to={detailPath(a)} className="text-primary-600 dark:text-primary-400 underline-offset-2 hover:underline">{a.code}</Link>
+                                                    <Link to={detailPath(a)} className="font-medium text-primary-700 dark:text-primary-300 underline underline-offset-2 decoration-primary-300 hover:decoration-primary-700">{a.code}</Link>
                                                 </td>
                                                 <td className="p-3 text-surface-900 dark:text-surface-100">
                                                     <span className="flex items-center gap-2">
@@ -141,19 +141,25 @@ export default function AssetList() {
                             {/* 휴대폰: 카드 */}
                             <ul className="md:hidden space-y-2">
                                 {al.visible.map((a) => (
-                                    <li key={a.id} className="glass-card p-3 flex items-start gap-3">
-                                        <input type="checkbox" className="w-5 h-5 mt-1 flex-shrink-0" aria-label={`${a.code} 고르기`} checked={al.selected.has(a.id)} onChange={() => al.toggle(a.id)} />
+                                    <li key={a.id} className="glass-card p-2 pr-3 flex items-start gap-2">
+                                        {/* 상자만 누르기엔 작아 칸 전체(44px)를 라벨로 감싼다 */}
+                                        <label className="w-11 h-11 flex items-center justify-center flex-shrink-0 cursor-pointer">
+                                            <input type="checkbox" className="w-5 h-5 accent-primary-600" aria-label={`${a.code} 고르기`} checked={al.selected.has(a.id)} onChange={() => al.toggle(a.id)} />
+                                        </label>
                                         <Thumb asset={a} size="w-12 h-12" />
-                                        <Link to={detailPath(a)} className="min-w-0 flex-1 block">
+                                        <Link to={detailPath(a)} className="min-w-0 flex-1 flex items-center gap-2 py-1 rounded-lg focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500">
+                                            <span className="min-w-0 flex-1 block">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="font-mono text-sm font-semibold text-surface-900 dark:text-surface-100">{a.code}</span>
                                                 <StatusBadge status={a.status} />
                                                 {a.missingFromSource && <MissingBadge />}
                                             </div>
-                                            <p className="text-sm text-surface-800 dark:text-surface-200 truncate">{a.name ?? '-'}</p>
+                                            <p className="text-sm text-surface-800 dark:text-surface-200 line-clamp-2 break-keep">{a.name ?? '-'}</p>
                                             <p className={sub}>
                                                 {where(a) ?? `미지정${a.locationRaw ? ` · ${a.locationRaw}` : ''}`} · 라벨 {a.tagId ? '있음' : '없음'} · 확인 {checked(a) ?? '없음'}
                                             </p>
+                                            </span>
+                                            <span aria-hidden="true" className="text-surface-500 text-lg flex-shrink-0">›</span>
                                         </Link>
                                     </li>
                                 ))}
@@ -195,7 +201,7 @@ interface FiltersProps {
 /** 공간 거르기 목록 — 건물을 등록했으면 건물 → 층 → 공간으로 묶고, 건물·층 전체도 고를 수 있다 */
 function SpaceOptions({ spaces, buildings }: { spaces: Space[]; buildings: Building[] }) {
     const archived = spaces.filter((s) => s.archived);
-    const archivedOptions = archived.map((s) => <option key={s.id} value={s.id}>{s.name} (숨김)</option>);
+    const archivedOptions = archived.map((s) => <option key={s.id} value={s.id}>{s.name} (삭제한 공간)</option>);
     if (!buildings.some((b) => !b.archived)) {
         return <>{spaces.filter((s) => !s.archived).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}{archivedOptions}</>;
     }
@@ -219,12 +225,33 @@ function SpaceOptions({ spaces, buildings }: { spaces: Space[]; buildings: Build
     );
 }
 
+/** 기본값과 다른 거르기 조건 수(검색 제외) — 접힌 [거르기] 버튼에 보인다 */
+function activeFilterCount(f: AssetFilters): number {
+    return (['space', 'status', 'label', 'checked', 'onlyMissing'] as const).filter((k) => f[k] !== DEFAULT_FILTERS[k]).length;
+}
+
 function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProps) {
     const label = 'text-xs text-surface-600 dark:text-surface-300';
+    // 휴대폰에서 칸 다섯 개가 화면을 다 차지해 목록이 보이지 않았다(2026-11-22 점검) — 검색만 두고 나머지는 접는다
+    const [open, setOpen] = useState(false);
+    const active = activeFilterCount(filters);
+    const changed = active > 0 || filters.search !== DEFAULT_FILTERS.search;
     return (
         <div className="glass-card p-4 mb-3">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <label className={`${label} sm:col-span-2 lg:col-span-1`}>
+            <div className="flex gap-2 items-end sm:hidden">
+                <label className={`${label} flex-1 min-w-0`}>
+                    검색
+                    <input type="search" className="input min-h-[48px] mt-1" placeholder="자산코드·품명·위치"
+                        value={filters.search} onChange={(e) => setFilter('search', e.target.value)} />
+                </label>
+                <button type="button" className="btn-secondary min-h-[48px] px-3 flex-shrink-0" aria-expanded={open} aria-controls="asset-filters"
+                    onClick={() => setOpen((v) => !v)}>
+                    거르기{active > 0 && <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-primary-600 text-white text-xs tabular-nums">{active}</span>}
+                    <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+                </button>
+            </div>
+            <div id="asset-filters" className={`${open ? 'grid mt-3' : 'hidden'} sm:grid sm:mt-0 gap-3 sm:grid-cols-2 lg:grid-cols-5`}>
+                <label className={`${label} hidden sm:block sm:col-span-2 lg:col-span-1`}>
                     검색
                     <input type="search" className="input min-h-[48px] mt-1" placeholder="자산코드·품명·위치"
                         value={filters.search} onChange={(e) => setFilter('search', e.target.value)} />
@@ -263,13 +290,13 @@ function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProp
                         <option value="never">한 번도 확인 안 됨</option>
                     </select>
                 </label>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
-                <label className="flex items-center gap-2 min-h-[44px] text-sm text-surface-700 dark:text-surface-300">
-                    <input type="checkbox" className="w-4 h-4" checked={filters.onlyMissing} onChange={(e) => setFilter('onlyMissing', e.target.checked)} />
-                    대장에 없음만
-                </label>
-                <button type="button" className="text-sm text-primary-600 dark:text-primary-400 min-h-[44px]" onClick={onReset}>조건 초기화</button>
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-2 lg:col-span-5">
+                    <label className="flex items-center gap-2 min-h-[44px] text-sm text-surface-700 dark:text-surface-300">
+                        <input type="checkbox" className="w-5 h-5 accent-primary-600" checked={filters.onlyMissing} onChange={(e) => setFilter('onlyMissing', e.target.checked)} />
+                        대장에 없음만
+                    </label>
+                    <button type="button" className="btn-secondary btn-sm min-h-[44px]" onClick={onReset} disabled={!changed}>조건 초기화</button>
+                </div>
             </div>
         </div>
     );

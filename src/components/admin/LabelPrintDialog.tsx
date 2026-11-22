@@ -79,7 +79,7 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
         cell: Math.min(lp.startCell, per) - 1 + i,
         item: { id: a.id, code: a.code, name: a.name ?? '', qr: lp.previewQr },
     }));
-    const sub = 'text-xs text-surface-500 dark:text-surface-400';
+    const sub = 'text-xs text-surface-600 dark:text-surface-400';
 
     return (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => !lp.busy && onClose()} role="presentation">
@@ -109,13 +109,13 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
                                     const p = LABEL_PRESETS[k];
                                     return (
                                         <label key={k} className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
-                                            <input type="radio" name="label-size" checked={lp.size === k} onChange={() => lp.setSize(k)} className="w-4 h-4" />
+                                            <input type="radio" name="label-size" checked={lp.size === k} onChange={() => lp.setSize(k)} className="w-5 h-5 accent-primary-600 flex-shrink-0" />
                                             <span>{p.label} {p.w}×{p.h}mm <span className={sub}>(A4 {p.cols * p.rows}칸)</span></span>
                                         </label>
                                     );
                                 })}
                                 <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
-                                    <input type="radio" name="label-size" checked={lp.size === 'custom'} onChange={() => lp.setSize('custom')} className="w-4 h-4" />
+                                    <input type="radio" name="label-size" checked={lp.size === 'custom'} onChange={() => lp.setSize('custom')} className="w-5 h-5 accent-primary-600 flex-shrink-0" />
                                     <span>직접 치수 <span className={sub}>(다른 라벨지 — 포장지에 적힌 치수를 넣으세요)</span></span>
                                 </label>
                             </div>
@@ -136,7 +136,7 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
                                         </label>
                                     ))}
                                 </div>
-                                {lp.customError && <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">{lp.customError}</p>}
+                                {lp.customError && <p className="mt-2 text-sm text-red-700 dark:text-red-300" role="alert">{lp.customError}</p>}
                             </div>
                         )}
 
@@ -151,13 +151,13 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
 
                         {lp.managersText && (
                             <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
-                                <input type="checkbox" checked={lp.showManagers} onChange={(e) => lp.setShowManagers(e.target.checked)} className="w-4 h-4" />
+                                <input type="checkbox" checked={lp.showManagers} onChange={(e) => lp.setShowManagers(e.target.checked)} className="w-5 h-5 accent-primary-600 flex-shrink-0" />
                                 관리 책임자 넣기 <span className={sub}>({lp.managersText} · 작은 라벨에서는 빠져요)</span>
                             </label>
                         )}
 
                         <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
-                            <input type="checkbox" checked={lp.cutLines} onChange={(e) => lp.setCutLines(e.target.checked)} className="w-4 h-4" />
+                            <input type="checkbox" checked={lp.cutLines} onChange={(e) => lp.setCutLines(e.target.checked)} className="w-5 h-5 accent-primary-600 flex-shrink-0" />
                             재단선 표시 <span className={sub}>(일반 종이에 뽑아 자를 때. 칸이 나뉜 라벨지는 끄세요)</span>
                         </label>
 
@@ -186,7 +186,7 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
                     </div>
                 </div>
 
-                {lp.error && <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">{lp.error}</p>}
+                {lp.error && <p className="mt-4 text-sm text-red-700 dark:text-red-300" role="alert">{lp.error}</p>}
                 {lp.busy && (
                     <p className="mt-4 text-sm text-surface-600 dark:text-surface-300" role="status">
                         {lp.busy === 'issuing'
