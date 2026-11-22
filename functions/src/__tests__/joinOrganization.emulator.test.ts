@@ -140,7 +140,7 @@ describe("joinOrganization — 에뮬레이터 통합 테스트", () => {
             status: "approved",
             createdAt: new Date(),
         });
-    });
+    }, 30_000); // 첫 테스트는 에뮬레이터가 데워지기 전이라 비우기·인증 정리가 5초를 넘긴다(CI 러너에서 두 번 실패)
 
     afterAll(async () => {
         await clearFirestoreData();
