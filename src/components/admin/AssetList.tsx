@@ -46,7 +46,7 @@ export default function AssetList() {
             <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
                 <div>
                     <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">재물 목록</h1>
-                    <p className="text-sm text-surface-500 dark:text-surface-400">
+                    <p className="text-sm text-surface-600 dark:text-surface-400 tabular-nums" aria-live="polite">
                         전체 {al.assets.length.toLocaleString('ko-KR')}건 · 걸러진 {al.filtered.length.toLocaleString('ko-KR')}건
                     </p>
                 </div>
@@ -130,7 +130,7 @@ export default function AssetList() {
                                                     {where(a) ?? <span className={sub}>미지정{a.locationRaw ? ` · ${a.locationRaw}` : ''}</span>}
                                                 </td>
                                                 <td className="p-3"><StatusBadge status={a.status} /></td>
-                                                <td className="p-3">{a.tagId ? <span className="text-surface-700 dark:text-surface-300">발급</span> : <span className={sub}>없음</span>}</td>
+                                                <td className="p-3">{a.tagId ? <span className="text-surface-700 dark:text-surface-300">있음</span> : <span className={sub}>없음</span>}</td>
                                                 <td className="p-3 whitespace-nowrap">{checked(a) ?? <span className={sub}>없음</span>}</td>
                                             </tr>
                                         ))}
@@ -152,7 +152,7 @@ export default function AssetList() {
                                             </div>
                                             <p className="text-sm text-surface-800 dark:text-surface-200 truncate">{a.name ?? '-'}</p>
                                             <p className={sub}>
-                                                {where(a) ?? `미지정${a.locationRaw ? ` · ${a.locationRaw}` : ''}`} · 라벨 {a.tagId ? '발급' : '없음'} · 확인 {checked(a) ?? '없음'}
+                                                {where(a) ?? `미지정${a.locationRaw ? ` · ${a.locationRaw}` : ''}`} · 라벨 {a.tagId ? '있음' : '없음'} · 확인 {checked(a) ?? '없음'}
                                             </p>
                                         </Link>
                                     </li>
@@ -250,8 +250,8 @@ function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProp
                     라벨
                     <select className="input min-h-[48px] mt-1" value={filters.label} onChange={(e) => setFilter('label', e.target.value as AssetFilters['label'])}>
                         <option value="all">전체</option>
-                        <option value="untagged">아직 안 뽑음</option>
-                        <option value="tagged">뽑음</option>
+                        <option value="untagged">라벨 없음</option>
+                        <option value="tagged">라벨 있음</option>
                     </select>
                 </label>
                 <label className={label}>

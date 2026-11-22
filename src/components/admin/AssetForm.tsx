@@ -20,6 +20,10 @@ export default function AssetForm() {
     const navigate = useNavigate();
     const f = useAssetForm(assetId);
     const v = f.values;
+    // 저장이 막히면 틀린 칸으로 초점을 옮긴다 — 오류 문구만 폼 끝에 뜨면 어느 칸인지 찾아야 했다
+    useEffect(() => {
+        if (f.errorField) document.getElementById(`asset-${f.errorField}`)?.focus();
+    }, [f.error, f.errorField]);
 
     if (f.loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
     if (f.loadError) {
@@ -46,7 +50,8 @@ export default function AssetForm() {
     const text = (key: keyof AssetFormValues & keyof typeof ASSET_LIMITS, label: string, placeholder = '', required = false) => (
         <Field id={`asset-${key}`} label={label} required={required}>
             <input id={`asset-${key}`} type="text" className="input w-full min-h-[48px]" value={v[key]} maxLength={ASSET_LIMITS[key]}
-                placeholder={placeholder} onChange={(e) => f.set(key, e.target.value)} />
+                placeholder={placeholder} onChange={(e) => f.set(key, e.target.value)}
+                aria-required={required || undefined} aria-invalid={f.errorField === key || undefined} />
         </Field>
     );
 
@@ -72,6 +77,7 @@ export default function AssetForm() {
                     <Field id="asset-code" label="자산코드" required hint="라벨에 크게 찍힙니다. 등록한 뒤에는 바꿀 수 없어요.">
                         <div className="flex gap-2">
                             <input id="asset-code" type="text" className="input flex-1 min-h-[48px] font-mono" value={v.code}
+                                aria-required="true" aria-describedby="asset-code-hint" aria-invalid={f.errorField === 'code' || undefined}
                                 maxLength={ASSET_LIMITS.code} placeholder="기관 관리번호 (예: A-2024-001)" onChange={(e) => f.set('code', e.target.value)} />
                             <button type="button" className="btn-secondary min-h-[48px] px-3 flex-shrink-0" onClick={f.autoCode}>자동 번호</button>
                         </div>
@@ -105,20 +111,21 @@ export default function AssetForm() {
                     {text('category', '분류', '예: 집기')}
                     {text('spec', '규격', '모델명·크기')}
                     <Field id="asset-acquiredAt" label="취득일자">
-                        <input id="asset-acquiredAt" type="date" className="input w-full min-h-[48px]" value={v.acquiredAt} onChange={(e) => f.set('acquiredAt', e.target.value)} />
+                        <input id="asset-acquiredAt" type="date" className="input w-full min-h-[48px]" value={v.acquiredAt} aria-invalid={f.errorField === 'acquiredAt' || undefined} onChange={(e) => f.set('acquiredAt', e.target.value)} />
                     </Field>
                     <Field id="asset-quantity" label="현재수량">
-                        <input id="asset-quantity" type="number" min={0} inputMode="numeric" className="input w-full min-h-[48px]" value={v.quantity} onChange={(e) => f.set('quantity', e.target.value)} />
+                        <input id="asset-quantity" type="number" min={0} inputMode="numeric" className="input w-full min-h-[48px]" value={v.quantity} aria-invalid={f.errorField === 'quantity' || undefined} onChange={(e) => f.set('quantity', e.target.value)} />
                     </Field>
                     <Field id="asset-amount" label="자산금액(원)" hint="관리자만 봅니다.">
-                        <input id="asset-amount" type="text" inputMode="numeric" className="input w-full min-h-[48px]" value={v.amount} placeholder="예: 250,000" onChange={(e) => f.set('amount', formatAmountInput(e.target.value))} />
+                        <input id="asset-amount" type="text" inputMode="numeric" className="input w-full min-h-[48px] tabular-nums" value={v.amount}
+                            aria-describedby="asset-amount-hint" aria-invalid={f.errorField === 'amount' || undefined} placeholder="예: 250,000" onChange={(e) => f.set('amount', formatAmountInput(e.target.value))} />
                     </Field>
                     <DepartmentField value={v.department} options={f.departments} onChange={(d) => f.set('department', d)} fromSpace={f.departmentFromSpace} />
                 </div>
                 {text('usage', '용도', '쓰는 곳·메모')}
                 {f.isNew && <PhotoPicker file={f.photo} onChange={f.setPhoto} />}
 
-                {f.error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{f.error}</p>}
+                {f.error && <p className="text-sm text-red-700 dark:text-red-300" role="alert">{f.error}</p>}
 
                 <div className="flex flex-col sm:flex-row gap-2 justify-end pt-2">
                     {f.isNew && (
@@ -139,10 +146,10 @@ function Field({ id, label, required, hint, children }: { id: string; label: str
     return (
         <div>
             <label htmlFor={id} className={labelCls}>
-                {label}{required && <span className="text-red-500" aria-hidden="true"> *</span>}
+                {label}{required && <span className="text-red-700 dark:text-red-300" aria-hidden="true"> *</span>}
             </label>
             {children}
-            {hint && <p className={`${sub} mt-1`}>{hint}</p>}
+            {hint && <p id={`${id}-hint`} className={`${sub} mt-1`}>{hint}</p>}
         </div>
     );
 }

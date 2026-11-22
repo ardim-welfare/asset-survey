@@ -148,11 +148,12 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
                 <section className="glass-card p-5" aria-labelledby="asset-money">
                     <h2 id="asset-money" className="font-semibold text-surface-900 dark:text-surface-100 mb-1">금액</h2>
                     <p className={`${sub} mb-3`}>희망이음 대장의 값을 그대로 보여 줍니다. 관리자만 볼 수 있습니다.</p>
-                    <dl className="grid grid-cols-3 gap-3 text-sm">
+                    {/* 휴대폰에서는 한 줄에 하나 — 세 칸이면 큰 금액이 칸을 넘어 화면이 옆으로 밀렸다 */}
+                    <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                         {([['자산금액', d.accounting?.amount], ['감가상각충당금', d.accounting?.depreciation], ['잔존가액', d.accounting?.residual]] as const).map(([label, v]) => (
                             <div key={label} className="rounded-xl bg-surface-50 dark:bg-surface-800 p-3">
                                 <dt className={sub}>{label}</dt>
-                                <dd className="font-semibold text-surface-900 dark:text-surface-100">{won(v)}</dd>
+                                <dd className="font-semibold text-surface-900 dark:text-surface-100 tabular-nums">{won(v)}</dd>
                             </div>
                         ))}
                     </dl>
@@ -162,7 +163,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
             <section className="glass-card p-5" aria-labelledby="asset-label">
                 <h2 id="asset-label" className="font-semibold text-surface-900 dark:text-surface-100 mb-1">QR 라벨</h2>
                 <p className="text-sm text-surface-700 dark:text-surface-300">
-                    {a.tagId ? <>발급됨 · 라벨 번호 <span className="font-mono">{a.tagId}</span></> : '아직 라벨을 뽑지 않았습니다.'}
+                    {a.tagId ? <>라벨 있음 · 라벨 번호 <span className="font-mono">{a.tagId}</span></> : '아직 라벨이 없습니다.'}
                 </p>
                 {renderLabelPrint && (
                     <button type="button" className="btn-secondary min-h-[48px] px-4 mt-3" onClick={() => setPrinting(true)}>

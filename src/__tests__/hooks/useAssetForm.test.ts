@@ -2,7 +2,7 @@
  * useAssetForm — 재물 직접 등록 입력 검사·값 바꾸기 (2026-11-22)
  */
 import { describe, it, expect } from 'vitest';
-import { validateAssetForm, toManualFields, EMPTY_ASSET_FORM, formatAmountInput } from '../../hooks/useAssetForm';
+import { validateAssetForm, toManualFields, EMPTY_ASSET_FORM, formatAmountInput, errorFieldOf } from '../../hooks/useAssetForm';
 
 const form = (over: Partial<typeof EMPTY_ASSET_FORM> = {}) => ({ ...EMPTY_ASSET_FORM, code: 'A-1', name: '책상', ...over });
 
@@ -39,5 +39,15 @@ describe('formatAmountInput', () => {
         expect(formatAmountInput('00012')).toBe('12');
         expect(formatAmountInput('')).toBe('');
         expect(toManualFields(form({ amount: formatAmountInput('250000') })).amount).toBe(250000);
+    });
+});
+
+describe('errorFieldOf', () => {
+    it('오류 문구가 가리키는 칸을 찾아 그 칸으로 초점을 옮길 수 있게 한다', () => {
+        expect(errorFieldOf(validateAssetForm(form({ code: '' }), true)!)).toBe('code');
+        expect(errorFieldOf(validateAssetForm(form({ name: '' }), true)!)).toBe('name');
+        expect(errorFieldOf(validateAssetForm(form({ amount: '이십만' }), true)!)).toBe('amount');
+        expect(errorFieldOf('같은 자산코드(1)의 재물이 이미 있습니다.')).toBe('code');
+        expect(errorFieldOf('저장하지 못했습니다.')).toBeNull();
     });
 });

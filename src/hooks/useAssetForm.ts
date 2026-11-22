@@ -51,6 +51,16 @@ export function formatAmountInput(raw: string): string {
     return digits === '' ? '' : Number(digits).toLocaleString('ko-KR');
 }
 
+/** 오류 문구가 가리키는 칸 — 저장이 막히면 그 칸에 표시하고 초점을 옮긴다(2026-11-22 점검) */
+export function errorFieldOf(message: string): keyof AssetFormValues | null {
+    if (/자산코드/.test(message)) return 'code';
+    if (/품명/.test(message)) return 'name';
+    if (/취득일자/.test(message)) return 'acquiredAt';
+    if (/수량/.test(message)) return 'quantity';
+    if (/자산금액/.test(message)) return 'amount';
+    return null;
+}
+
 /** 입력 검사 — 문제가 있으면 안내 문구 */
 export function validateAssetForm(v: AssetFormValues, isNew: boolean): string | null {
     if (isNew && !v.code.trim()) return '자산코드를 넣어 주세요. 번호가 없으면 [자동 번호]를 누르세요.';
@@ -215,6 +225,7 @@ export default function useAssetForm(assetId: string | undefined) {
 
     return {
         isNew, values, set, autoCode, chooseSpace, save, saving, error, photo, setPhoto, departments,
+        errorField: error ? errorFieldOf(error) : null,
         /** 지금 부서 값이 공간의 담당 팀에서 자동으로 채운 것인가 */
         departmentFromSpace: autoDepartment !== null && values.department === autoDepartment,
         asset, spaces, buildings, loading, loadError, reload: load,

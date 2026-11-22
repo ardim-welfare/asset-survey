@@ -48,7 +48,7 @@ export default function AssetPhoto({ asset, admin, onChanged }: Props) {
             onChanged({ photoUrl: null, photoThumbUrl: null, photoPath: null, photoThumbPath: null });
             showToast('사진을 지웠습니다.', 'success');
         } catch {
-            showToast('사진을 지우지 못했습니다.', 'error');
+            showToast('사진을 지우지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
         } finally {
             setBusy(false);
         }
@@ -75,7 +75,7 @@ export default function AssetPhoto({ asset, admin, onChanged }: Props) {
                         {busy ? '처리하는 중…' : asset.photoUrl ? '사진 바꾸기' : '사진 올리기'}
                     </button>
                     {asset.photoUrl && (
-                        <button type="button" className="btn-secondary btn-sm min-h-[44px] px-4 text-red-600 dark:text-red-400" disabled={busy} onClick={() => void handleRemove()}>
+                        <button type="button" className="btn-secondary btn-sm min-h-[44px] px-4 text-red-700 dark:text-red-300" disabled={busy} onClick={() => void handleRemove()}>
                             지우기
                         </button>
                     )}
