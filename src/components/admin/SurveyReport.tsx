@@ -12,7 +12,7 @@ import { SYNC_KIND_LABEL } from '../../lib/survey/report';
 import { toDateOrNull } from '../../lib/dateUtils';
 import type { SyncTask, SyncTaskKind, SurveyEvent } from '../../types/survey';
 
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
 const card = 'glass-card p-5 mb-4';
 const KIND_ORDER: SyncTaskKind[] = ['move', 'dispose', 'missing', 'register', 'relabel'];
 const KIND_HELP: Record<SyncTaskKind, string> = {
@@ -43,7 +43,7 @@ export default function SurveyReport() {
     if (r.notFound || r.error || !r.ctx || !r.survey) {
         return (
             <div className="max-w-3xl mx-auto glass-card p-6 text-center">
-                <p className="text-surface-700 dark:text-surface-300 mb-4">{r.notFound ? '이 기관에 없는 조사입니다.' : '보고서를 불러오지 못했습니다.'}</p>
+                <p className="text-surface-700 dark:text-surface-300 mb-4">{r.notFound ? '이 기관에 없는 조사입니다.' : '보고서를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 열어 주세요.'}</p>
                 <Link to="/admin/surveys" className="btn-primary min-h-[48px] px-5">재물조사로</Link>
             </div>
         );
@@ -58,13 +58,13 @@ export default function SurveyReport() {
 
     return (
         <div className="max-w-5xl mx-auto animate-fade-in">
-            <Link to="/admin/surveys" className="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 min-h-[44px]">
+            <Link to="/admin/surveys" className="inline-flex items-center gap-1 text-sm font-medium text-primary-700 dark:text-primary-300 min-h-[44px]">
                 <span aria-hidden="true">←</span> 재물조사
             </Link>
             <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
                 <div>
                     <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">{closed ? '결과 보고서' : '중간 보고서'}</h1>
-                    <p className="text-sm text-surface-500 dark:text-surface-400">{reportHeader(ctx).map(([k, v]) => `${k} ${v}`).join(' · ')}</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400">{reportHeader(ctx).map(([k, v]) => `${k} ${v}`).join(' · ')}</p>
                 </div>
                 <div className="flex gap-2">
                     <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={r.printPdf}>PDF(인쇄)</button>
@@ -156,7 +156,7 @@ export default function SurveyReport() {
                             <li key={e.id} className="text-surface-700 dark:text-surface-300">
                                 <span className={sub}>{when(e.at)}</span> · {EVENT_LABEL[e.type]}
                                 {e.spaceId && ` · ${ctx.spaceName(e.spaceId)}`} · {ctx.personName(e.byUid)}
-                                {e.reason && <span className="text-surface-500 dark:text-surface-400"> — {e.reason}</span>}
+                                {e.reason && <span className="text-surface-600 dark:text-surface-400"> — {e.reason}</span>}
                             </li>
                         ))}
                     </ol>
@@ -176,7 +176,7 @@ function TaskRow({ task, spaceName, onToggle }: { task: SyncTask; spaceName: (ke
                 <input type="checkbox" className="w-5 h-5 mt-0.5 flex-shrink-0" checked={task.done} onChange={onToggle} />
                 <span className={task.done ? 'line-through text-surface-500 dark:text-surface-400' : 'text-surface-800 dark:text-surface-200'}>
                     <span className="font-mono">{task.code}</span> {task.name ?? ''}
-                    <span className="block text-xs text-surface-500 dark:text-surface-400">{where}{task.memo ? ` · ${task.memo}` : ''}</span>
+                    <span className="block text-xs text-surface-600 dark:text-surface-400">{where}{task.memo ? ` · ${task.memo}` : ''}</span>
                 </span>
             </label>
         </li>

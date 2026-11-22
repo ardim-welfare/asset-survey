@@ -15,7 +15,7 @@ import type { Space } from '../../types/space';
 import type { Building } from '../../types/building';
 import type { SurveySubmission } from '../../types/survey';
 
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
 const card = 'glass-card p-5 mb-4';
 const MODE_LABEL = { delegated: '나눠서 조사', solo: '혼자 조사' } as const;
 
@@ -28,7 +28,7 @@ export default function SurveyManager() {
     if (s.error) {
         return (
             <div className="max-w-3xl mx-auto glass-card p-6 text-center">
-                <p className="text-red-600 dark:text-red-400 mb-3">조사 정보를 불러오지 못했습니다.</p>
+                <p className="text-red-700 dark:text-red-300 mb-3" role="alert">조사 정보를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 불러오세요.</p>
                 <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={() => void s.reload()}>다시 불러오기</button>
             </div>
         );
@@ -58,11 +58,12 @@ export default function SurveyManager() {
     };
 
     const closed = s.surveys.filter((x) => x.status === 'closed');
+    const activeSpaceCount = s.spaces.filter((x) => !x.archived).length;
 
     return (
         <div className="max-w-4xl mx-auto animate-fade-in">
             <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">재물조사</h1>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mb-6">
+            <p className="text-sm text-surface-600 dark:text-surface-400 mb-6">
                 조사를 시작하면 그때의 운영 재물이 공간별 대상 목록으로 고정되고, 공간 담당자 화면의 스캔 탭이 열립니다.
             </p>
 
@@ -76,11 +77,19 @@ export default function SurveyManager() {
             ) : (
                 <section className={`${card} text-center`}>
                     <p className="text-surface-700 dark:text-surface-300 font-medium mb-1">진행 중인 조사가 없습니다</p>
-                    <p className={`${sub} mb-4`}>조사 방식: {MODE_LABEL[s.mode]} (설정에서 바꿀 수 있습니다)</p>
-                    <button type="button" className="btn-primary min-h-[48px] px-5" onClick={() => void s.openForm()}
-                        disabled={s.spaces.filter((x) => !x.archived).length === 0}>새 조사 시작</button>
-                    {s.spaces.length === 0 && (
-                        <p className={`${sub} mt-3`}>먼저 <Link to="/admin/spaces" className="underline">공간</Link>을 만들고 <Link to="/admin/import" className="underline">재물을 가져오세요</Link>.</p>
+                    <p className={`${sub} mb-4`}>
+                        조사 방식: {MODE_LABEL[s.mode]} · <Link to="/admin/settings" className="underline underline-offset-2 text-primary-700 dark:text-primary-300">설정에서 바꾸기</Link>
+                    </p>
+                    {activeSpaceCount === 0 ? (
+                        <>
+                            <p className="text-sm text-surface-700 dark:text-surface-300 mb-3">조사하려면 공간과 재물이 먼저 있어야 합니다.</p>
+                            <div className="flex flex-wrap justify-center gap-2">
+                                <Link to="/admin/spaces" className="btn-primary min-h-[48px] px-5">공간 만들기</Link>
+                                <Link to="/admin/import" className="btn-secondary min-h-[48px] px-5">재물 가져오기</Link>
+                            </div>
+                        </>
+                    ) : (
+                        <button type="button" className="btn-primary min-h-[48px] px-5" onClick={() => void s.openForm()}>새 조사 시작</button>
                     )}
                 </section>
             )}
@@ -91,12 +100,15 @@ export default function SurveyManager() {
                     <ul className="divide-y divide-surface-100 dark:divide-surface-700">
                         {closed.map((x) => (
                             <li key={x.id}>
-                                <Link to={`/admin/surveys/${x.id}`} className="flex flex-wrap items-center justify-between gap-2 py-3 min-h-[48px] text-sm">
-                                    <span className="font-medium text-primary-600 dark:text-primary-400">{x.name}</span>
-                                    <span className={sub}>
-                                        {x.startDate} ~ {x.endDate}
-                                        {x.summary && ` · 확인 ${x.summary.found}/${x.summary.target} · 미발견 ${x.summary.missing}`}
+                                <Link to={`/admin/surveys/${x.id}`} className="flex items-center gap-2 py-3 min-h-[48px] text-sm rounded-lg hover:bg-surface-50 dark:hover:bg-surface-800 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500">
+                                    <span className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-x-2">
+                                        <span className="font-medium text-primary-700 dark:text-primary-300">{x.name}</span>
+                                        <span className={`${sub} tabular-nums`}>
+                                            {x.startDate} ~ {x.endDate}
+                                            {x.summary && ` · 확인 ${x.summary.found}/${x.summary.target} · 미발견 ${x.summary.missing}`}
+                                        </span>
                                     </span>
+                                    <span aria-hidden="true" className="text-surface-500 text-lg">›</span>
                                 </Link>
                             </li>
                         ))}
@@ -110,7 +122,7 @@ export default function SurveyManager() {
 type Admin = ReturnType<typeof useSurveyAdmin>;
 
 function SubmissionBadge({ sub: x, names }: { sub: SurveySubmission | null; names: Map<string, string> }) {
-    if (!x) return <span className="text-xs text-surface-500 dark:text-surface-400">조사 중</span>;
+    if (!x) return <span className="text-xs text-surface-600 dark:text-surface-400">조사 중 · 제출 전</span>;
     const who = (uid: string | null) => (uid ? names.get(uid) ?? '알 수 없음' : '');
     if (x.state === 'submitted') return <span className="text-xs font-medium text-sky-700 dark:text-sky-300">제출됨 · {who(x.submittedByUid)}</span>;
     // 사유는 마우스 말풍선(title)이 아니라 글자로 — 휴대폰·키보드로는 볼 수 없었다(2026-11-22 점검)
@@ -172,8 +184,21 @@ function Dashboard({ s, onReview, onClose }: {
                     <Stat label="미등록" value={`${s.totals.unregistered}건`} warn={s.totals.unregistered > 0} />
                 </dl>
                 <div className="mt-3 h-2 rounded-full bg-surface-100 dark:bg-surface-800 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={s.totals.target} aria-valuenow={s.totals.found} aria-label="전체 진행률">
-                    <div className="h-full bg-primary-500" style={{ width: `${pct}%` }} />
+                    <div className="h-full bg-primary-600 dark:bg-primary-400" style={{ width: `${pct}%` }} />
                 </div>
+
+                <details className="mt-4 group">
+                    <summary className="btn-secondary btn-sm min-h-[44px] list-none [&::-webkit-details-marker]:hidden inline-flex cursor-pointer">
+                        <span aria-hidden="true" className="group-open:rotate-90 transition-transform">▸</span> 숫자가 무슨 뜻인가요?
+                    </summary>
+                    <dl className="mt-2 grid gap-1 text-sm text-surface-700 dark:text-surface-300 sm:grid-cols-2">
+                        <div><dt className="inline font-semibold">확인</dt> <dd className="inline">— 이 공간 대상 중 찾은 수 / 대상 수</dd></div>
+                        <div><dt className="inline font-semibold">다른 곳</dt> <dd className="inline">— 이 공간 대상인데 다른 공간에서 찾음</dd></div>
+                        <div><dt className="inline font-semibold">예외</dt> <dd className="inline">— 이 공간에서 찍었는데 다른 공간 것·대장에 없는 것·대상 밖</dd></div>
+                        <div><dt className="inline font-semibold">상태 이상</dt> <dd className="inline">— 고장·파손 등으로 표시한 것</dd></div>
+                        <div><dt className="inline font-semibold">미등록</dt> <dd className="inline">— 찍었지만 재물 대장에 없는 코드</dd></div>
+                    </dl>
+                </details>
 
                 {/* 휴대폰: 공간마다 카드 — 7열 표가 넘쳐 승인·반려 버튼이 화면 밖에 있었다(2026-11-22 점검) */}
                 <ul className="sm:hidden mt-4 space-y-2" aria-label="공간별 진행">
@@ -211,12 +236,12 @@ function Dashboard({ s, onReview, onClose }: {
                 </ul>
                 <div className="hidden sm:block overflow-x-auto mt-4">
                     <table className="w-full text-sm">
-                        <thead className="text-left text-surface-500 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
+                        <thead className="text-left text-surface-600 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
                             <tr>
                                 <th className="py-2 pr-3 font-medium">공간</th>
                                 <th className="py-2 pr-3 font-medium">확인</th>
-                                <th className="py-2 pr-3 font-medium" title="대상 중 다른 공간에서 찾음">다른 곳</th>
-                                <th className="py-2 pr-3 font-medium" title="이 공간에서 나온 다른 공간·미등록·범위 밖">예외</th>
+                                <th className="py-2 pr-3 font-medium">다른 곳</th>
+                                <th className="py-2 pr-3 font-medium">예외</th>
                                 <th className="py-2 pr-3 font-medium">상태 이상</th>
                                 {delegated && <th className="py-2 pr-3 font-medium">제출</th>}
                                 {delegated && <th className="py-2 font-medium"><span className="sr-only">처리</span></th>}
@@ -233,10 +258,10 @@ function Dashboard({ s, onReview, onClose }: {
                                             {r.name}
                                             {r.location && <span className={`${sub} block`}>{r.location}</span>}
                                         </td>
-                                        <td className="py-2 pr-3 whitespace-nowrap">{p?.found ?? 0} / {p?.target ?? 0}</td>
-                                        <td className="py-2 pr-3">{p?.elsewhere ?? 0}</td>
-                                        <td className="py-2 pr-3">{p?.foreign ?? 0}</td>
-                                        <td className="py-2 pr-3">{p?.issues ?? 0}</td>
+                                        <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{p?.found ?? 0} / {p?.target ?? 0}</td>
+                                        <td className="py-2 pr-3 tabular-nums">{p?.elsewhere ?? 0}</td>
+                                        <td className="py-2 pr-3 tabular-nums">{p?.foreign ?? 0}</td>
+                                        <td className="py-2 pr-3 tabular-nums">{p?.issues ?? 0}</td>
                                         {delegated && <td className="py-2 pr-3">{isNone ? <span className={sub}>관리자 확인</span> : <SubmissionBadge sub={x} names={s.names} />}</td>}
                                         {delegated && (
                                             <td className="py-2 whitespace-nowrap">
@@ -261,7 +286,7 @@ function Dashboard({ s, onReview, onClose }: {
                 <div className="mt-5 pt-4 border-t border-surface-100 dark:border-surface-700">
                     {s.blockers.length > 0 ? (
                         <p className="text-sm text-surface-700 dark:text-surface-300 mb-2">
-                            마감하려면 모든 공간이 승인돼야 합니다. 남은 공간: <strong>{s.blockers.map(nameOf).join(', ')}</strong>
+                            마감하려면 모든 공간이 승인돼야 합니다. 남은 공간 {s.blockers.length}곳: <strong>{s.blockers.map(nameOf).join(', ')}</strong>
                             <span className={`${sub} block`}>담당자가 제출하지 못하는 공간은 '대신 승인'(사유 필수)으로 처리할 수 있습니다.</span>
                         </p>
                     ) : (
@@ -297,7 +322,7 @@ function Stat({ label, value, warn = false }: { label: string; value: string; wa
     return (
         <div className="rounded-xl bg-surface-50 dark:bg-surface-800 p-3">
             <dt className={sub}>{label}</dt>
-            <dd className={`text-lg font-bold ${warn ? 'text-red-600 dark:text-red-400' : 'text-surface-900 dark:text-surface-100'}`}>{value}</dd>
+            <dd className={`text-lg font-bold tabular-nums ${warn ? 'text-red-700 dark:text-red-300' : 'text-surface-900 dark:text-surface-100'}`}>{value}</dd>
         </div>
     );
 }
@@ -336,8 +361,8 @@ function StartFormView({ form, setForm, spaces, buildings, preview, error, mode,
     const spaceRow = (x: Space) => (
         <li key={x.id}>
             <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
-                <input type="checkbox" className="w-4 h-4" checked={form.spaceIds.includes(x.id)} onChange={() => toggle(x.id)} />
-                <span className="flex-1">{x.name}</span>
+                <input type="checkbox" className="w-5 h-5 accent-primary-600 flex-shrink-0" checked={form.spaceIds.includes(x.id)} onChange={() => toggle(x.id)} />
+                <span className="flex-1 break-keep">{x.name}</span>
                 <span className={sub}>{preview?.count(x.id) ?? 0}건 · 담당 {x.managerUids.length}명{(x.teamIds ?? []).length > 0 ? ` · 팀 ${(x.teamIds ?? []).length}` : ''}</span>
             </label>
         </li>
@@ -400,7 +425,7 @@ function StartFormView({ form, setForm, spaces, buildings, preview, error, mode,
                     {(preview?.unassigned ?? 0) > 0 && (
                         <li>
                             <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
-                                <input type="checkbox" className="w-4 h-4" checked={form.includesUnassigned} onChange={(e) => setForm({ ...form, includesUnassigned: e.target.checked })} />
+                                <input type="checkbox" className="w-5 h-5 accent-primary-600 flex-shrink-0" checked={form.includesUnassigned} onChange={(e) => setForm({ ...form, includesUnassigned: e.target.checked })} />
                                 <span className="flex-1">공간 미지정 재물</span>
                                 <span className={sub}>{preview?.unassigned}건 · 어디서 찍든 '다른 공간'으로 나옴</span>
                             </label>
@@ -415,7 +440,7 @@ function StartFormView({ form, setForm, spaces, buildings, preview, error, mode,
                 </p>
             )}
             {mode === 'solo' && <p className={`${sub} mt-3`}>조사 방식이 '혼자 조사'라 관리자만 찍고, 제출·승인 없이 바로 마감합니다.</p>}
-            {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
+            {error && <p className="mt-3 text-sm text-red-700 dark:text-red-300" role="alert">{error}</p>}
 
             <div className="flex flex-col sm:flex-row gap-2 justify-end mt-4">
                 <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={onCancel} disabled={starting}>취소</button>
@@ -437,7 +462,7 @@ function GroupCheck({ label, display, level, picked, total, onToggle }: {
             : 'font-medium text-primary-700 dark:text-primary-300'}`}>
             <input
                 type="checkbox"
-                className="w-4 h-4"
+                className="w-5 h-5 accent-primary-600 flex-shrink-0"
                 checked={total > 0 && picked === total}
                 ref={(el) => { if (el) el.indeterminate = picked > 0 && picked < total; }}
                 onChange={onToggle}
