@@ -28,9 +28,9 @@ export default function SurveyModeSection({ value, saving, onChange }: SurveyMod
     return (
         <fieldset className="glass-card p-6 mb-6" disabled={saving}>
             <legend className="sr-only">조사 방식</legend>
-            <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-1" aria-hidden="true">조사 방식</h2>
-            <p className="text-xs text-surface-500 dark:text-surface-400 mb-4">
-                재물조사를 누가 스캔하고 어떻게 마감할지 정합니다. 다음에 여는 조사부터 적용됩니다.
+            <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-1" aria-hidden="true">조사 방식</h3>
+            <p className="text-xs text-surface-600 dark:text-surface-400 mb-4">
+                재물조사를 누가 스캔하고 어떻게 마감할지 정합니다. 고르면 바로 저장되고, 다음에 여는 조사부터 적용됩니다.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {OPTIONS.map((opt) => {
@@ -48,11 +48,11 @@ export default function SurveyModeSection({ value, saving, onChange }: SurveyMod
                                 value={opt.value}
                                 checked={checked}
                                 onChange={() => { if (!checked) onChange(opt.value); }}
-                                className="mt-1 accent-primary-600"
+                                className="mt-0.5 w-5 h-5 flex-shrink-0 accent-primary-600"
                             />
                             <span>
                                 <span className="block font-semibold text-sm text-surface-900 dark:text-surface-100">{opt.title}</span>
-                                <span className="block text-xs text-surface-500 dark:text-surface-400 mt-1 leading-relaxed">{opt.desc}</span>
+                                <span className="block text-xs text-surface-600 dark:text-surface-400 mt-1 leading-relaxed">{opt.desc}</span>
                             </span>
                         </label>
                     );

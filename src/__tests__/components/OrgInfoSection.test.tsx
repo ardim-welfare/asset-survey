@@ -66,7 +66,8 @@ describe('OrgInfoSection', () => {
     it('피드백 버튼 클릭 시 onRequestFeedback 호출', () => {
         const props = baseProps();
         render(<OrgInfoSection {...props} />);
-        fireEvent.click(screen.getByText(/슈퍼관리자에게 요청하세요/));
+        expect(screen.getByText(/슈퍼관리자에게 요청하세요/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '변경 요청하기' }));
         expect(props.onRequestFeedback).toHaveBeenCalled();
     });
 });

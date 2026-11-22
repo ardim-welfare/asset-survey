@@ -39,7 +39,7 @@ export default function AccountSection() {
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">{user?.displayName || '이름 없음'}</p>
-                    <p className="text-xs text-surface-500 dark:text-surface-400 truncate">{user?.email}</p>
+                    <p className="text-xs text-surface-600 dark:text-surface-400 truncate">{user?.email}</p>
                 </div>
                 <button
                     onClick={logout}
@@ -55,17 +55,10 @@ export default function AccountSection() {
             {notifApiAvailable && (
                 <>
                     <div className="border-t border-surface-100 dark:border-surface-700 my-1 mx-3" />
-                    <div
-                        role="button"
-                        tabIndex={0}
-                        className="flex items-center justify-between cursor-pointer rounded-xl p-3 hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors"
+                    <button
+                        type="button"
+                        className="w-full text-left flex items-center justify-between gap-2 rounded-xl p-3 min-h-[48px] hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500"
                         onClick={handleNotifClick}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                handleNotifClick();
-                            }
-                        }}
                     >
                         <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${permission === 'granted' ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-surface-100 dark:bg-surface-800'}`}>
@@ -85,7 +78,7 @@ export default function AccountSection() {
                         ) : (
                             <span className="text-xs font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-full">꺼짐</span>
                         )}
-                    </div>
+                    </button>
                 </>
             )}
         </div>

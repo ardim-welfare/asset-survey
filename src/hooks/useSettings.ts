@@ -35,7 +35,6 @@ export default function useSettings() {
     const [org, setOrg] = useState<Organization | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [success, setSuccess] = useState(false);
     const [withdrawing, setWithdrawing] = useState(false);
     const [form, setForm] = useState<SettingsForm>({
         name: '',
@@ -117,8 +116,8 @@ export default function useSettings() {
                     managerSecondary: targetData.managerSecondary.trim(),
                 });
             }
-            setSuccess(true);
-            setTimeout(() => setSuccess(false), 3000);
+            // 저장 알림은 토스트로 — 맨 위 띠는 아래쪽 칸에서 저장하면 화면 밖이었다(2026-11-22 점검)
+            showToast('저장했습니다.', 'success');
         } catch (err) {
             console.error('저장 실패:', err);
             // 즉시 저장 토글의 낙관적 반영을 이전 값으로 되돌린다.
@@ -168,7 +167,7 @@ export default function useSettings() {
     };
 
     return {
-        org, orgId, loading, saving, success, withdrawing,
+        org, orgId, loading, saving, withdrawing,
         form, setForm,
         // 핸들러
         handleSave, handleRegenCode, handlePhoneChange, handleWithdraw,

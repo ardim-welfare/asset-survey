@@ -17,7 +17,7 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
     return (
         <div className="glass-card p-6 mb-6">
             <div className="flex items-center justify-between mb-1">
-                <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">결재 라인</h2>
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">결재 라인</h3>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                     <span className={`text-xs font-medium ${form.hideApprovalLine ? 'text-surface-600 dark:text-surface-400' : 'text-primary-700 dark:text-primary-300'}`}>
                         {form.hideApprovalLine ? 'PDF 결재란 숨김' : 'PDF 결재란 표시'}
@@ -29,7 +29,7 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
                     />
                 </label>
             </div>
-            <p className="text-xs text-surface-500 dark:text-surface-400 mb-4">PDF 보고서에 표시될 결재란을 설정합니다. (수동 결재용)</p>
+            <p className="text-xs text-surface-600 dark:text-surface-400 mb-4">재물조사 결과 보고서 PDF에 찍힐 결재란(종이로 결재할 때)입니다. 낮은 직급부터 적으세요(최대 5칸).</p>
 
             <div className={`space-y-2 mb-3 transition-opacity ${form.hideApprovalLine ? 'opacity-40 pointer-events-none' : ''}`}>
                 {form.approvalLine.map((item, idx) => (

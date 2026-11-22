@@ -22,8 +22,8 @@ export default function ManagerSection({ form, setForm, handleSave, saving }: Pr
     });
     return (
         <section className="glass-card p-6 mb-6" aria-labelledby="manager-title">
-            <h2 id="manager-title" className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-1">관리 책임자</h2>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mb-4">
+            <h3 id="manager-title" className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-1">관리 책임자</h3>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
                 기관의 물품 관리 책임자를 정·부로 적어 둡니다. 기록용이며 권한과는 상관없고, 라벨을 인쇄할 때 넣을 수 있어요.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
