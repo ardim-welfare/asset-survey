@@ -10,7 +10,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getMySpaces, getAssetsBySpaces } from '../../lib/firestore';
 import { sortAssets, filterAssets, DEFAULT_FILTERS } from '../../hooks/useAssetList';
 import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from '../common/AssetBadges';
-import { isUsefulLifeOver } from '../../lib/usefulLife';
+import { isUsefulLifeOver, usefulLifeEnd } from '../../lib/usefulLife';
 import type { Asset } from '../../types/asset';
 import type { Space } from '../../types/space';
 
@@ -116,7 +116,14 @@ export default function MyAssets() {
                                             {isUsefulLifeOver(a) && <UsefulLifeOverBadge />}
                                         </div>
                                         <p className="text-sm text-surface-800 dark:text-surface-200 line-clamp-2 break-keep">{a.name ?? '-'}</p>
-                                        {current === 'all' && <p className={sub}>{spaces.find((s) => s.id === a.spaceId)?.name ?? ''}</p>}
+                                        {/* 공간(전체 보기일 때)과 내용연수가 끝나는 날을 한 줄에(2026-11-22) */}
+                                        {(current === 'all' || usefulLifeEnd(a.acquiredAt, a.usefulLife)) && (
+                                            <p className={sub}>
+                                                {[current === 'all' ? spaces.find((s) => s.id === a.spaceId)?.name ?? '' : '',
+                                                    usefulLifeEnd(a.acquiredAt, a.usefulLife) ? `내용연수 ${usefulLifeEnd(a.acquiredAt, a.usefulLife)}까지` : '']
+                                                    .filter(Boolean).join(' · ')}
+                                            </p>
+                                        )}
                                         </span>
                                         <span aria-hidden="true" className="text-surface-500 text-lg flex-shrink-0">›</span>
                                     </Link>
