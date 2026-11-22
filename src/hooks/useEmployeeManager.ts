@@ -41,16 +41,18 @@ export default function useEmployeeManager() {
     const { runWithRetry } = useRetry();
     const [employees, setEmployees] = useState<User[]>([]);
     const [disabledEmployees, setDisabledEmployees] = useState<User[]>([]);
-    const [preRegisteredEmployees, setPreRegisteredEmployees] = useState<{ id: string; name: string; email: string; createdAt: unknown }[]>([]);
+    const [preRegisteredEmployees, setPreRegisteredEmployees] = useState<{ id: string; name: string; email: string; teamId?: string | null; createdAt: unknown }[]>([]);
     const [organization, setOrganization] = useState<Organization | null>(null);
     const [loading, setLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
-    const [newEmployee, setNewEmployee] = useState({ name: '', email: '' });
+    const [newEmployee, setNewEmployee] = useState({ name: '', email: '', teamId: '' });
     const [copiedType, setCopiedType] = useState<'none' | 'link' | 'code'>('none');
     const [regenerating, setRegenerating] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState({ name: '', email: '' });
     const [searchQuery, setSearchQuery] = useState('');
+    /** 팀 거르기 — 'all' / 'none'(팀 없음) / 팀 ID (2026-11-22) */
+    const [teamFilter, setTeamFilter] = useState<string>('all');
 
     const orgId = userData?.organizationId;
 
@@ -95,8 +97,9 @@ export default function useEmployeeManager() {
         e.preventDefault();
         if (!newEmployee.name.trim()) return;
         await runWithRetry('add-emp', async () => {
-            await addPreRegisteredEmployee(orgId!, newEmployee.name.trim(), newEmployee.email.trim().toLowerCase());
-            setNewEmployee({ name: '', email: '' });
+            await addPreRegisteredEmployee(orgId!, newEmployee.name.trim(), newEmployee.email.trim().toLowerCase(), newEmployee.teamId || null);
+            // 같은 팀 직원을 이어서 넣기 쉽게 팀은 남긴다
+            setNewEmployee((prev) => ({ name: '', email: '', teamId: prev.teamId }));
             setShowAddForm(false);
             await fetchData();
         }, { errorMessage: '직원 추가에 실패했습니다.' });
@@ -288,6 +291,14 @@ export default function useEmployeeManager() {
         }, { errorMessage: '역할 변경에 실패했습니다.', ...staleRowGuard() });
     };
 
+    /** 소속 팀 바꾸기(2026-11-22) — 공간 담당 권한이 팀으로도 오므로 관리자만 바꾼다(Rules가 본인 변경을 막는다) */
+    const handleChangeTeam = async (emp: User, teamId: string) => {
+        await runWithRetry(`change-team-${emp.id}`, async () => {
+            await updateUser(emp.id, { teamId: teamId || null });
+            setEmployees((prev) => prev.map((e) => (e.id === emp.id ? { ...e, teamId: teamId || null } : e)));
+        }, { errorMessage: '팀을 바꾸지 못했습니다.', ...staleRowGuard() });
+    };
+
     const handleDeletePreRegistered = async (preRegId: string) => {
         if (!orgId) return;
         if (!await confirm({ message: '사전 등록을 취소하시겠습니까?', confirmColor: 'warning' })) return;
@@ -340,8 +351,10 @@ export default function useEmployeeManager() {
         })),
     ];
 
-    // 통합 검색
+    // 통합 검색 + 팀 거르기
     const filteredUnifiedList = unifiedList.filter(m => {
+        const team = (m.original as { teamId?: string | null }).teamId ?? null;
+        if (teamFilter === 'none' ? team !== null : teamFilter !== 'all' && team !== teamFilter) return false;
         if (!searchQuery.trim()) return true;
         const q = searchQuery.toLowerCase();
         return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
@@ -363,11 +376,11 @@ export default function useEmployeeManager() {
         newEmployee, setNewEmployee,
         copiedType, regenerating,
         editingId, setEditingId, editForm, setEditForm,
-        searchQuery, setSearchQuery,
+        searchQuery, setSearchQuery, teamFilter, setTeamFilter,
         filteredEmployees, admins, regularEmployees,
         unifiedList, filteredUnifiedList, stats,
         handleAddEmployee, handleCopyInviteCode, handleRegenerateCode,
         handleEditEmployee, handleSaveEdit, handleDeleteEmployee, handleChangeRole,
-        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently,
+        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently, handleChangeTeam,
     };
 }

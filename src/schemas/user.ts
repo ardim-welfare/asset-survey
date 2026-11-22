@@ -9,6 +9,8 @@ export const userSchema = z.object({
     email: z.string().catch(''),
     role: userRoleSchema.catch('employee'),
     organizationId: z.string().nullable().catch(null),
+    /** 소속 팀(teams 문서 ID) — 2026-11-22. 관리자만 정한다(Rules가 본인 변경을 막는다) */
+    teamId: z.string().nullable().optional().catch(null),
     organizationStatus: z.string().optional().catch(''),
     theme: z.enum(['light', 'dark']).optional().catch(undefined),
     /**

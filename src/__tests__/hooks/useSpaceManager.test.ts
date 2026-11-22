@@ -25,7 +25,7 @@ vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ showToast: mockShowT
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm: mockConfirm }) }));
 
 const space = (over: Partial<Space>): Space => ({
-    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, buildingId: null, floor: null, ...over,
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], teamIds: [], archived: false, buildingId: null, floor: null, ...over,
 });
 
 const building = (over: Partial<Building>): Building => ({

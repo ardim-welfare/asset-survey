@@ -1064,6 +1064,47 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(emp('A', 1).collection('scans').doc('zz__org-A__9').set(scanDoc('emp_A1')));
     });
 
+    it('#V2b 담당 팀(2026-11-22) — 공간의 teamIds에 내 팀이 있으면 찍을 수 있고, 다른 팀이면 막힌다', async () => {
+      await seedSurvey();
+      const setTeam = async (teamId: string | null) => testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('users').doc('emp_A1').set({ teamId }, { merge: true });
+      });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('spaces').doc('sp-2').set({ teamIds: ['t1'] }, { merge: true });
+      });
+      const scan = (id: string) => emp('A', 1).collection('scans').doc(id).set(scanDoc('emp_A1', { spaceId: 'sp-2', expectedSpaceId: 'sp-2' }));
+      await setTeam('t9');
+      await assertFails(scan('sv1__org-A__1'));
+      await setTeam('t1');
+      await assertSucceeds(scan('sv1__org-A__1'));
+    });
+
+    it('#U-team 직원은 자기 팀을 바꿀 수 없고, 같은 기관 관리자는 바꿀 수 있다', async () => {
+      await assertFails(emp('A', 1).collection('users').doc('emp_A1').update({ teamId: 't1', lastEditedByUid: 'emp_A1' }));
+      await assertSucceeds(admin('A').collection('users').doc('emp_A1').update({ teamId: 't1', lastEditedByUid: 'admin_A' }));
+    });
+
+    // ── 팀 ──
+    it('#T1 팀은 같은 기관이 읽고 관리자만 만들며 지우지 못한다', async () => {
+      const team = (uid: string, extra: Record<string, unknown> = {}) => ({
+        organizationId: 'org-A', name: '행정팀', order: 0, archived: false, createdAt: serverTs(), updatedAt: serverTs(), lastEditedByUid: uid, ...extra,
+      });
+      await assertSucceeds(admin('A').collection('teams').doc('t1').set(team('admin_A')));
+      await assertFails(emp('A', 1).collection('teams').doc('t2').set(team('emp_A1')));
+      await assertFails(admin('B').collection('teams').doc('t3').set(team('admin_B')));
+      await assertFails(admin('A').collection('teams').doc('t4').set(team('admin_A', { name: '' })));
+      await assertSucceeds(emp('A', 2).collection('teams').doc('t1').get());
+      await assertFails(emp('B', 1).collection('teams').doc('t1').get());
+      await assertFails(admin('A').collection('teams').doc('t1').delete());
+    });
+
+    it('#O-mgr 관리 책임자 정·부는 50자 이하 글자, 라벨 표시는 참·거짓만', async () => {
+      const org = admin('A').collection('organizations').doc('org-A');
+      await assertSucceeds(org.update({ managerPrimary: '관장 홍길동', managerSecondary: '사무국장 김철수', labelShowManagers: true }));
+      await assertFails(org.update({ managerPrimary: '가'.repeat(51) }));
+      await assertFails(org.update({ labelShowManagers: 'yes' }));
+    });
+
     it('#V3 같은 물건을 다시 찍어도 기록이 바뀌지 않는다 — 물건 상태·메모만 고친다', async () => {
       await seedSurvey();
       const ref = (db: ReturnType<typeof admin>) => db.collection('scans').doc('sv1__org-A__1');

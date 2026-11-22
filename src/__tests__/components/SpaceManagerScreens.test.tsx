@@ -19,7 +19,7 @@ import SpaceManager from '../../components/admin/SpaceManager';
 import EmployeeHome from '../../components/employee/EmployeeHome';
 
 const space = (over: Partial<Space>): Space => ({
-    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, buildingId: null, floor: null, ...over,
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], teamIds: [], archived: false, buildingId: null, floor: null, ...over,
 });
 
 const baseHook = () => ({
@@ -91,7 +91,7 @@ describe('EmployeeHome — 내 담당 공간', () => {
         render(<MemoryRouter><EmployeeHome /></MemoryRouter>);
         expect(await screen.findByText('1층 상담실')).toBeInTheDocument();
         expect(screen.getByRole('link', { name: '1층 상담실' })).toHaveAttribute('href', '/employee/assets?space=a');
-        expect(firestore.getMySpaces).toHaveBeenCalledWith('org-A', 'u1');
+        expect(firestore.getMySpaces).toHaveBeenCalledWith('org-A', 'u1', null);
     });
 
     it('진행 중인 조사가 있으면 스캔으로 가는 카드를 보인다', async () => {

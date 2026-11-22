@@ -9,6 +9,7 @@ import useSettingsModals from '../../hooks/useSettingsModals';
 import WithdrawOrgModal from './WithdrawOrgModal';
 import FeedbackForm from '../common/FeedbackForm';
 import OrgInfoSection from './settings/OrgInfoSection';
+import ManagerSection from './settings/ManagerSection';
 import ApprovalLineSection from './settings/ApprovalLineSection';
 import SurveyModeSection from './settings/SurveyModeSection';
 import AccountSection from './settings/AccountSection';
@@ -67,6 +68,9 @@ export default function Settings() {
                 saving={saving}
                 onChange={(surveyMode) => handleSave(null, { surveyMode })}
             />
+
+            {/* 관리 책임자 정·부 (2026-11-22) — 기록용, 라벨에 넣을 수 있다 */}
+            <ManagerSection form={form} setForm={setForm} handleSave={handleSave} saving={saving} />
 
             {/* 결재 라인 설정 */}
             <ApprovalLineSection

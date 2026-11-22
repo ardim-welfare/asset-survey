@@ -12,6 +12,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSpaceManager from '../../hooks/useSpaceManager';
+import useTeams from '../../hooks/useTeams';
+import { useAuth } from '../../hooks/useAuth';
+import type { Team } from '../../types/team';
 import { SkeletonList } from '../common/Skeleton';
 import { SPACE_NAME_MAX } from '../../schemas/space';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
@@ -32,10 +35,12 @@ export default function SpaceManager() {
     const {
         loading, loadError, busy, reload,
         activeSpaces, archivedSpaces, members, nameOf,
-        addSpace, renameSpace, moveSpace, setSpaceLocation, addManager, removeManager, archiveSpace, restoreSpace,
+        addSpace, renameSpace, moveSpace, setSpaceLocation, addManager, removeManager, addTeam, removeTeam, archiveSpace, restoreSpace,
         activeBuildings, archivedBuildings, spacesIn,
         addBuilding, editBuilding, moveBuilding, archiveBuilding, restoreBuilding,
     } = useSpaceManager();
+    const { userData } = useAuth();
+    const teamsState = useTeams(userData?.organizationId);
     const [tab, setTab] = useState<Tab>('spaces');
     const [newName, setNewName] = useState('');
     const [newLocation, setNewLocation] = useState<SpaceLocation>(NO_LOCATION);
@@ -65,6 +70,10 @@ export default function SpaceManager() {
             onLocate={() => setLocating(space)}
             onAddManager={(uid) => addManager(space, uid)}
             onRemoveManager={(uid) => removeManager(space, uid)}
+            teams={teamsState.activeTeams}
+            teamName={teamsState.teamName}
+            onAddTeam={(teamId) => addTeam(space, teamId)}
+            onRemoveTeam={(teamId) => removeTeam(space, teamId)}
             onArchive={() => archiveSpace(space)}
         />
     );
@@ -292,15 +301,21 @@ interface SpaceCardProps {
     onLocate: () => void;
     onAddManager: (uid: string) => void;
     onRemoveManager: (uid: string) => void;
+    teams: Team[];
+    teamName: (id: string) => string | null;
+    onAddTeam: (teamId: string) => void;
+    onRemoveTeam: (teamId: string) => void;
     onArchive: () => void;
 }
 
 function SpaceCard({
     space, isFirst, isLast, busy, members, nameOf, showLocation,
-    onRename, onMove, onLocate, onAddManager, onRemoveManager, onArchive,
+    onRename, onMove, onLocate, onAddManager, onRemoveManager, teams, teamName, onAddTeam, onRemoveTeam, onArchive,
 }: SpaceCardProps) {
     const candidates = members.filter((m) => !space.managerUids.includes(m.uid));
     const selectId = `space-manager-${space.id}`;
+    const spaceTeams = space.teamIds ?? [];
+    const teamCandidates = teams.filter((t) => !spaceTeams.includes(t.id));
 
     return (
         <li className="glass-card p-4">
@@ -308,7 +323,10 @@ function SpaceCard({
                 <div className="min-w-0">
                     <h2 className="font-semibold text-surface-900 dark:text-surface-100 break-keep">{space.name}</h2>
                     <p className="text-xs text-surface-500 dark:text-surface-400">
-                        {space.managerUids.length > 0 ? `담당자 ${space.managerUids.length}명` : '담당자 없음'}
+                        {space.managerUids.length === 0 && spaceTeams.length === 0
+                            ? '담당자 없음'
+                            : [space.managerUids.length > 0 ? `담당자 ${space.managerUids.length}명` : '', spaceTeams.length > 0 ? `담당 팀 ${spaceTeams.length}` : '']
+                                .filter(Boolean).join(' · ')}
                     </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -337,6 +355,32 @@ function SpaceCard({
                         </li>
                     ))}
                 </ul>
+            )}
+
+            {/* 담당 팀 (2026-11-22) */}
+            {spaceTeams.length > 0 && (
+                <ul className="flex flex-wrap gap-2 mb-3" aria-label={`${space.name} 담당 팀`}>
+                    {spaceTeams.map((id) => (
+                        <li key={id} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 text-sm">
+                            <span aria-hidden="true">👥</span> {teamName(id) ?? '(숨긴 팀)'}
+                            <button type="button" onClick={() => onRemoveTeam(id)} disabled={busy}
+                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent-100 dark:hover:bg-accent-800/50"
+                                aria-label={`${teamName(id) ?? '팀'} 담당 팀에서 빼기`}>
+                                <span aria-hidden="true">✕</span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {teams.length > 0 && (
+                <div className="mb-2">
+                    <label htmlFor={`space-team-${space.id}`} className="sr-only">{space.name} 담당 팀 지정</label>
+                    <select id={`space-team-${space.id}`} value="" onChange={(e) => onAddTeam(e.target.value)}
+                        disabled={busy || teamCandidates.length === 0} className="input w-full min-h-[48px]">
+                        <option value="">{teamCandidates.length === 0 ? '지정할 팀이 없습니다' : '+ 담당 팀 지정'}</option>
+                        {teamCandidates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                </div>
             )}
 
             <div className="flex flex-col sm:flex-row gap-2">

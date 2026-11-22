@@ -12,6 +12,8 @@ function baseForm(overrides: Partial<SettingsForm> = {}): SettingsForm {
         approvalLine: [{ title: '담당' }, { title: '팀장' }],
         hideApprovalLine: false,
         surveyMode: 'delegated',
+        managerPrimary: '',
+        managerSecondary: '',
         ...overrides,
     };
 }

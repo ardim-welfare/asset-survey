@@ -222,7 +222,7 @@ export default function useAssetImport() {
             const order = active.length === 0 ? 0 : Math.max(...active.map((s) => s.order)) + 1;
             const place = { buildingId: parsed.buildingId, floor: parsed.floor };
             const id = await createSpace(orgId, name, order, place);
-            setSpaces((prev) => [...prev, { id, organizationId: orgId, name: normalizeSpaceName(name), order, managerUids: [], archived: false, ...place }]);
+            setSpaces((prev) => [...prev, { id, organizationId: orgId, name: normalizeSpaceName(name), order, managerUids: [], teamIds: [], archived: false, ...place }]);
             setLocationMap((prev) => ({ ...prev, [key]: id }));
             const b = buildings.find((x) => x.id === parsed.buildingId);
             const where = b ? ` (${b.name}${parsed.floor ? ` ${parsed.floor}` : ''})` : '';

@@ -16,6 +16,7 @@ export default function EmployeeHome() {
     const { user, userData } = useAuth();
     const orgId = userData?.organizationId ?? null;
     const uid = user?.uid ?? null;
+    const teamId = userData?.teamId ?? null;
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -34,12 +35,12 @@ export default function EmployeeHome() {
             // 스캔 탭을 처음 열어도 뜨게(서비스 워커의 /assets/ 런타임 캐시에 담긴다)
             if (sv) { void import('./ScanPage').catch(() => { }); void import('html5-qrcode').catch(() => { }); }
         }, () => { });
-        getMySpaces(orgId, uid)
+        getMySpaces(orgId, uid, teamId)
             .then((list) => { if (!cancelled) setSpaces(list); })
             .catch(() => { if (!cancelled) setError(true); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [orgId, uid]);
+    }, [orgId, uid, teamId]);
 
     return (
         <div className="max-w-lg mx-auto animate-fade-in space-y-4">

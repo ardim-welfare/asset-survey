@@ -8,6 +8,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { APP_URL } from '../../lib/constants';
 import { SkeletonList, SkeletonBox } from '../common/Skeleton';
 import EmployeeListItem from './EmployeeListItem';
+import TeamSection from './TeamSection';
+import useTeams from '../../hooks/useTeams';
 
 export default function EmployeeManager() {
     const {
@@ -16,14 +18,16 @@ export default function EmployeeManager() {
         newEmployee, setNewEmployee,
         copiedType, regenerating,
         editingId, setEditingId, editForm, setEditForm,
-        searchQuery, setSearchQuery,
-        filteredUnifiedList, stats,
+        searchQuery, setSearchQuery, teamFilter, setTeamFilter,
+        filteredUnifiedList, stats, employees,
         handleAddEmployee, handleCopyInviteCode, handleRegenerateCode,
         handleEditEmployee, handleSaveEdit, handleDeleteEmployee, handleChangeRole,
-        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently,
+        handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently, handleChangeTeam,
     } = useEmployeeManager();
     const { userData } = useAuth();
     const selfUid = userData?.id;
+    const teams = useTeams(userData?.organizationId);
+    const memberCount = (teamId: string) => employees.filter((e) => e.teamId === teamId).length;
 
     if (loading) {
         return (
@@ -117,6 +121,9 @@ export default function EmployeeManager() {
                 </div>
             </div>
 
+            {/* 팀 (2026-11-22) — 팀을 먼저 만들고 직원에 팀을 정한다 */}
+            <TeamSection t={teams} memberCount={memberCount} />
+
             {/* 직원 사전 등록 폼 모달 */}
             {showAddForm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
@@ -146,6 +153,14 @@ export default function EmployeeManager() {
                                 <label className="label">이메일 <span className="text-red-500">*</span></label>
                                 <input type="email" value={newEmployee.email} onChange={e => setNewEmployee({ ...newEmployee, email: e.target.value })} className="input" placeholder="example@gmail.com" required />
                             </div>
+                            <div>
+                                <label htmlFor="new-employee-team" className="label">팀</label>
+                                <select id="new-employee-team" value={newEmployee.teamId} onChange={e => setNewEmployee({ ...newEmployee, teamId: e.target.value })} className="input min-h-[48px]">
+                                    <option value="">팀 없음</option>
+                                    {teams.activeTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                                {teams.activeTeams.length === 0 && <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">위 '팀' 칸에서 팀을 먼저 만들면 고를 수 있어요.</p>}
+                            </div>
                             <div className="flex gap-3 pt-2">
                                 <button type="button" onClick={() => setShowAddForm(false)} className="btn-secondary flex-1 min-h-[48px]">취소</button>
                                 <button type="submit" className="btn-primary flex-1 min-h-[48px]">등록</button>
@@ -164,6 +179,13 @@ export default function EmployeeManager() {
                         </svg>
                         <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input pl-10" placeholder="이름, 이메일 검색" />
                     </div>
+                    {teams.activeTeams.length > 0 && (
+                        <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} className="input mt-2 min-h-[48px]" aria-label="팀으로 거르기">
+                            <option value="all">전체 팀</option>
+                            <option value="none">팀 없음</option>
+                            {teams.activeTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                    )}
                 </div>
             )}
 
@@ -196,6 +218,9 @@ export default function EmployeeManager() {
                             onCancelEdit={() => setEditingId(null)}
                             onDelete={handleDeleteEmployee}
                             onChangeRole={handleChangeRole}
+                            teams={teams.activeTeams}
+                            teamName={teams.teamName}
+                            onChangeTeam={handleChangeTeam}
                             onDeletePreRegistered={handleDeletePreRegistered}
                             onRestore={handleRestoreEmployee}
                             onDeletePermanently={handleDeletePermanently}

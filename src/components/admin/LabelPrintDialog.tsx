@@ -149,6 +149,13 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
                             </select>
                         </label>
 
+                        {lp.managersText && (
+                            <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
+                                <input type="checkbox" checked={lp.showManagers} onChange={(e) => lp.setShowManagers(e.target.checked)} className="w-4 h-4" />
+                                관리 책임자 넣기 <span className={sub}>({lp.managersText} · 작은 라벨에서는 빠져요)</span>
+                            </label>
+                        )}
+
                         <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
                             <input type="checkbox" checked={lp.cutLines} onChange={(e) => lp.setCutLines(e.target.checked)} className="w-4 h-4" />
                             재단선 표시 <span className={sub}>(일반 종이에 뽑아 자를 때. 칸이 나뉜 라벨지는 끄세요)</span>
@@ -172,7 +179,7 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
                             aria-hidden="true"
                         >
                             <div style={{ transform: `scale(${PREVIEW_SCALE})`, transformOrigin: 'top left' }}>
-                                <LabelSheet spec={lp.spec} cells={previewCells} orgName={lp.orgName} cutLines={lp.cutLines} />
+                                <LabelSheet spec={lp.spec} cells={previewCells} orgName={lp.orgName} managers={lp.showManagers ? lp.managersText : ''} cutLines={lp.cutLines} />
                             </div>
                         </div>
                         <p className={`${sub} mt-1 text-center`}>미리보기의 QR은 모양만 보여 줍니다</p>
@@ -200,7 +207,7 @@ export default function LabelPrintDialog({ assets, orgId, onClose, onTags, onRel
             {lp.pages && createPortal(
                 <div className="label-print-root" aria-hidden="true">
                     {lp.pages.map((cells, i) => (
-                        <LabelSheet key={i} spec={lp.spec} cells={cells} orgName={lp.orgName} cutLines={lp.cutLines} />
+                        <LabelSheet key={i} spec={lp.spec} cells={cells} orgName={lp.orgName} managers={lp.showManagers ? lp.managersText : ''} cutLines={lp.cutLines} />
                     ))}
                 </div>,
                 document.body,

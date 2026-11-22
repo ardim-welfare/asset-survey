@@ -12,6 +12,8 @@ export interface PreRegisteredEmployee {
     id: string;
     name: string;
     email: string;
+    /** 가입하면 이 팀으로 들어간다(2026-11-22) */
+    teamId?: string | null;
     createdAt: unknown;
 }
 
@@ -33,11 +35,13 @@ export const addPreRegisteredEmployee = async (
     orgId: string,
     name: string,
     email: string,
+    teamId: string | null = null,
 ): Promise<void> => {
     try {
         await addDoc(collection(db, 'organizations', orgId, 'preRegistered'), {
             name: name.trim(),
             email: email.trim().toLowerCase(),
+            teamId,
             createdAt: serverTimestamp(),
         });
     } catch (error) {

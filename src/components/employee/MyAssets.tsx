@@ -19,6 +19,7 @@ export default function MyAssets() {
     const { user, userData } = useAuth();
     const orgId = userData?.organizationId ?? null;
     const uid = user?.uid ?? null;
+    const teamId = userData?.teamId ?? null;
     const [params, setParams] = useSearchParams();
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [assets, setAssets] = useState<Asset[]>([]);
@@ -33,7 +34,7 @@ export default function MyAssets() {
         setLoading(true);
         setError(false);
         (async () => {
-            const mine = await getMySpaces(orgId, uid);
+            const mine = await getMySpaces(orgId, uid, teamId);
             const list = await getAssetsBySpaces(orgId, mine.map((s) => s.id));
             if (cancelled) return;
             setSpaces(mine);
@@ -42,7 +43,7 @@ export default function MyAssets() {
             .catch(() => { if (!cancelled) setError(true); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [orgId, uid]);
+    }, [orgId, uid, teamId]);
 
     const spaceParam = params.get('space');
     const current = spaces.some((s) => s.id === spaceParam) ? spaceParam : 'all';

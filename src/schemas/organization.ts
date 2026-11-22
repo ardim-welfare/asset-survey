@@ -42,6 +42,11 @@ export const organizationSchema = z.object({
     /** 라벨 인쇄 기본 규격 — 마지막에 인쇄한 규격을 기관 기본으로 기억한다 */
     labelSize: labelSizeSchema.optional().catch(undefined),
     labelCustom: labelCustomSchema.optional().catch(undefined),
+    /** 기관 관리 책임자 정·부(2026-11-22) — 기록용 글자(예: '관장 홍길동'). 권한과 상관없고 라벨에 넣을 수 있다 */
+    managerPrimary: z.string().optional().catch(undefined),
+    managerSecondary: z.string().optional().catch(undefined),
+    /** 라벨에 관리 책임자를 넣을지 — 라벨 인쇄 창의 마지막 선택을 기억한다 */
+    labelShowManagers: z.boolean().optional().catch(undefined),
     status: orgStatusSchema.catch('pending'),
     inviteCode: z.string().optional().catch(undefined),
     uniqueNumber: z.string().optional().catch(undefined),

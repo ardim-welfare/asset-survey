@@ -43,10 +43,10 @@ import {
 import type { Space } from '../../../types/space';
 
 const space = (over: Partial<Space>): Space => ({
-    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, buildingId: null, floor: null, ...over,
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], teamIds: [], archived: false, buildingId: null, floor: null, ...over,
 });
 
-const snapOf = (spaces: Space[]) => ({ docs: spaces.map((s) => ({ data: () => s })) });
+const snapOf = (spaces: Space[]) => ({ docs: spaces.map((s) => ({ id: s.id, data: () => s })) });
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -64,6 +64,15 @@ describe('spaces — 조회', () => {
 
         expect(fs.where).toHaveBeenCalledWith('organizationId', '==', 'org-A');
         expect(list.map((s) => s.id)).toEqual(['c', 'a', 'b']);
+    });
+
+    it('getMySpaces는 내 팀이 담당하는 공간도 합친다(겹치면 한 번만, 2026-11-22)', async () => {
+        vi.mocked(fs.getDocs)
+            .mockResolvedValueOnce(snapOf([space({ id: 'a', managerUids: ['u1'] })]) as never)
+            .mockResolvedValueOnce(snapOf([space({ id: 'a', teamIds: ['t1'] }), space({ id: 'c', order: 1, teamIds: ['t1'] })]) as never);
+        const list = await getMySpaces('org-A', 'u1', 't1');
+        expect(fs.where).toHaveBeenCalledWith('teamIds', 'array-contains', 't1');
+        expect(list.map((s) => s.id)).toEqual(['a', 'c']);
     });
 
     it('getMySpaces는 기관 + 담당자 조건으로 찾고 숨긴 공간은 뺀다', async () => {
@@ -94,7 +103,7 @@ describe('spaces — 쓰기', () => {
 
         expect(id).toBe('new-id');
         expect(vi.mocked(fs.addDoc).mock.calls[0][1]).toEqual({
-            organizationId: 'org-A', name: '2층 사무실', order: 3, managerUids: [], archived: false, buildingId: null, floor: null,
+            organizationId: 'org-A', name: '2층 사무실', order: 3, managerUids: [], teamIds: [], archived: false, buildingId: null, floor: null,
             createdAt: '__serverTimestamp__', updatedAt: '__serverTimestamp__', lastEditedByUid: 'admin-1',
         });
     });

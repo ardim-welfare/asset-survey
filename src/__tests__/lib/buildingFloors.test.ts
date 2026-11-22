@@ -8,7 +8,7 @@ const bld = (over: Partial<Building>): Building => ({
     id: 'b1', organizationId: 'o', name: '본관', address: '', floors: ['B1', '1', '2'], order: 0, archived: false, ...over,
 });
 const sp = (over: Partial<Space>): Space => ({
-    id: 's', organizationId: 'o', name: '공간', order: 0, managerUids: [], archived: false, buildingId: null, floor: null, ...over,
+    id: 's', organizationId: 'o', name: '공간', order: 0, managerUids: [], teamIds: [], archived: false, buildingId: null, floor: null, ...over,
 });
 
 describe('층 목록 다루기', () => {

@@ -136,6 +136,8 @@ export const joinOrganization = onCall(
             // 6. preRegistered 서브컬렉션에서 이메일 매칭
             let preRegName = "";
             let preRegDocId = "";
+            // 사전 등록 때 정한 소속 팀(2026-11-22) — 글자일 때만 옮긴다
+            let preRegTeamId: string | null = null;
             const preRegSnap = await db
                 .collection("organizations")
                 .doc(orgId)
@@ -147,6 +149,8 @@ export const joinOrganization = onCall(
                 const preRegDoc = preRegSnap.docs[0];
                 preRegName = preRegDoc.data().name || "";
                 preRegDocId = preRegDoc.id;
+                const team = preRegDoc.data().teamId;
+                preRegTeamId = typeof team === "string" && team.length > 0 && team.length <= 100 ? team : null;
             }
 
             // 7. admin 존재 여부 확인
@@ -167,6 +171,7 @@ export const joinOrganization = onCall(
                     name: finalName,
                     role,
                     organizationId: orgId,
+                    teamId: preRegTeamId,
                     phone: "",
                     // 이용약관 동의 기록 — 동의 일시는 클라이언트 시각을 신뢰하지 않고 서버에서 찍는다.
                     consent: {

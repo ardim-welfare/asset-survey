@@ -56,6 +56,8 @@ const ORG_SCOPED: ReadonlyArray<readonly [collection: string, field: string]> = 
     ["spaces", "organizationId"],
     // 건물 — 공간이 건물을 가리키므로 공간 뒤
     ["buildings", "organizationId"],
+    // 팀 — 공간·직원이 팀을 가리키므로 그 뒤
+    ["teams", "organizationId"],
     // 해지 시점에 이미 지워졌지만, 그 뒤에 남은 문서가 있으면 함께 지운다.
     ["users", "organizationId"],
 ];

@@ -296,11 +296,12 @@ function StartFormView({ form, setForm, spaces, buildings, preview, error, mode,
             <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
                 <input type="checkbox" className="w-4 h-4" checked={form.spaceIds.includes(x.id)} onChange={() => toggle(x.id)} />
                 <span className="flex-1">{x.name}</span>
-                <span className={sub}>{preview?.count(x.id) ?? 0}건 · 담당 {x.managerUids.length}명</span>
+                <span className={sub}>{preview?.count(x.id) ?? 0}건 · 담당 {x.managerUids.length}명{(x.teamIds ?? []).length > 0 ? ` · 팀 ${(x.teamIds ?? []).length}` : ''}</span>
             </label>
         </li>
     );
-    const noManager = active.filter((x) => form.spaceIds.includes(x.id) && x.managerUids.length === 0);
+    // 담당 팀이 있으면 담당자가 있는 것으로 본다(2026-11-22)
+    const noManager = active.filter((x) => form.spaceIds.includes(x.id) && x.managerUids.length === 0 && (x.teamIds ?? []).length === 0);
     return (
         <section className={card} aria-labelledby="start-title">
             <h2 id="start-title" className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-3">새 조사 시작</h2>

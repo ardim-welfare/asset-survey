@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import type { User, UserRole, UnifiedMember } from '../../types';
+import type { Team } from '../../types/team';
 
 interface Props {
     member: UnifiedMember;
@@ -16,6 +17,10 @@ interface Props {
     onCancelEdit: () => void;
     onDelete: (member: User) => void;
     onChangeRole: (member: User, role: UserRole) => void;
+    /** 팀(2026-11-22) — 활성 직원은 고르고, 가입 대기는 이름만 보인다 */
+    teams?: Team[];
+    teamName?: (id: string | null | undefined) => string | null;
+    onChangeTeam?: (member: User, teamId: string) => void;
     onDeletePreRegistered: (id: string) => void;
     onRestore: (member: User) => void;
     onDeletePermanently: (member: User) => void;
@@ -32,6 +37,9 @@ export default function EmployeeListItem({
     onCancelEdit,
     onDelete,
     onChangeRole,
+    teams = [],
+    teamName,
+    onChangeTeam,
     onDeletePreRegistered,
     onRestore,
     onDeletePermanently,
@@ -114,6 +122,9 @@ export default function EmployeeListItem({
                                 </span>
                             )}
                             {isSelf && <span className="badge badge-neutral text-xs">나</span>}
+                            {!isActive && teamName?.((member.original as { teamId?: string | null }).teamId) && (
+                                <span className="badge badge-neutral text-xs">{teamName((member.original as { teamId?: string | null }).teamId)}</span>
+                            )}
                         </div>
                         {member.email && (
                             <p className="text-sm text-surface-500 dark:text-surface-400 truncate">{member.email}</p>
@@ -125,6 +136,17 @@ export default function EmployeeListItem({
                         {/* 활성 직원: 역할 변경 + 편집 + 비활성화 */}
                         {isActive && (
                             <>
+                                {onChangeTeam && teams.length > 0 && (
+                                    <select
+                                        value={(member.original as { teamId?: string | null }).teamId ?? ''}
+                                        onChange={e => onChangeTeam(member.original, e.target.value)}
+                                        aria-label={`${member.name || member.email} 팀`}
+                                        className="text-xs border border-surface-200 dark:border-surface-600 rounded-lg px-2 py-1 min-h-[48px] max-w-[9rem] bg-white dark:bg-surface-800 text-surface-600 dark:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                    >
+                                        <option value="">팀 없음</option>
+                                        {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                )}
                                 <select
                                     value={member.role || 'employee'}
                                     onChange={e =>

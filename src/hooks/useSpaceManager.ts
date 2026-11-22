@@ -20,7 +20,7 @@ import {
     type SpaceLocation, type BuildingInput,
 } from '../lib/firestore';
 import { sameLocation } from '../lib/spaceGroups';
-import { SPACE_MANAGERS_MAX } from '../schemas/space';
+import { SPACE_MANAGERS_MAX, SPACE_TEAMS_MAX } from '../schemas/space';
 import type { Space } from '../types/space';
 import type { Building } from '../types/building';
 
@@ -121,7 +121,7 @@ export default function useSpaceManager() {
         try {
             const id = await createSpace(orgId, rawName, order, loc);
             setSpaces((prev) => sortSpaces([...prev, {
-                id, organizationId: orgId, name: normalizeSpaceName(rawName), order, managerUids: [], archived: false,
+                id, organizationId: orgId, name: normalizeSpaceName(rawName), order, managerUids: [], teamIds: [], archived: false,
                 buildingId: loc.buildingId, floor: loc.floor,
             }]));
             showToast('공간을 추가했습니다.', 'success');
@@ -204,6 +204,31 @@ export default function useSpaceManager() {
             '담당자를 지정하지 못했습니다.',
         );
     }, [spaces, showToast, withRollback]);
+
+    /** 담당 팀 지정(2026-11-22) — 그 팀 직원은 모두 이 공간을 조사·제출할 수 있다 */
+    const addTeam = useCallback(async (space: Space, teamId: string) => {
+        const current = space.teamIds ?? [];
+        if (!teamId || current.includes(teamId)) return;
+        if (current.length >= SPACE_TEAMS_MAX) {
+            showToast(`담당 팀은 공간당 ${SPACE_TEAMS_MAX}개까지 지정할 수 있습니다.`, 'warning');
+            return;
+        }
+        const teamIds = [...current, teamId];
+        await withRollback(
+            spaces.map((s) => (s.id === space.id ? { ...s, teamIds } : s)),
+            () => updateSpace(space.id, { teamIds }),
+            '담당 팀을 지정하지 못했습니다.',
+        );
+    }, [spaces, showToast, withRollback]);
+
+    const removeTeam = useCallback(async (space: Space, teamId: string) => {
+        const teamIds = (space.teamIds ?? []).filter((t) => t !== teamId);
+        await withRollback(
+            spaces.map((s) => (s.id === space.id ? { ...s, teamIds } : s)),
+            () => updateSpace(space.id, { teamIds }),
+            '담당 팀을 빼지 못했습니다.',
+        );
+    }, [spaces, withRollback]);
 
     const removeManager = useCallback(async (space: Space, uid: string) => {
         const managerUids = space.managerUids.filter((u) => u !== uid);
@@ -363,7 +388,7 @@ export default function useSpaceManager() {
     return {
         loading, loadError, busy, reload: load,
         activeSpaces, archivedSpaces, members, nameOf,
-        addSpace, renameSpace, moveSpace, setSpaceLocation, addManager, removeManager, archiveSpace, restoreSpace,
+        addSpace, renameSpace, moveSpace, setSpaceLocation, addManager, removeManager, addTeam, removeTeam, archiveSpace, restoreSpace,
         buildings, activeBuildings, archivedBuildings, spacesIn,
         addBuilding, editBuilding, moveBuilding, archiveBuilding, restoreBuilding,
     };

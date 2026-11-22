@@ -23,6 +23,9 @@ export interface SettingsForm {
     hideApprovalLine: boolean;
     /** 조사 방식 (기획서 F02) */
     surveyMode: SurveyMode;
+    /** 관리 책임자 정·부 (2026-11-22, 기록용) */
+    managerPrimary: string;
+    managerSecondary: string;
 }
 
 export default function useSettings() {
@@ -42,6 +45,8 @@ export default function useSettings() {
         approvalLine: [{ title: '담당' }, { title: '팀장' }],
         hideApprovalLine: false,
         surveyMode: DEFAULT_SURVEY_MODE,
+        managerPrimary: '',
+        managerSecondary: '',
     });
 
     const orgId = userData?.organizationId;
@@ -64,6 +69,8 @@ export default function useSettings() {
                             : [{ title: '담당' }, { title: '팀장' }],
                         hideApprovalLine: orgData.hideApprovalLine ?? false,
                         surveyMode: orgData.surveyMode ?? DEFAULT_SURVEY_MODE,
+                        managerPrimary: orgData.managerPrimary ?? '',
+                        managerSecondary: orgData.managerSecondary ?? '',
                     });
                 }
             } catch (err) {
@@ -106,6 +113,8 @@ export default function useSettings() {
                     approvalLine: targetData.approvalLine.filter(a => a.title.trim()).map(a => ({ title: a.title.trim() })),
                     hideApprovalLine: targetData.hideApprovalLine,
                     surveyMode: targetData.surveyMode,
+                    managerPrimary: targetData.managerPrimary.trim(),
+                    managerSecondary: targetData.managerSecondary.trim(),
                 });
             }
             setSuccess(true);

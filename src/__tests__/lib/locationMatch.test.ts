@@ -7,7 +7,7 @@ const bld = (over: Partial<Building>): Building => ({
     id: 'b1', organizationId: 'o', name: '본관', address: '', floors: ['B1', '1', '2', '3'], order: 0, archived: false, ...over,
 });
 const sp = (over: Partial<Space>): Space => ({
-    id: 's', organizationId: 'o', name: '상담실', order: 0, managerUids: [], archived: false, buildingId: 'b1', floor: '2', ...over,
+    id: 's', organizationId: 'o', name: '상담실', order: 0, managerUids: [], teamIds: [], archived: false, buildingId: 'b1', floor: '2', ...over,
 });
 const BUILDINGS = [bld({}), bld({ id: 'b2', name: '별관', floors: ['1', '2'] })];
 

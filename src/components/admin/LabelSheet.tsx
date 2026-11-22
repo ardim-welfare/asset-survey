@@ -17,11 +17,12 @@ interface LabelProps {
     spec: LabelSpec;
     label: SheetLabel;
     orgName: string;
+    managers: string;
     cell: number;
     cutLines: boolean;
 }
 
-function Label({ spec, label, orgName, cell, cutLines }: LabelProps) {
+function Label({ spec, label, orgName, managers, cell, cutLines }: LabelProps) {
     const pos = cellPos(spec, cell);
     const l = labelLayout(spec, label.code);
     return (
@@ -41,6 +42,10 @@ function Label({ spec, label, orgName, cell, cutLines }: LabelProps) {
                 {l.showOrg && orgName && (
                     <span style={{ fontSize: `${l.org}mm`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{orgName}</span>
                 )}
+                {/* 관리 책임자 정·부 — 기관명과 같은 작은 글씨, 작은 라벨(기관명도 빠지는 크기)에서는 뺀다 */}
+                {l.showOrg && managers && (
+                    <span style={{ fontSize: `${l.org}mm`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{managers}</span>
+                )}
                 <span style={{ fontSize: `${l.code}mm`, fontWeight: 700, whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{label.code}</span>
                 {label.name && (
                     <span style={{
@@ -57,15 +62,17 @@ interface SheetProps {
     spec: LabelSpec;
     cells: Array<{ cell: number; item: SheetLabel }>;
     orgName: string;
+    /** 관리 책임자 줄(정·부) — 빈 글자면 넣지 않는다 */
+    managers?: string;
     cutLines: boolean;
 }
 
 /** A4 한 장 (210×297mm) */
-export default function LabelSheet({ spec, cells, orgName, cutLines }: SheetProps) {
+export default function LabelSheet({ spec, cells, orgName, managers = '', cutLines }: SheetProps) {
     return (
         <div className="label-page" style={{ position: 'relative', width: '210mm', height: '297mm', overflow: 'hidden', background: '#fff' }}>
             {cells.map(({ cell, item }) => (
-                <Label key={`${item.id}-${cell}`} spec={spec} label={item} orgName={orgName} cell={cell} cutLines={cutLines} />
+                <Label key={`${item.id}-${cell}`} spec={spec} label={item} orgName={orgName} managers={managers} cell={cell} cutLines={cutLines} />
             ))}
         </div>
     );

@@ -8,4 +8,4 @@ import type { FirestoreDoc } from './common';
 export type Space = z.infer<typeof spaceSchema> & FirestoreDoc;
 
 /** 화면에서 고칠 수 있는 필드 */
-export type SpacePatch = Partial<Pick<Space, 'name' | 'order' | 'managerUids' | 'archived' | 'buildingId' | 'floor'>>;
+export type SpacePatch = Partial<Pick<Space, 'name' | 'order' | 'managerUids' | 'teamIds' | 'archived' | 'buildingId' | 'floor'>>;

@@ -10,6 +10,7 @@ export * from './broadcast';
 export * from './space';
 export * from './building';
 export * from './assetCheck';
+export * from './team';
 export * from './asset';
 export * from './survey';
 export * from './dashboard';

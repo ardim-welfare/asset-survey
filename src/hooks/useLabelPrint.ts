@@ -49,8 +49,17 @@ interface Options {
     onReloadNeeded?: () => void;
 }
 
+/** 라벨 한 줄 — "정 관장 홍길동 · 부 사무국장 김철수". 적은 것만 넣는다 */
+export function managersLine(primary?: string, secondary?: string): string {
+    return [primary?.trim() ? `정 ${primary.trim()}` : '', secondary?.trim() ? `부 ${secondary.trim()}` : '']
+        .filter(Boolean).join(' · ');
+}
+
 export default function useLabelPrint(assets: Asset[], { orgId, onTags, onReloadNeeded }: Options) {
     const [orgName, setOrgName] = useState('');
+    /** 관리 책임자 글자(정·부, 2026-11-22) — 설정에 적은 것이 없으면 빈 글자 */
+    const [managersText, setManagersText] = useState('');
+    const [showManagers, setShowManagersState] = useState(true);
     const [size, setSize] = useState<LabelSize>(DEFAULT_LABEL_SIZE);
     const [custom, setCustom] = useState<LabelSpec>(() => {
         const { label: _label, ...spec } = LABEL_PRESETS.medium;
@@ -71,6 +80,8 @@ export default function useLabelPrint(assets: Asset[], { orgId, onTags, onReload
         getOrganization(orgId).then((org) => {
             if (cancelled || !org) return;
             setOrgName(org.name || '');
+            setManagersText(managersLine(org.managerPrimary, org.managerSecondary));
+            if (typeof org.labelShowManagers === 'boolean') setShowManagersState(org.labelShowManagers);
             if (org.labelSize) setSize(org.labelSize);
             if (org.labelCustom) setCustom(org.labelCustom);
             setSaved({ size: org.labelSize, custom: org.labelCustom });
@@ -135,11 +146,17 @@ export default function useLabelPrint(assets: Asset[], { orgId, onTags, onReload
         }
     }, [assets, customError, busy, onTags, onReloadNeeded, orgId, saved, size, custom]);
 
+    /** 라벨에 관리 책임자 넣기 — 기관 기본으로 기억한다(실패해도 화면 선택은 그대로) */
+    const setShowManagers = useCallback((on: boolean) => {
+        setShowManagersState(on);
+        if (orgId) updateOrganization(orgId, { labelShowManagers: on }).catch(() => { });
+    }, [orgId]);
+
     /** 인쇄 창이 닫히면 인쇄 영역을 걷는다 */
     const finish = useCallback(() => setItems(null), []);
 
     return {
-        orgName, size, setSize, custom, setCustom, customError, spec,
+        orgName, managersText, showManagers, setShowManagers, size, setSize, custom, setCustom, customError, spec,
         startCell, setStartCell, cutLines, setCutLines,
         busy, progress, error, prepare, items, pages, pageCount, finish, previewQr,
     };

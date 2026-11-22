@@ -5,6 +5,8 @@ import { timestampSchema } from './common';
 export const SPACE_NAME_MAX = 50;
 /** 공간 하나에 지정할 수 있는 담당자 수 상한 — firestore.rules와 같은 값 */
 export const SPACE_MANAGERS_MAX = 20;
+/** 공간 하나에 지정할 수 있는 담당 팀 수 상한 — firestore.rules와 같은 값 */
+export const SPACE_TEAMS_MAX = 10;
 
 /**
  * 공간 (spaces/{spaceId}) — 재물이 놓인 곳(사무실·층·시설). 기획서 F03.
@@ -26,6 +28,8 @@ export const spaceSchema = z.object({
     name: z.string().catch(''),
     order: z.number().catch(0),
     managerUids: z.array(z.string()).catch([]),
+    /** 담당 팀(teams 문서 ID, 2026-11-22) — 그 팀 직원은 모두 이 공간의 담당자로 본다(Rules가 찍는 사람의 teamId로 확인) */
+    teamIds: z.array(z.string()).catch([]),
     archived: z.boolean().catch(false),
     buildingId: z.string().nullable().catch(null),
     floor: z.string().nullable().catch(null),

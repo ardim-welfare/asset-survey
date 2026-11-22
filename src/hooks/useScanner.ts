@@ -85,8 +85,10 @@ export default function useScanner(initialSpaceId: string | null) {
         const inSurvey = spaces.filter((s) => survey.spaceIds.includes(s.id)).sort((a, b) => a.order - b.order);
         if (isAdmin) return inSurvey;
         if (survey.mode !== 'delegated') return [];
-        return inSurvey.filter((s) => s.managerUids.includes(uid));
-    }, [survey, spaces, uid, isAdmin]);
+        // 개인으로 지정됐거나 내 팀이 담당하는 공간(2026-11-22) — Rules의 isSpaceManager와 같은 기준
+        const teamId = userData?.teamId ?? null;
+        return inSurvey.filter((s) => s.managerUids.includes(uid) || (!!teamId && (s.teamIds ?? []).includes(teamId)));
+    }, [survey, spaces, uid, isAdmin, userData?.teamId]);
 
     // 고른 공간이 내 공간이 아니면(주소로 들어온 경우 등) 첫 공간으로
     useEffect(() => {

@@ -58,16 +58,22 @@ export const getSpaces = async (orgId: string): Promise<Space[]> => {
     }
 };
 
-/** 내가 담당하는 공간 (숨긴 공간 제외, 표시 순서대로) */
-export const getMySpaces = async (orgId: string, uid: string): Promise<Space[]> => {
+/**
+ * 내가 담당하는 공간 (숨긴 공간 제외, 표시 순서대로) — 개인으로 지정된 공간과
+ * 내 팀이 담당하는 공간(2026-11-22)을 합친다. 두 조건을 한 쿼리로 묶을 수 없어 두 번 읽는다.
+ */
+export const getMySpaces = async (orgId: string, uid: string, teamId?: string | null): Promise<Space[]> => {
     try {
-        const q = query(
-            collection(db, 'spaces').withConverter(spaceConverter),
-            where('organizationId', '==', orgId),
-            where('managerUids', 'array-contains', uid),
-        );
-        const snap = await getDocs(q);
-        return sortSpaces(snap.docs.map((d) => d.data() as Space).filter((s) => !s.archived));
+        const col = collection(db, 'spaces').withConverter(spaceConverter);
+        const [byMe, byTeam] = await Promise.all([
+            getDocs(query(col, where('organizationId', '==', orgId), where('managerUids', 'array-contains', uid))),
+            teamId
+                ? getDocs(query(col, where('organizationId', '==', orgId), where('teamIds', 'array-contains', teamId)))
+                : Promise.resolve(null),
+        ]);
+        const byId = new Map<string, Space>();
+        for (const d of [...byMe.docs, ...(byTeam?.docs ?? [])]) byId.set(d.id, d.data() as Space);
+        return sortSpaces([...byId.values()].filter((s) => !s.archived));
     } catch (error) {
         captureError(error, { context: 'getMySpaces', orgId });
         throw error;
@@ -91,6 +97,7 @@ export const createSpace = async (
             name: normalizeSpaceName(name),
             order,
             managerUids: [],
+            teamIds: [],
             archived: false,
             buildingId: location.buildingId,
             floor: location.buildingId ? location.floor : null,
