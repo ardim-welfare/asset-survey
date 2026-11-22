@@ -21,6 +21,8 @@ export interface ReportContext {
     report: SurveyReport;
     /** 공간 키 → 이름(마감 회차는 survey.spaceNames) */
     spaceName: (key: string | null) => string;
+    /** 공간 키 → 위치("본관 2층", 없으면 빈 글자). 건물을 등록하지 않은 기관은 비워 둔다 */
+    spaceLocation?: (key: string | null) => string;
     /** uid → 이름 */
     personName: (uid: string | null) => string;
 }
@@ -48,10 +50,37 @@ export function reportHeader(ctx: ReportContext): Array<[string, string]> {
     ];
 }
 
+/**
+ * 건물·층별 합계 — 공간별 행을 위치("본관 2층")로 모은다. 순서는 공간별 표에 처음 나온 순서
+ * (회차가 건물 → 층 → 공간 순서로 담으므로 건물·층 순서가 된다). 위치가 없는 공간은 '건물 미지정'.
+ */
+export function locationSummaryRows(ctx: ReportContext): Array<Array<string | number>> {
+    const loc = ctx.spaceLocation ?? (() => '');
+    const order: string[] = [];
+    const sum = new Map<string, { spaces: number; target: number; found: number; missing: number; elsewhere: number; issues: number }>();
+    for (const x of ctx.report.spaces) {
+        const key = loc(x.key) || '건물 미지정';
+        if (!sum.has(key)) { order.push(key); sum.set(key, { spaces: 0, target: 0, found: 0, missing: 0, elsewhere: 0, issues: 0 }); }
+        const v = sum.get(key)!;
+        v.spaces += 1; v.target += x.target; v.found += x.found; v.missing += x.missing; v.elsewhere += x.elsewhere; v.issues += x.issues;
+    }
+    return order.map((k) => {
+        const v = sum.get(k)!;
+        return [k, v.spaces, v.target, v.found, v.missing, v.elsewhere, v.issues];
+    });
+}
+
 export function buildReportTables(ctx: ReportContext): ReportTable[] {
     const { report, spaceName } = ctx;
     const s = report.summary;
     const scanRow = (x: Scan, extra: Array<string | number> = []) => [x.code, x.name ?? '', ...extra];
+    // 건물을 등록한 기관만 위치 열·건물·층별 표를 더한다(없는 기관의 보고서는 예전과 같다)
+    const loc = ctx.spaceLocation ?? (() => '');
+    const hasLocation = report.spaces.some((x) => loc(x.key) !== '');
+    const where = (key: string | null) => {
+        const l = hasLocation ? loc(key) : '';
+        return l ? `${l} ${spaceName(key)}` : spaceName(key);
+    };
 
     return [
         {
@@ -60,10 +89,17 @@ export function buildReportTables(ctx: ReportContext): ReportTable[] {
             rows: [[s.target, s.found, s.missing, s.otherSpace, s.unregistered, s.outOfScope, s.damaged, s.labelDamaged, s.manual]],
             empty: '',
         },
+        ...(hasLocation ? [{
+            title: '건물·층별',
+            columns: ['건물·층', '공간 수', '대상', '확인', '미발견', '다른 곳에서 찾음', '상태 이상'],
+            rows: locationSummaryRows(ctx),
+            empty: '',
+        }] : []),
         {
             title: '공간별',
-            columns: ['공간', '대상', '확인', '미발견', '다른 곳에서 찾음', '직접 입력', '상태 이상', '제출·승인'],
+            columns: [...(hasLocation ? ['건물·층'] : []), '공간', '대상', '확인', '미발견', '다른 곳에서 찾음', '직접 입력', '상태 이상', '제출·승인'],
             rows: report.spaces.map((x) => [
+                ...(hasLocation ? [loc(x.key) || '-'] : []),
                 spaceName(x.key), x.target, x.found, x.missing, x.elsewhere, x.manual, x.issues,
                 submissionText(x, ctx.survey.mode, ctx.personName),
             ]),
@@ -72,43 +108,43 @@ export function buildReportTables(ctx: ReportContext): ReportTable[] {
         {
             title: '미발견',
             columns: ['자산코드', '품명', '목록상 공간'],
-            rows: report.missing.map((m) => [m.code, m.name ?? '', spaceName(m.spaceKey)]),
+            rows: report.missing.map((m) => [m.code, m.name ?? '', where(m.spaceKey)]),
             empty: '모든 대상을 찾았습니다.',
         },
         {
             title: '위치 다름',
             columns: ['자산코드', '품명', '목록상 공간', '찾은 공간'],
-            rows: report.otherSpace.map((x) => scanRow(x, [spaceName(x.expectedSpaceId), spaceName(x.spaceId)])),
+            rows: report.otherSpace.map((x) => scanRow(x, [where(x.expectedSpaceId), where(x.spaceId)])),
             empty: '없음',
         },
         {
             title: '파손·불용 필요',
             columns: ['자산코드', '품명', '찾은 공간', '메모'],
-            rows: report.damaged.map((x) => scanRow(x, [spaceName(x.spaceId), x.memo])),
+            rows: report.damaged.map((x) => scanRow(x, [where(x.spaceId), x.memo])),
             empty: '없음',
         },
         {
             title: '라벨 훼손',
             columns: ['자산코드', '품명', '찾은 공간', '메모'],
-            rows: report.labelDamaged.map((x) => scanRow(x, [spaceName(x.spaceId), x.memo])),
+            rows: report.labelDamaged.map((x) => scanRow(x, [where(x.spaceId), x.memo])),
             empty: '없음',
         },
         {
             title: '미등록',
             columns: ['읽힌 코드', '찾은 공간', '물건 상태', '메모'],
-            rows: report.unregistered.map((x) => [x.code, spaceName(x.spaceId), CONDITION_LABEL[x.condition], x.memo]),
+            rows: report.unregistered.map((x) => [x.code, where(x.spaceId), CONDITION_LABEL[x.condition], x.memo]),
             empty: '없음',
         },
         {
             title: '범위 밖(불용·폐기 등)',
             columns: ['자산코드', '품명', '찾은 공간', '메모'],
-            rows: report.outOfScope.map((x) => scanRow(x, [spaceName(x.spaceId), x.memo])),
+            rows: report.outOfScope.map((x) => scanRow(x, [where(x.spaceId), x.memo])),
             empty: '없음',
         },
         {
             title: '직접 입력(재확인 대상)',
             columns: ['자산코드', '품명', '찾은 공간', '판정'],
-            rows: report.manual.map((x) => scanRow(x, [spaceName(x.spaceId), SCAN_RESULT_LABEL[x.result]])),
+            rows: report.manual.map((x) => scanRow(x, [where(x.spaceId), SCAN_RESULT_LABEL[x.result]])),
             empty: '없음',
         },
     ];

@@ -377,6 +377,8 @@ export function subscribeSubmission(surveyId: string, spaceId: string, onChange:
  */
 export const closeSurvey = async (input: {
     orgId: string; surveyId: string; tasks: SyncTaskDraft[]; spaceNames: Record<string, string>; summary: SurveySummary;
+    /** 마감 시점 공간 위치("본관 2층") — 건물을 등록하지 않은 기관은 빈 글자뿐이라 남기지 않는다 */
+    spaceLocations?: Record<string, string>;
 }): Promise<void> => {
     const { orgId, surveyId, tasks } = input;
     const uid = actorStamp().lastEditedByUid ?? '';
@@ -393,6 +395,7 @@ export const closeSurvey = async (input: {
         const batch = writeBatch(db);
         batch.update(doc(db, 'surveys', surveyId), {
             status: 'closed', closedAt: serverTimestamp(), closedByUid: uid, spaceNames: input.spaceNames, summary: input.summary,
+            ...(input.spaceLocations && Object.values(input.spaceLocations).some(Boolean) ? { spaceLocations: input.spaceLocations } : {}),
             lastEditedByUid: uid,
         });
         batch.set(doc(collection(db, 'surveyEvents')), eventData(orgId, surveyId, 'close', {

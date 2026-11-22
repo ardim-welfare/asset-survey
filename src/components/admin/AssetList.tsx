@@ -2,14 +2,17 @@
  * AssetList — 관리자 재물 목록 (기획서 F08) · 라벨 인쇄할 재물 고르기 (F09)
  *
  * 넓은 화면은 표, 휴대폰은 카드. 검색·공간·상태·라벨·대장에 없음으로 거르고, 고른 재물을 한꺼번에
- * 라벨 인쇄한다(공간별 인쇄는 공간으로 거른 뒤 '모두 고르기').
+ * 라벨 인쇄한다(공간별 인쇄는 공간으로 거른 뒤 '모두 고르기'). 건물·층 단위로도 거를 수 있다(2026-11-22).
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import useAssetList, { type AssetFilters } from '../../hooks/useAssetList';
+import useAssetList, { buildingFilter, floorFilter, type AssetFilters } from '../../hooks/useAssetList';
+import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { StatusBadge, MissingBadge } from '../common/AssetBadges';
 import LabelPrintDialog from './LabelPrintDialog';
 import type { Asset } from '../../types/asset';
+import type { Space } from '../../types/space';
+import type { Building } from '../../types/building';
 
 const sub = 'text-xs text-surface-500 dark:text-surface-400';
 const detailPath = (a: Asset) => `/admin/assets/${encodeURIComponent(a.id)}`;
@@ -55,7 +58,7 @@ export default function AssetList() {
                 </div>
             ) : (
                 <>
-                    <Filters filters={filters} setFilter={setFilter} spaces={al.spaces} onReset={al.resetFilters} />
+                    <Filters filters={filters} setFilter={setFilter} spaces={al.spaces} buildings={al.buildings} onReset={al.resetFilters} />
 
                     <div className="glass-card p-3 mb-3 flex flex-wrap items-center gap-2 sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-10">
                         <span className="text-sm font-medium text-surface-800 dark:text-surface-200 mr-auto" aria-live="polite">
@@ -169,11 +172,39 @@ export default function AssetList() {
 interface FiltersProps {
     filters: AssetFilters;
     setFilter: <K extends keyof AssetFilters>(key: K, value: AssetFilters[K]) => void;
-    spaces: Array<{ id: string; name: string; archived?: boolean }>;
+    spaces: Space[];
+    buildings: Building[];
     onReset: () => void;
 }
 
-function Filters({ filters, setFilter, spaces, onReset }: FiltersProps) {
+/** 공간 거르기 목록 — 건물을 등록했으면 건물 → 층 → 공간으로 묶고, 건물·층 전체도 고를 수 있다 */
+function SpaceOptions({ spaces, buildings }: { spaces: Space[]; buildings: Building[] }) {
+    const archived = spaces.filter((s) => s.archived);
+    const archivedOptions = archived.map((s) => <option key={s.id} value={s.id}>{s.name} (숨김)</option>);
+    if (!buildings.some((b) => !b.archived)) {
+        return <>{spaces.filter((s) => !s.archived).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}{archivedOptions}</>;
+    }
+    return (
+        <>
+            {groupSpacesByLocation(spaces.filter((s) => !s.archived), buildings).map((g) => (
+                <optgroup key={g.buildingId ?? 'none'} label={g.label}>
+                    {g.buildingId && <option value={buildingFilter(g.buildingId)}>{g.label} 전체</option>}
+                    {g.floors.map((f) => [
+                        g.buildingId && f.floor
+                            ? <option key={`f-${f.floor}`} value={floorFilter(g.buildingId, f.floor)}>{g.label} {f.label} 전체</option>
+                            : null,
+                        ...f.spaces.map((s) => (
+                            <option key={s.id} value={s.id}>{g.buildingId ? `· ${f.floor ? `${f.label} ` : ''}${s.name}` : s.name}</option>
+                        )),
+                    ])}
+                </optgroup>
+            ))}
+            {archived.length > 0 && <optgroup label="숨긴 공간">{archivedOptions}</optgroup>}
+        </>
+    );
+}
+
+function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProps) {
     const label = 'text-xs text-surface-600 dark:text-surface-300';
     return (
         <div className="glass-card p-4 mb-3">
@@ -188,7 +219,7 @@ function Filters({ filters, setFilter, spaces, onReset }: FiltersProps) {
                     <select className="input min-h-[48px] mt-1" value={filters.space} onChange={(e) => setFilter('space', e.target.value)}>
                         <option value="all">전체 공간</option>
                         <option value="none">공간 미지정</option>
-                        {spaces.map((s) => <option key={s.id} value={s.id}>{s.name}{s.archived ? ' (숨김)' : ''}</option>)}
+                        <SpaceOptions spaces={spaces} buildings={buildings} />
                     </select>
                 </label>
                 <label className={label}>

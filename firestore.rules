@@ -382,11 +382,12 @@ service cloud.firestore {
                     && resource.data.status == 'open'
                     && request.resource.data.status == 'closed'
                     && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['status', 'closedAt', 'closedByUid', 'spaceNames', 'summary', 'lastEditedByUid'])
+                         .hasOnly(['status', 'closedAt', 'closedByUid', 'spaceNames', 'spaceLocations', 'summary', 'lastEditedByUid'])
                     && request.resource.data.closedAt == request.time
                     && request.resource.data.closedByUid == request.auth.uid
                     && request.resource.data.lastEditedByUid == request.auth.uid
                     && request.resource.data.spaceNames is map
+                    && (!('spaceLocations' in request.resource.data) || request.resource.data.spaceLocations is map)
                     && request.resource.data.summary is map;
       allow delete: if false;
     }

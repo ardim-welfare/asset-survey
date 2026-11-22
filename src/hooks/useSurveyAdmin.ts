@@ -7,6 +7,7 @@
  * - 공간 제출 승인·반려, 제출 없는 공간 대신 승인(사유 필수)
  * - 마감: '나눠서 조사'는 대상 공간이 모두 승인돼야 한다(사용자 결정 2026-11-21). 마감하면 희망이음 반영
  *   목록을 만들고 공간 이름·요약을 회차에 남긴다.
+ * - 건물·층(2026-11-22): 대상 공간은 건물 → 층 → 공간 순서로 담고(보고서도 이 순서), 마감 때 위치도 남긴다.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './useAuth';
@@ -14,8 +15,9 @@ import { useConfirm } from './useConfirm';
 import { useToast } from './useToast';
 import {
     getSurveys, getSurveyTargets, getSpaces, getAssets, getOrganization, startSurvey, groupTargets,
-    subscribeSurveyScans, subscribeSubmissions, reviewSpace, closeSurvey, getOrganizationMembers,
+    subscribeSurveyScans, subscribeSubmissions, reviewSpace, closeSurvey, getOrganizationMembers, getBuildings,
 } from '../lib/firestore';
+import { orderSpacesByLocation, spaceLocationMap } from '../lib/spaceGroups';
 import { progressBySpace, type SpaceProgress } from '../lib/survey/judge';
 import { buildReport, buildSyncTasks, closeBlockers } from '../lib/survey/report';
 import { DEFAULT_SURVEY_MODE, SURVEY_NAME_MAX, NO_SPACE_KEY } from '../schemas';
@@ -23,6 +25,7 @@ import { toLocalDateStr } from '../lib/dateUtils';
 import type { Survey, SurveyTarget, Scan, SurveySubmission } from '../types/survey';
 import type { Asset } from '../types/asset';
 import type { Space } from '../types/space';
+import type { Building } from '../types/building';
 import type { SurveyMode } from '../types';
 
 export interface StartForm {
@@ -35,12 +38,12 @@ export interface StartForm {
 
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
-export function defaultStartForm(spaces: Space[], today = new Date()): StartForm {
+export function defaultStartForm(spaces: Space[], today = new Date(), buildings: Building[] = []): StartForm {
     return {
         name: `${today.getFullYear()}년 정기 재물조사`,
         startDate: toLocalDateStr(today),
         endDate: toLocalDateStr(addDays(today, 14)),
-        spaceIds: spaces.filter((s) => !s.archived).map((s) => s.id),
+        spaceIds: orderSpacesByLocation(spaces, buildings).map((s) => s.id),
         includesUnassigned: true,
     };
 }
@@ -63,6 +66,23 @@ export function spaceNamesFor(survey: Pick<Survey, 'spaceIds' | 'includesUnassig
     return names;
 }
 
+/** 마감 시점 공간 위치 표 — 대상 공간만("본관 2층", 건물이 없으면 빈 글자) */
+export function spaceLocationsFor(survey: Pick<Survey, 'spaceIds'>, spaces: Space[], buildings: Building[]): Record<string, string> {
+    const all = spaceLocationMap(spaces, buildings);
+    const out: Record<string, string> = {};
+    for (const id of survey.spaceIds) out[id] = all[id] ?? '';
+    return out;
+}
+
+/**
+ * 보고서 공간 순서 — 회차의 spaceIds 순서(시작할 때 건물 → 층 → 공간으로 담는다), 공간 미지정은 맨 끝.
+ * 예전에는 spaceNames의 키 순서를 썼는데, Firestore는 map 키를 정렬해 돌려주므로 마감한 회차는
+ * 공간 ID 순서(사실상 뒤죽박죽)로 나왔다(2026-11-22).
+ */
+export function reportOrderFor(survey: Pick<Survey, 'spaceIds' | 'includesUnassigned'>): string[] {
+    return [...survey.spaceIds, ...(survey.includesUnassigned ? [NO_SPACE_KEY] : [])];
+}
+
 /** 검토 요청 — 승인·반려·대신 승인 */
 export interface ReviewRequest {
     spaceId: string;
@@ -78,6 +98,7 @@ export default function useSurveyAdmin() {
     const uid = user?.uid ?? null;
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [spaces, setSpaces] = useState<Space[]>([]);
+    const [buildings, setBuildings] = useState<Building[]>([]);
     const [assets, setAssets] = useState<Asset[]>([]);
     const [mode, setMode] = useState<SurveyMode>(DEFAULT_SURVEY_MODE);
     const [targets, setTargets] = useState<SurveyTarget[]>([]);
@@ -97,9 +118,12 @@ export default function useSurveyAdmin() {
         setLoading(true);
         setError(false);
         try {
-            const [list, sp, org] = await Promise.all([getSurveys(orgId), getSpaces(orgId), getOrganization(orgId)]);
+            const [list, sp, org, bd] = await Promise.all([
+                getSurveys(orgId), getSpaces(orgId), getOrganization(orgId), getBuildings(orgId),
+            ]);
             setSurveys(list);
             setSpaces(sp);
+            setBuildings(bd);
             setMode(org?.surveyMode ?? DEFAULT_SURVEY_MODE);
             const current = list.find((s) => s.status === 'open');
             setTargets(current ? await getSurveyTargets(orgId, current.id) : []);
@@ -131,11 +155,11 @@ export default function useSurveyAdmin() {
         try {
             const list = await getAssets(orgId);
             setAssets(list);
-            setForm(defaultStartForm(spaces));
+            setForm(defaultStartForm(spaces, new Date(), buildings));
         } catch {
             showToast('재물 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         }
-    }, [orgId, spaces, showToast]);
+    }, [orgId, spaces, buildings, showToast]);
 
     /** 양식 기준 공간별 대상 수 */
     const preview = useMemo(() => {
@@ -210,7 +234,8 @@ export default function useSurveyAdmin() {
         if (!orgId || !open || closing) return null;
         if (blockers.length > 0) { showToast('승인되지 않은 공간이 있어 마감할 수 없습니다.', 'error'); return null; }
         const spaceNames = spaceNamesFor(open, spaces);
-        const report = buildReport(targets, scans, submissions, Object.keys(spaceNames));
+        const spaceLocations = spaceLocationsFor(open, spaces, buildings);
+        const report = buildReport(targets, scans, submissions, reportOrderFor(open));
         const tasks = buildSyncTasks(open.id, report);
         const ok = await confirm({
             title: '조사를 마감할까요?',
@@ -221,7 +246,7 @@ export default function useSurveyAdmin() {
         if (!ok) return null;
         setClosing(true);
         try {
-            await closeSurvey({ orgId, surveyId: open.id, tasks, spaceNames, summary: report.summary });
+            await closeSurvey({ orgId, surveyId: open.id, tasks, spaceNames, spaceLocations, summary: report.summary });
             showToast('마감했습니다. 결과 보고서를 확인하세요.', 'success');
             const id = open.id;
             await load();
@@ -232,10 +257,10 @@ export default function useSurveyAdmin() {
         } finally {
             setClosing(false);
         }
-    }, [orgId, open, closing, blockers, spaces, targets, scans, submissions, confirm, showToast, load]);
+    }, [orgId, open, closing, blockers, spaces, buildings, targets, scans, submissions, confirm, showToast, load]);
 
     return {
-        orgId, uid, surveys, spaces, mode, open, loading, error, reload: load,
+        orgId, uid, surveys, spaces, buildings, mode, open, loading, error, reload: load,
         form, setForm, openForm, closeForm: () => setForm(null), preview, formError, start, starting,
         progress, totals, scans, recent, submissions, submissionOf, names, review, blockers, close, closing,
     };

@@ -41,6 +41,11 @@ export const surveySchema = z.object({
     closedAt: timestampSchema.optional().catch(undefined),
     closedByUid: z.string().optional().catch(undefined),
     spaceNames: z.record(z.string(), z.string()).optional().catch(undefined),
+    /**
+     * 마감 시점 공간 위치(공간 ID → "본관 2층", 건물이 없으면 빈 글자) — 2026-11-22 건물·층.
+     * 보고서가 나중에 공간을 옮겨도 마감 시점 위치로 묶이게 남긴다. 그 전에 마감한 회차에는 없다.
+     */
+    spaceLocations: z.record(z.string(), z.string()).optional().catch(undefined),
     /** 마감 시점 요약 숫자(목록 화면용) */
     summary: z.object({
         target: z.number().catch(0),

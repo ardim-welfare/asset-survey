@@ -24,7 +24,7 @@ vi.mock('../../lib/firestore', async () => {
     const spaces = await vi.importActual<typeof import('../../lib/firestore/spaces')>('../../lib/firestore/spaces');
     return {
         getOrganization: vi.fn(), getSpaces: vi.fn(), createSpace: vi.fn(), getAssets: vi.fn(),
-        getAccountingMap: vi.fn(), commitImport: vi.fn(),
+        getAccountingMap: vi.fn(), commitImport: vi.fn(), getBuildings: vi.fn(async () => []),
         validateSpaceName: spaces.validateSpaceName, normalizeSpaceName: spaces.normalizeSpaceName,
     };
 });
@@ -152,7 +152,22 @@ describe('useAssetImport', () => {
         expect(result.current.locationMap['창고']).toBeUndefined();
 
         await act(async () => { await result.current.createSpaceFor('창고', '창고'); });
-        expect(firestore.createSpace).toHaveBeenCalledWith('org-A', '창고', 2);
+        expect(firestore.createSpace).toHaveBeenCalledWith('org-A', '창고', 2, { buildingId: null, floor: null });
         expect(result.current.locationMap['창고']).toBe('sp-new');
+    });
+
+    it('위치 앞의 건물·층 이름은 떼어 내 건물·층을 채워 공간을 만든다', async () => {
+        vi.mocked(firestore.getOrganization).mockResolvedValue({ id: 'org-A', name: '기관' } as never);
+        vi.mocked(firestore.getBuildings).mockResolvedValueOnce([
+            { id: 'b1', organizationId: 'org-A', name: '본관', address: '', floors: ['1', '2'], order: 0, archived: false },
+        ] as never);
+        vi.mocked(firestore.createSpace).mockResolvedValue('sp-new');
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+        await act(async () => { await result.current.goCompare(); });
+
+        await act(async () => { await result.current.createSpaceFor('본관 2층 창고', '본관 2층 창고'); });
+        expect(firestore.createSpace).toHaveBeenCalledWith('org-A', '창고', 2, { buildingId: 'b1', floor: '2' });
+        expect(result.current.locationMap['본관 2층 창고']).toBe('sp-new');
     });
 });

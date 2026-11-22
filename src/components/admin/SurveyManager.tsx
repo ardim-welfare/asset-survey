@@ -10,7 +10,9 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { NO_SPACE_KEY, REASON_MAX } from '../../schemas';
 import { SCAN_RESULT_LABEL } from '../../lib/survey/judge';
 import { daysLeft } from '../../lib/survey/report';
+import { groupSpacesByLocation, orderSpacesByLocation, spaceLocationMap } from '../../lib/spaceGroups';
 import type { Space } from '../../types/space';
+import type { Building } from '../../types/building';
 import type { SurveySubmission } from '../../types/survey';
 
 const sub = 'text-xs text-surface-500 dark:text-surface-400';
@@ -68,7 +70,7 @@ export default function SurveyManager() {
                 <Dashboard s={s} onReview={askReview} onClose={async () => { const id = await s.close(); if (id) navigate(`/admin/surveys/${id}`); }} />
             ) : s.form ? (
                 <StartFormView
-                    form={s.form} setForm={s.setForm} spaces={s.spaces} preview={s.preview} error={s.formError}
+                    form={s.form} setForm={s.setForm} spaces={s.spaces} buildings={s.buildings} preview={s.preview} error={s.formError}
                     mode={s.mode} starting={s.starting} onStart={() => void s.start()} onCancel={s.closeForm}
                 />
             ) : (
@@ -125,9 +127,16 @@ function Dashboard({ s, onReview, onClose }: {
     onClose: () => void;
 }) {
     const open = s.open!;
+    // 건물 → 층 → 공간 순서. 회차 대상인데 지금은 숨긴 공간도 빠지지 않게 뒤에 붙인다
+    const ordered = orderSpacesByLocation(s.spaces, s.buildings);
+    const inSurvey = [
+        ...ordered.filter((x) => open.spaceIds.includes(x.id)),
+        ...s.spaces.filter((x) => x.archived && open.spaceIds.includes(x.id)),
+    ];
+    const locationOf = spaceLocationMap(s.spaces, s.buildings);
     const rows = [
-        ...s.spaces.filter((x) => open.spaceIds.includes(x.id)).sort((a, b) => a.order - b.order).map((x) => ({ key: x.id, name: x.name })),
-        ...(open.includesUnassigned ? [{ key: NO_SPACE_KEY, name: '공간 미지정' }] : []),
+        ...inSurvey.map((x) => ({ key: x.id, name: x.name, location: locationOf[x.id] ?? '' })),
+        ...(open.includesUnassigned ? [{ key: NO_SPACE_KEY, name: '공간 미지정', location: '' }] : []),
     ];
     const nameOf = (key: string) => rows.find((r) => r.key === key)?.name ?? '(지운 공간)';
     const pct = s.totals.target > 0 ? Math.round((s.totals.found / s.totals.target) * 100) : 0;
@@ -178,7 +187,10 @@ function Dashboard({ s, onReview, onClose }: {
                                 const isNone = r.key === NO_SPACE_KEY;
                                 return (
                                     <tr key={r.key}>
-                                        <td className="py-2 pr-3 text-surface-900 dark:text-surface-100">{r.name}</td>
+                                        <td className="py-2 pr-3 text-surface-900 dark:text-surface-100">
+                                            {r.name}
+                                            {r.location && <span className={`${sub} block`}>{r.location}</span>}
+                                        </td>
                                         <td className="py-2 pr-3 whitespace-nowrap">{p?.found ?? 0} / {p?.target ?? 0}</td>
                                         <td className="py-2 pr-3">{p?.elsewhere ?? 0}</td>
                                         <td className="py-2 pr-3">{p?.foreign ?? 0}</td>
@@ -252,6 +264,7 @@ interface StartFormProps {
     form: StartForm;
     setForm: (f: StartForm) => void;
     spaces: Space[];
+    buildings: Building[];
     preview: { count: (key: string) => number; total: number; unassigned: number } | null;
     error: string | null;
     mode: 'delegated' | 'solo';
@@ -260,11 +273,33 @@ interface StartFormProps {
     onCancel: () => void;
 }
 
-function StartFormView({ form, setForm, spaces, preview, error, mode, starting, onStart, onCancel }: StartFormProps) {
-    const active = spaces.filter((x) => !x.archived).sort((a, b) => a.order - b.order);
-    const toggle = (id: string) => setForm({
-        ...form, spaceIds: form.spaceIds.includes(id) ? form.spaceIds.filter((x) => x !== id) : [...form.spaceIds, id],
-    });
+function StartFormView({ form, setForm, spaces, buildings, preview, error, mode, starting, onStart, onCancel }: StartFormProps) {
+    // 건물 → 층 → 공간 순서 — 고른 공간도 이 순서로 담아 보고서가 같은 순서로 나오게 한다
+    const active = orderSpacesByLocation(spaces, buildings);
+    const groups = groupSpacesByLocation(active, buildings);
+    const hasBuildings = buildings.some((b) => !b.archived);
+    const setIds = (ids: Set<string>) => setForm({ ...form, spaceIds: active.map((x) => x.id).filter((id) => ids.has(id)) });
+    const toggle = (id: string) => {
+        const next = new Set(form.spaceIds);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        setIds(next);
+    };
+    /** 건물·층 묶음 한꺼번에 — 다 골라져 있으면 모두 빼고, 아니면 모두 고른다 */
+    const toggleMany = (ids: string[]) => {
+        const next = new Set(form.spaceIds);
+        const all = ids.every((id) => next.has(id));
+        for (const id of ids) { if (all) next.delete(id); else next.add(id); }
+        setIds(next);
+    };
+    const spaceRow = (x: Space) => (
+        <li key={x.id}>
+            <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
+                <input type="checkbox" className="w-4 h-4" checked={form.spaceIds.includes(x.id)} onChange={() => toggle(x.id)} />
+                <span className="flex-1">{x.name}</span>
+                <span className={sub}>{preview?.count(x.id) ?? 0}건 · 담당 {x.managerUids.length}명</span>
+            </label>
+        </li>
+    );
     const noManager = active.filter((x) => form.spaceIds.includes(x.id) && x.managerUids.length === 0);
     return (
         <section className={card} aria-labelledby="start-title">
@@ -286,16 +321,39 @@ function StartFormView({ form, setForm, spaces, preview, error, mode, starting, 
 
             <fieldset className="mt-4">
                 <legend className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-1">대상 공간 <span className={`${sub} font-normal`}>(운영 재물만 대상)</span></legend>
+                {hasBuildings && active.length > 0 && (
+                    <p className={`${sub} mb-1`}>건물·층 이름 옆 상자로 그 안의 공간을 한꺼번에 고르거나 뺄 수 있습니다.</p>
+                )}
                 <ul className="divide-y divide-surface-100 dark:divide-surface-700">
-                    {active.map((x) => (
-                        <li key={x.id}>
-                            <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
-                                <input type="checkbox" className="w-4 h-4" checked={form.spaceIds.includes(x.id)} onChange={() => toggle(x.id)} />
-                                <span className="flex-1">{x.name}</span>
-                                <span className={sub}>{preview?.count(x.id) ?? 0}건 · 담당 {x.managerUids.length}명</span>
-                            </label>
-                        </li>
-                    ))}
+                    {!hasBuildings ? active.map(spaceRow) : groups.filter((g) => g.count > 0).map((g) => {
+                        const ids = g.floors.flatMap((f) => f.spaces.map((x) => x.id));
+                        const picked = ids.filter((id) => form.spaceIds.includes(id)).length;
+                        return (
+                            <li key={g.buildingId ?? 'none'} className="py-1">
+                                <GroupCheck
+                                    label={g.label} level="building" picked={picked} total={ids.length}
+                                    onToggle={() => toggleMany(ids)}
+                                />
+                                <ul className="pl-4">
+                                    {g.floors.map((f) => {
+                                        const fids = f.spaces.map((x) => x.id);
+                                        const fpicked = fids.filter((id) => form.spaceIds.includes(id)).length;
+                                        return (
+                                            <li key={f.floor ?? 'none'}>
+                                                {f.label && g.buildingId && (
+                                                    <GroupCheck
+                                                        label={`${g.label} ${f.label}`} display={f.label} level="floor"
+                                                        picked={fpicked} total={fids.length} onToggle={() => toggleMany(fids)}
+                                                    />
+                                                )}
+                                                <ul className={f.label && g.buildingId ? 'pl-4' : ''}>{f.spaces.map(spaceRow)}</ul>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </li>
+                        );
+                    })}
                     {(preview?.unassigned ?? 0) > 0 && (
                         <li>
                             <label className="flex items-center gap-3 min-h-[44px] text-sm text-surface-800 dark:text-surface-200">
@@ -323,5 +381,27 @@ function StartFormView({ form, setForm, spaces, preview, error, mode, starting, 
                 </button>
             </div>
         </section>
+    );
+}
+
+/** 건물·층 묶음 체크 상자 — 일부만 골랐으면 '일부 선택'(indeterminate)으로 보인다 */
+function GroupCheck({ label, display, level, picked, total, onToggle }: {
+    label: string; display?: string; level: 'building' | 'floor'; picked: number; total: number; onToggle: () => void;
+}) {
+    return (
+        <label className={`flex items-center gap-3 min-h-[44px] text-sm ${level === 'building'
+            ? 'font-semibold text-surface-900 dark:text-surface-100'
+            : 'font-medium text-primary-700 dark:text-primary-300'}`}>
+            <input
+                type="checkbox"
+                className="w-4 h-4"
+                checked={total > 0 && picked === total}
+                ref={(el) => { if (el) el.indeterminate = picked > 0 && picked < total; }}
+                onChange={onToggle}
+                aria-label={`${label} 공간 모두 고르기`}
+            />
+            <span className="flex-1">{display ?? label}</span>
+            <span className={sub}>{picked}/{total}곳</span>
+        </label>
     );
 }

@@ -1150,7 +1150,9 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(admin('B').collection('surveys').doc('sv1').update(close('admin_B')));
       await assertFails(admin('A').collection('surveys').doc('sv1').update(close('admin_A', { name: '바꿈' })));
       await assertFails(admin('A').collection('surveys').doc('sv1').update(close('admin_A', { closedByUid: 'emp_A1' })));
-      await assertSucceeds(admin('A').collection('surveys').doc('sv1').update(close('admin_A')));
+      // 마감 시점 공간 위치(2026-11-22)는 map일 때만 함께 남길 수 있다
+      await assertFails(admin('A').collection('surveys').doc('sv1').update(close('admin_A', { spaceLocations: '본관 1층' })));
+      await assertSucceeds(admin('A').collection('surveys').doc('sv1').update(close('admin_A', { spaceLocations: { 'sp-1': '본관 1층' } })));
       await assertFails(admin('A').collection('surveys').doc('sv1').update({ status: 'open' }));
       await assertFails(emp('A', 1).collection('scans').doc('sv1__org-A__1').set(scanDoc('emp_A1')));
       await assertFails(emp('A', 1).collection('surveySubmissions').doc('sv1__sp-1').set(subDoc('emp_A1')));

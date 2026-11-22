@@ -5,6 +5,7 @@
  * 파일은 브라우저에서 읽고 서버로 보내지 않는다 — 값만 저장한다.
  */
 import { useState, type ChangeEvent } from 'react';
+import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { useNavigate } from 'react-router-dom';
 import useAssetImport from '../../hooks/useAssetImport';
 import { IMPORT_FIELDS, type ImportField } from '../../lib/import/columns';
@@ -265,6 +266,8 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
 function CompareSection({ im }: { im: Im }) {
     const diff = im.diff;
     const activeSpaces = im.spaces.filter((s) => !s.archived);
+    // 건물을 등록했으면 공간 고르기를 건물·층으로 묶는다
+    const spaceGroups = im.buildings.some((b) => !b.archived) ? groupSpacesByLocation(activeSpaces, im.buildings) : null;
     const [showChanged, setShowChanged] = useState(false);
     const [showMissing, setShowMissing] = useState(false);
     if (!diff) return null;
@@ -288,7 +291,13 @@ function CompareSection({ im }: { im: Im }) {
                                     <select id={id} value={im.locationMap[loc.key] ?? ''} onChange={(e) => im.setLocationSpace(loc.key, e.target.value)}
                                         className="input flex-1 min-h-[48px]">
                                         <option value="">(공간 정하지 않음)</option>
-                                        {activeSpaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        {spaceGroups ? spaceGroups.filter((g) => g.count > 0).map((g) => (
+                                            <optgroup key={g.buildingId ?? 'none'} label={g.label}>
+                                                {g.floors.flatMap((f) => f.spaces.map((s) => (
+                                                    <option key={s.id} value={s.id}>{g.buildingId && f.floor ? `${f.label} ${s.name}` : s.name}</option>
+                                                )))}
+                                            </optgroup>
+                                        )) : activeSpaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                                     </select>
                                     {loc.location && !im.locationMap[loc.key] && (
                                         <button type="button" onClick={() => im.createSpaceFor(loc.key, loc.location)} disabled={im.working}

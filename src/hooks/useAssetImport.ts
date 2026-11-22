@@ -10,13 +10,15 @@ import { useToast } from './useToast';
 import { useConfirm } from './useConfirm';
 import {
     getOrganization, getSpaces, createSpace, getAssets, getAccountingMap, commitImport,
-    validateSpaceName, normalizeSpaceName,
+    validateSpaceName, normalizeSpaceName, getBuildings,
 } from '../lib/firestore';
+import { matchSpaceByLocation, parseLocation } from '../lib/import/locationMatch';
 import { readWorkbook, toImportTable, parseAssets, blockingReasons, type SheetTable } from '../lib/import/parseSheet';
 import { autoMapColumns, type ColumnMap, type ImportField } from '../lib/import/columns';
 import { diffAssets, countByLocation, type LocationSpaceMap } from '../lib/import/diff';
 import { captureError } from '../lib/sentry';
 import type { Space } from '../types/space';
+import type { Building } from '../types/building';
 import type { Asset, AssetAccounting } from '../types/asset';
 import type { Organization } from '../types/organization';
 
@@ -32,9 +34,12 @@ export function reportedTotalOf(totalRows: Array<{ amount: number | null }>): nu
 }
 
 /**
- * 위치 원문별 공간 자동 제안 — 지난번 연결(그 공간이 아직 보이면) → 이름이 같은 공간 → 미지정
+ * 위치 원문별 공간 자동 제안 — 지난번 연결(그 공간이 아직 보이면) → 이름이 같은 공간
+ * → 건물·층을 붙여 부른 이름("본관 2층 상담실" = 본관·2층의 '상담실', 2026-11-22) → 미지정
  */
-export function suggestLocationMap(locationKeys: string[], spaces: Space[], saved: Record<string, string> = {}): LocationSpaceMap {
+export function suggestLocationMap(
+    locationKeys: string[], spaces: Space[], saved: Record<string, string> = {}, buildings: Building[] = [],
+): LocationSpaceMap {
     const active = spaces.filter((s) => !s.archived);
     const map: LocationSpaceMap = {};
     for (const key of locationKeys) {
@@ -44,7 +49,9 @@ export function suggestLocationMap(locationKeys: string[], spaces: Space[], save
             continue;
         }
         const byName = active.find((s) => normalizeSpaceName(s.name) === normalizeSpaceName(key));
-        if (byName) map[key] = byName.id;
+        if (byName) { map[key] = byName.id; continue; }
+        const byPlace = matchSpaceByLocation(key, active, buildings);
+        if (byPlace) map[key] = byPlace.id;
     }
     return map;
 }
@@ -66,6 +73,7 @@ export default function useAssetImport() {
     const [working, setWorking] = useState(false);
 
     const [spaces, setSpaces] = useState<Space[]>([]);
+    const [buildings, setBuildings] = useState<Building[]>([]);
     const [existing, setExisting] = useState<Asset[]>([]);
     const [accounting, setAccounting] = useState<Map<string, AssetAccounting>>(new Map());
     const [locationMap, setLocationMap] = useState<LocationSpaceMap>({});
@@ -167,11 +175,14 @@ export default function useAssetImport() {
         setWorking(true);
         setError('');
         try {
-            const [spaceList, assetList, accMap] = await Promise.all([getSpaces(orgId), getAssets(orgId), getAccountingMap(orgId)]);
+            const [spaceList, assetList, accMap, buildingList] = await Promise.all([
+                getSpaces(orgId), getAssets(orgId), getAccountingMap(orgId), getBuildings(orgId),
+            ]);
             setSpaces(spaceList);
+            setBuildings(buildingList);
             setExisting(assetList);
             setAccounting(accMap);
-            setLocationMap(suggestLocationMap(locations.map((l) => l.key), spaceList, org?.locationSpaceMap ?? {}));
+            setLocationMap(suggestLocationMap(locations.map((l) => l.key), spaceList, org?.locationSpaceMap ?? {}, buildingList));
             setStep('compare');
         } catch {
             setError('앱에 있는 재물을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
@@ -191,10 +202,16 @@ export default function useAssetImport() {
         });
     }, []);
 
-    /** 위치 이름 그대로 새 공간을 만들어 연결한다 */
+    /**
+     * 위치 이름으로 새 공간을 만들어 연결한다. 위치 앞에 등록한 건물·층 이름이 있으면 떼어 내 건물·층을 채운다
+     * ("본관 2층 상담실" → 본관·2층의 '상담실'). 뗀 이름이 다른 공간과 겹치면 원문 이름을 그대로 쓴다.
+     */
     const createSpaceFor = useCallback(async (key: string, location: string | null) => {
         if (!orgId || !location) return;
-        const problem = validateSpaceName(location, spaces);
+        const parsed = parseLocation(location, buildings);
+        let name = parsed.name;
+        if (name !== normalizeSpaceName(location) && validateSpaceName(name, spaces)) name = location;
+        const problem = validateSpaceName(name, spaces);
         if (problem) {
             showToast(problem, 'warning');
             return;
@@ -203,16 +220,19 @@ export default function useAssetImport() {
         try {
             const active = spaces.filter((s) => !s.archived);
             const order = active.length === 0 ? 0 : Math.max(...active.map((s) => s.order)) + 1;
-            const id = await createSpace(orgId, location, order);
-            setSpaces((prev) => [...prev, { id, organizationId: orgId, name: normalizeSpaceName(location), order, managerUids: [], archived: false, buildingId: null, floor: null }]);
+            const place = { buildingId: parsed.buildingId, floor: parsed.floor };
+            const id = await createSpace(orgId, name, order, place);
+            setSpaces((prev) => [...prev, { id, organizationId: orgId, name: normalizeSpaceName(name), order, managerUids: [], archived: false, ...place }]);
             setLocationMap((prev) => ({ ...prev, [key]: id }));
-            showToast(`공간 '${normalizeSpaceName(location)}'을(를) 만들었습니다.`, 'success');
+            const b = buildings.find((x) => x.id === parsed.buildingId);
+            const where = b ? ` (${b.name}${parsed.floor ? ` ${parsed.floor}` : ''})` : '';
+            showToast(`공간 '${normalizeSpaceName(name)}'${where}을(를) 만들었습니다.`, 'success');
         } catch {
             showToast('공간을 만들지 못했습니다.', 'error');
         } finally {
             setWorking(false);
         }
-    }, [orgId, spaces, showToast]);
+    }, [orgId, spaces, buildings, showToast]);
 
     const confirmImport = useCallback(async () => {
         if (!orgId || !parsed || !diff || !table) return;
@@ -251,7 +271,7 @@ export default function useAssetImport() {
     return {
         step, working, error, fileName,
         sheets, sheetIndex, table, columnMap, parsed, blockers, reportedTotal,
-        spaces, locations, locationMap, diff, progress, importId, result,
+        spaces, buildings, locations, locationMap, diff, progress, importId, result,
         pickFile, selectSheet, selectHeaderRow, setColumn, goCompare, backToMap,
         setLocationSpace, createSpaceFor, confirmImport, reset,
     };

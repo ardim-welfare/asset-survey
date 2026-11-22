@@ -84,3 +84,16 @@ export function spaceLocationText(space: Space, buildings: Building[]): string {
     if (!b) return '';
     return space.floor ? `${b.name} ${floorLabel(space.floor)}` : b.name;
 }
+
+/** 숨기지 않은 공간을 화면 순서(건물 → 층 → 공간)로 편다 — 회차 대상·현황판·보고서가 이 순서를 따른다 */
+export function orderSpacesByLocation(spaces: Space[], buildings: Building[]): Space[] {
+    return groupSpacesByLocation(spaces.filter((s) => !s.archived), buildings)
+        .flatMap((g) => g.floors.flatMap((f) => f.spaces));
+}
+
+/** 공간 ID → "본관 2층"(건물이 없으면 빈 글자) */
+export function spaceLocationMap(spaces: Space[], buildings: Building[]): Record<string, string> {
+    const map: Record<string, string> = {};
+    for (const s of spaces) map[s.id] = spaceLocationText(s, buildings);
+    return map;
+}

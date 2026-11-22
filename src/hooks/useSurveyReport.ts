@@ -9,10 +9,10 @@ import { useAuth } from './useAuth';
 import { useToast } from './useToast';
 import {
     getSurvey, getSurveyTargets, getScans, getSubmissions, getSpaces, getOrganization, getOrganizationMembers,
-    getSyncTasks, setSyncTaskDone, getSurveyEvents,
+    getSyncTasks, setSyncTaskDone, getSurveyEvents, getBuildings,
 } from '../lib/firestore';
 import { buildReport, type SurveyReport } from '../lib/survey/report';
-import { spaceNamesFor } from './useSurveyAdmin';
+import { spaceNamesFor, spaceLocationsFor, reportOrderFor } from './useSurveyAdmin';
 import { printSurveyReport } from '../lib/pdf/surveyReportPdf';
 import { downloadSurveyReportExcel } from '../lib/excelExport';
 import { NO_SPACE_KEY } from '../schemas';
@@ -26,6 +26,7 @@ export default function useSurveyReport(surveyId: string | undefined) {
     const [survey, setSurvey] = useState<Survey | null>(null);
     const [report, setReport] = useState<SurveyReport | null>(null);
     const [spaceNames, setSpaceNames] = useState<Record<string, string>>({});
+    const [spaceLocations, setSpaceLocations] = useState<Record<string, string>>({});
     const [names, setNames] = useState<Map<string, string>>(new Map());
     const [org, setOrg] = useState<{ name: string; approvalLine: Array<{ title: string }> }>({ name: '', approvalLine: [] });
     const [tasks, setTasks] = useState<SyncTask[]>([]);
@@ -42,13 +43,15 @@ export default function useSurveyReport(surveyId: string | undefined) {
             const s = await getSurvey(surveyId);
             if (!s || s.organizationId !== orgId) { setNotFound(true); return; }
             setSurvey(s);
-            const [targets, scans, subs, spaces, o, ev] = await Promise.all([
+            const [targets, scans, subs, spaces, o, ev, buildings] = await Promise.all([
                 getSurveyTargets(orgId, s.id), getScans(orgId, s.id), getSubmissions(orgId, s.id), getSpaces(orgId),
-                getOrganization(orgId), getSurveyEvents(orgId, s.id),
+                getOrganization(orgId), getSurveyEvents(orgId, s.id), getBuildings(orgId),
             ]);
             const sn = s.spaceNames ?? spaceNamesFor(s, spaces);
             setSpaceNames(sn);
-            setReport(buildReport(targets, scans, subs, Object.keys(sn)));
+            // 마감 회차는 마감 시점 위치, 진행 중이거나 건물 도입 전에 마감한 회차는 지금 위치
+            setSpaceLocations(s.spaceLocations ?? (s.status === 'closed' ? {} : spaceLocationsFor(s, spaces, buildings)));
+            setReport(buildReport(targets, scans, subs, reportOrderFor(s)));
             setOrg({ name: o?.name ?? '', approvalLine: o?.hideApprovalLine ? [] : (o?.approvalLine ?? []) });
             setEvents(ev);
             setTasks(s.status === 'closed' ? await getSyncTasks(orgId, s.id) : []);
@@ -67,8 +70,9 @@ export default function useSurveyReport(surveyId: string | undefined) {
     const ctx = useMemo<ReportContext | null>(() => (survey && report ? {
         survey, report,
         spaceName: (key) => (key === null || key === NO_SPACE_KEY ? '공간 미지정' : spaceNames[key] ?? '(대상 밖 공간)'),
+        spaceLocation: (key) => (key === null || key === NO_SPACE_KEY ? '' : spaceLocations[key] ?? ''),
         personName: (uid) => (uid ? names.get(uid) ?? '알 수 없음' : '-'),
-    } : null), [survey, report, spaceNames, names]);
+    } : null), [survey, report, spaceNames, spaceLocations, names]);
 
     const fileBase = survey ? `재물조사_${survey.name}_${survey.endDate}`.replace(/[\\/:*?"<>|]/g, '_') : '재물조사';
 

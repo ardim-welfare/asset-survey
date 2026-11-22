@@ -6,10 +6,10 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Asset } from '../../types/asset';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ userData: { organizationId: 'org-A' } }) }));
-vi.mock('../../lib/firestore', () => ({ getAssets: vi.fn(), getSpaces: vi.fn() }));
+vi.mock('../../lib/firestore', () => ({ getAssets: vi.fn(), getSpaces: vi.fn(), getBuildings: vi.fn(async () => []) }));
 
 import * as firestore from '../../lib/firestore';
-import useAssetList, { filterAssets, sortAssets, DEFAULT_FILTERS, LIST_PAGE } from '../../hooks/useAssetList';
+import useAssetList, { filterAssets, sortAssets, DEFAULT_FILTERS, LIST_PAGE, buildingFilter, floorFilter } from '../../hooks/useAssetList';
 
 const asset = (code: string, over: Partial<Asset> = {}): Asset => ({
     id: `org-A__${code}`, organizationId: 'org-A', code, name: 'TV', category: null, spec: null, acquiredAt: null,
@@ -41,6 +41,20 @@ describe('sortAssets·filterAssets', () => {
     it('공간 미지정·특정 공간', () => {
         expect(codes({ space: 'none' })).toEqual(['3']);
         expect(codes({ space: 'sp1' })).toEqual(['1', '4']);
+    });
+    it('건물·층 단위로 거른다 — 건물이 없는 공간·공간 미지정은 빠진다', () => {
+        const all = [
+            asset('a', { spaceId: 's1' }), asset('b', { spaceId: 's2' }), asset('c', { spaceId: 's3' }), asset('d', { spaceId: null }),
+        ];
+        const places = new Map([
+            ['s1', { buildingId: 'b1', floor: '1' }],
+            ['s2', { buildingId: 'b1', floor: '2' }],
+            ['s3', { buildingId: null, floor: null }],
+        ]);
+        const pick = (space: string) => filterAssets(all, { ...DEFAULT_FILTERS, space }, places).map((x) => x.code);
+        expect(pick(buildingFilter('b1'))).toEqual(['a', 'b']);
+        expect(pick(floorFilter('b1', '2'))).toEqual(['b']);
+        expect(pick(buildingFilter('b9'))).toEqual([]);
     });
     it('대장에 없음만·라벨 발급 여부', () => {
         expect(codes({ onlyMissing: true })).toEqual(['4']);

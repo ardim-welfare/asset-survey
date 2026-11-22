@@ -100,6 +100,23 @@ describe('보고서 표·PDF', () => {
         expect(tables[1].rows[0]).toEqual(['창고', 1, 1, 0, 1, 0, 1, '대신 승인(박관리) — 담당자 휴가']);
     });
 
+    it('건물·층(2026-11-22): 위치가 있으면 건물·층별 표와 위치 열을 더하고, 예외 목록 공간에 위치를 붙인다', () => {
+        const loc: Record<string, string> = { 'sp-1': '본관 1층', 'sp-2': '본관 2층' };
+        const tables = buildReportTables({ ...ctx, spaceLocation: (k: string | null) => (k ? loc[k] ?? '' : '') });
+        expect(tables.map((t) => t.title).slice(0, 3)).toEqual(['종합', '건물·층별', '공간별']);
+        // 공간별 순서(sp-2, sp-1, 미지정) 그대로 위치별로 모은다
+        expect(tables[1].rows.map((r) => r[0])).toEqual(['본관 2층', '본관 1층', '건물 미지정']);
+        expect(tables[2].columns[0]).toBe('건물·층');
+        expect(tables[2].rows[0].slice(0, 2)).toEqual(['본관 2층', '창고']);
+        expect(tables[4].rows).toEqual([['4', '', '본관 2층 창고', '본관 1층 101호']]);
+    });
+
+    it('위치가 하나도 없으면 표 모양이 예전과 같다', () => {
+        const tables = buildReportTables({ ...ctx, spaceLocation: () => '' });
+        expect(tables.map((t) => t.title)[1]).toBe('공간별');
+        expect(tables[1].columns[0]).toBe('공간');
+    });
+
     it('PDF HTML — 기관명·결재란·표를 담고 값은 이스케이프한다', () => {
         const html = buildSurveyReportHtml({ ...ctx, survey: { ...ctx.survey, name: '<b>조사</b>' } }, '행복복지관', [{ title: '담당' }, { title: '관장' }], new Date(2026, 11, 6));
         expect(html).toContain('재물조사 결과 보고서');

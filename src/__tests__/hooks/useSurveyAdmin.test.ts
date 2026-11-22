@@ -19,7 +19,7 @@ vi.mock('../../lib/firestore', async () => {
         getOrganizationMembers: vi.fn(async () => [{ id: 'emp-1', name: '김직원' }]),
         subscribeSurveyScans: vi.fn((_o: string, _s: string, cb: (x: unknown[]) => void) => { pushScans = cb; return () => { }; }),
         subscribeSubmissions: vi.fn((_o: string, _s: string, cb: (x: unknown[]) => void) => { pushSubs = cb; return () => { }; }),
-        reviewSpace: vi.fn(), closeSurvey: vi.fn(),
+        reviewSpace: vi.fn(), closeSurvey: vi.fn(), getBuildings: vi.fn(async () => []),
     };
 });
 vi.mock('../../lib/firebase', () => ({ db: {}, auth: { currentUser: null } }));

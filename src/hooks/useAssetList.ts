@@ -3,17 +3,47 @@
  *
  * 기관의 재물을 한 번 읽어 와 화면에서 거른다(검색·공간·상태·대장에 없음·라벨). 500~2,000건 기관을
  * 기준으로, 거를 때마다 서버를 다시 읽지 않는 쪽이 읽기 비용이 적다. 그리는 것은 100건씩 늘린다.
+ *
+ * 공간 거르기는 건물·층 단위로도 된다(2026-11-22) — 건물 하나를 거른 뒤 '모두 고르기'로 그 건물 라벨을 한 번에 뽑는다.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './useAuth';
-import { getAssets, getSpaces } from '../lib/firestore';
+import { getAssets, getSpaces, getBuildings } from '../lib/firestore';
+import { spaceLocationMap } from '../lib/spaceGroups';
 import type { Asset, AssetStatus } from '../types/asset';
 import type { Space } from '../types/space';
+import type { Building } from '../types/building';
 
 export const LIST_PAGE = 100;
 
-/** 공간 거르기 — 전체 / 공간 미지정 / 특정 공간 ID */
+/**
+ * 공간 거르기 — 전체 / 공간 미지정 / 특정 공간 ID / 건물(`b:건물ID`) / 층(`f:건물ID|층`)
+ * 건물·층은 공간 ID가 아니라 접두사로 구분한다(공간 문서 ID에는 ':'가 들어가지 않는다).
+ */
 export type SpaceFilter = 'all' | 'none' | string;
+
+export const buildingFilter = (buildingId: string): SpaceFilter => `b:${buildingId}`;
+export const floorFilter = (buildingId: string, floor: string): SpaceFilter => `f:${buildingId}|${floor}`;
+
+/** 공간 ID → 건물·층 (건물·층 거르기에 쓴다) */
+export type SpacePlaceIndex = Map<string, { buildingId: string | null; floor: string | null }>;
+
+export const spacePlaceIndex = (spaces: Space[]): SpacePlaceIndex =>
+    new Map(spaces.map((s) => [s.id, { buildingId: s.buildingId ?? null, floor: s.floor ?? null }]));
+
+/** 재물이 공간 거르기 조건에 맞는가 */
+function matchesSpace(a: Asset, filter: SpaceFilter, places?: SpacePlaceIndex): boolean {
+    if (filter === 'all') return true;
+    if (filter === 'none') return a.spaceId == null;
+    if (filter.startsWith('b:') || filter.startsWith('f:')) {
+        const place = a.spaceId ? places?.get(a.spaceId) : undefined;
+        if (!place?.buildingId) return false;
+        if (filter.startsWith('b:')) return place.buildingId === filter.slice(2);
+        const [bid, floor] = filter.slice(2).split('|');
+        return place.buildingId === bid && (place.floor ?? '') === floor;
+    }
+    return a.spaceId === filter;
+}
 export type StatusFilter = AssetStatus | 'all';
 export type LabelFilter = 'all' | 'untagged' | 'tagged';
 
@@ -33,11 +63,11 @@ const collator = new Intl.Collator('ko', { numeric: true });
 export const sortAssets = (list: Asset[]): Asset[] => [...list].sort((a, b) => collator.compare(a.code, b.code));
 
 /** 거르기 — 검색은 자산코드·품명·원본 위치에서 띄어쓰기·대소문자 무시하고 찾는다 */
-export function filterAssets(list: Asset[], f: AssetFilters): Asset[] {
+export function filterAssets(list: Asset[], f: AssetFilters, places?: SpacePlaceIndex): Asset[] {
     const q = f.search.replace(/\s+/g, '').toLowerCase();
     return list.filter((a) => {
         if (f.status !== 'all' && a.status !== f.status) return false;
-        if (f.space === 'none' ? a.spaceId != null : f.space !== 'all' && a.spaceId !== f.space) return false;
+        if (!matchesSpace(a, f.space, places)) return false;
         if (f.onlyMissing && !a.missingFromSource) return false;
         if (f.label === 'untagged' && a.tagId) return false;
         if (f.label === 'tagged' && !a.tagId) return false;
@@ -54,6 +84,7 @@ export default function useAssetList() {
     const orgId = userData?.organizationId ?? null;
     const [assets, setAssets] = useState<Asset[]>([]);
     const [spaces, setSpaces] = useState<Space[]>([]);
+    const [buildings, setBuildings] = useState<Building[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [filters, setFilters] = useState<AssetFilters>(DEFAULT_FILTERS);
@@ -65,9 +96,10 @@ export default function useAssetList() {
         setLoading(true);
         setError(false);
         try {
-            const [a, s] = await Promise.all([getAssets(orgId), getSpaces(orgId)]);
+            const [a, s, b] = await Promise.all([getAssets(orgId), getSpaces(orgId), getBuildings(orgId)]);
             setAssets(sortAssets(a));
             setSpaces(s);
+            setBuildings(b);
         } catch {
             setError(true);
         } finally {
@@ -77,8 +109,13 @@ export default function useAssetList() {
 
     useEffect(() => { void load(); }, [load]);
 
-    const filtered = useMemo(() => filterAssets(assets, filters), [assets, filters]);
-    const spaceName = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
+    const places = useMemo(() => spacePlaceIndex(spaces), [spaces]);
+    const filtered = useMemo(() => filterAssets(assets, filters, places), [assets, filters, places]);
+    /** 공간 표시 이름 — 건물을 등록했으면 "본관 2층 상담실" */
+    const spaceName = useMemo(() => {
+        const loc = spaceLocationMap(spaces, buildings);
+        return new Map(spaces.map((s) => [s.id, loc[s.id] ? `${loc[s.id]} ${s.name}` : s.name]));
+    }, [spaces, buildings]);
 
     const setFilter = useCallback(<K extends keyof AssetFilters>(key: K, value: AssetFilters[K]) => {
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -116,7 +153,7 @@ export default function useAssetList() {
     }, []);
 
     return {
-        orgId, assets, spaces, spaceName, loading, error, reload: load,
+        orgId, assets, spaces, buildings, spaceName, loading, error, reload: load,
         filters, setFilter, resetFilters, filtered,
         visible: filtered.slice(0, shown), hasMore: filtered.length > shown, showMore: () => setShown((n) => n + LIST_PAGE),
         selected, toggle, setMany, selectFiltered, clearSelection, selectedAssets, applyTags,
