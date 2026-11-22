@@ -2,9 +2,9 @@
 
 > **자동 생성 문서** — `scripts/generate-functions-doc.ts`로 생성됨
 >
-> 마지막 업데이트: 2026. 11. 21. 오전 8:58:45
+> 마지막 업데이트: 2026. 11. 22. 오전 9:24:40
 >
-> 총 함수 수: **34개**
+> 총 함수 수: **35개**
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 📞 onCall (클라이언트 직접 호출)
 
-> 총 22개
+> 총 23개
 
 ### `ocrDocument`
 
@@ -93,6 +93,16 @@
 | **인증** | 인증 필수 |
 | **요청 파라미터** | `{ format: 'excel' \| 'pdf', dataset: string, recordCount: number, exportId: string }` |
 | **반환값** | `{ success: boolean }` |
+
+### `refreshDashboardStats`
+
+| 항목 | 내용 |
+|------|------|
+| **파일** | `functions/src/handlers/callable/refreshDashboardStats.ts` |
+| **설명** | 시스템 관리자 운영 현황 대시보드 통계를 바로 다시 집계해 `system/dashboardStats`에 저장한다(평소엔 밤 배치가 매일 갱신). 전 기관을 훑으므로 마지막 갱신 뒤 10분 안의 재요청은 재집계를 건너뛰고 `skipped: true`와 남은 시간을 돌려준다. |
+| **인증** | 시스템 관리자(superAdmin) 전용 |
+| **요청 파라미터** | `없음` |
+| **반환값** | `{ skipped: boolean, lastUpdatedAt: string, retryAfterSec?: number }` |
 
 ### `sendBroadcastNotice`
 
@@ -241,7 +251,7 @@
 | 항목 | 내용 |
 |------|------|
 | **파일** | `functions/src/handlers/scheduled/dailyNightlyBatch.ts` |
-| **설명** | 야간 배치: Firestore 백업(GCS export) → 어제 백업 완료 확인 |
+| **설명** | 야간 배치: Firestore 백업(GCS export) → 어제 백업 완료 확인 → 시스템 관리자 운영 현황 통계 집계(system/dashboardStats) |
 | **인증** | 시스템 자동 실행 |
 | **비고** | schedule: "20 2 * * *" (KST 02:20). 2026-08-28 Cloud Run 비용 점검에서 일곱 스텝 통합 배치를 집계·백업·주간 유지보수 셋으로 분리(1GiB→512MiB, 재시도 범위 축소) |
 

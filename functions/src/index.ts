@@ -48,6 +48,7 @@ export { purgeOrganization } from "./handlers/callable/purgeOrganization";
 // ── 접속기록 (개인정보 안전성 확보조치 기준 제16조) ──
 export { recordSession } from "./handlers/callable/recordSession";
 export { recordExport } from "./handlers/callable/recordExport";
+export { refreshDashboardStats } from "./handlers/callable/refreshDashboardStats";
 export {
     auditUserCreated, auditUserUpdated, auditUserDeleted,
 } from "./handlers/triggers/auditLog";

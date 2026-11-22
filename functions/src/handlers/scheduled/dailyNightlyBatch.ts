@@ -15,6 +15,7 @@ import { getKSTDateString } from "../../utils/kstDate";
 import { captureWarning } from "../../core/sentry";
 import { runStep, logBatchResult } from "../../utils/batchStep";
 import { purgeOrganizationData, OrgNotRetiredError, type PurgeBucket } from "../../services/organization/purgeOrganizationData";
+import { computeAllDashboardStats } from "../../services/statistics/computeDashboardStats";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const firestoreAdmin = require("@google-cloud/firestore");
@@ -440,6 +441,9 @@ export const dailyNightlyBatch = onSchedule(
         // 오늘 백업을 건 **뒤에** 어제 것을 확인한다. 순서가 중요한 건 아니지만(runStep이
         // 스텝을 격리한다) 본론이 먼저 나가는 편이 로그를 읽기 쉽다.
         await runStep(failed, CONTEXT, "verifyPreviousBackup", () => verifyPreviousBackup());
+        // 시스템 관리자 운영 현황 대시보드(system/dashboardStats)를 매일 새로 만든다.
+        // 백업 뒤에 둔다 — 백업은 하루 놓치면 영영 없지만 통계는 수동 갱신으로 다시 만들 수 있다.
+        await runStep(failed, CONTEXT, "computeDashboardStats", () => computeAllDashboardStats().then(() => undefined));
 
         await logBatchResult(CONTEXT, failed);
     }
