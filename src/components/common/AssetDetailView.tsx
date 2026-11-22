@@ -6,14 +6,15 @@
  * 금액·변경 이력·라벨 인쇄는 관리자에게만 보인다(사용자 결정 2026-11-21: 금액은 관리자만).
  */
 import { useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import useAssetDetail from '../../hooks/useAssetDetail';
 import { StatusBadge, MissingBadge } from './AssetBadges';
 import { COMPARE_FIELD_LABEL, type CompareField } from '../../lib/import/diff';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
-import { toDateOrNull } from '../../lib/dateUtils';
+import { toDateOrNull, toLocalDateStr } from '../../lib/dateUtils';
 import type { Asset, HistoryEntry } from '../../types/asset';
 import type { Space } from '../../types/space';
+import type { AssetCheck } from '../../types/assetCheck';
 
 const sub = 'text-xs text-surface-500 dark:text-surface-400';
 const won = (n: number | null | undefined) => (n == null ? '-' : `${n.toLocaleString('ko-KR')}원`);
@@ -55,9 +56,20 @@ interface Props {
     renderLabelPrint?: RenderLabelPrint;
 }
 
+/** 마지막 확인 한 줄 — "2026-11-22 · QR" / "2026-11-20 · 조사(본관 2층 상담실)" */
+function checkText(check: AssetCheck | null, spaces: Space[]): string | null {
+    const at = check ? toDateOrNull(check.checkedAt ?? null) : null;
+    if (!check || !at) return null;
+    const where = check.spaceId ? spaces.find((s) => s.id === check.spaceId)?.name : undefined;
+    const via = check.via === 'survey' ? `조사${where ? `(${where})` : ''}` : 'QR';
+    return `${toLocalDateStr(at)} · ${via}`;
+}
+
 export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
     const { assetId } = useParams<{ assetId: string }>();
     const d = useAssetDetail(assetId, { admin });
+    // 라벨 QR로 열었으면(TagRedirect) 방금 확인 기록을 남겼다 — 서버 시각이 돌아오기 전이라 따로 알린다
+    const justChecked = (useLocation().state as { justChecked?: boolean } | null)?.justChecked === true;
     const [printing, setPrinting] = useState(false);
     const listPath = admin ? '/admin/assets' : '/employee/assets';
 
@@ -84,6 +96,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
         ['수량', a.quantity == null ? null : `${a.quantity}${a.acquiredQuantity != null && a.acquiredQuantity !== a.quantity ? ` (취득 ${a.acquiredQuantity})` : ''}`],
         ['공간', d.space ? `${d.space.name}${d.space.archived ? ' (숨김)' : ''}` : a.spaceId ? '(지운 공간)' : '미지정'],
         ['대장의 위치', a.locationRaw],
+        ['마지막 확인', justChecked ? '방금 (QR)' : checkText(d.check, d.spaces)],
         ['대장의 상태', a.statusRaw],
         ['부서', a.department],
         ['용도', a.usage],
@@ -102,6 +115,11 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
                 </div>
                 <h1 className="text-xl font-bold text-surface-900 dark:text-surface-100 break-keep">{a.name ?? '(품명 없음)'}</h1>
                 <p className="font-mono text-surface-700 dark:text-surface-300">{a.code}</p>
+                {justChecked && (
+                    <p className="mt-3 text-sm text-green-800 dark:text-green-300 bg-green-50 dark:bg-green-900/20 rounded-xl p-3" role="status">
+                        ✅ 확인 기록을 남겼습니다. 재물 목록에서 마지막 확인 날짜로 오래 못 본 재물을 찾을 수 있어요.
+                    </p>
+                )}
                 {a.missingFromSource && (
                     <p className="mt-3 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
                         마지막으로 가져온 대장 파일에 이 재물이 없었습니다. 실제로 없어진 것인지 확인해 주세요.

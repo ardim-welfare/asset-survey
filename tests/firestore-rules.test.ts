@@ -820,6 +820,33 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
         .update({ organizationId: 'org-B', updatedAt: serverTs(), lastEditedByUid: 'admin_A' }));
     });
 
+    // ── 재물 마지막 확인 (2026-11-22) ──
+    const checkDoc = (org: 'A' | 'B', assetId: string, uid: string, extra: Record<string, unknown> = {}) => ({
+      organizationId: `org-${org}`, assetId, checkedAt: serverTs(), checkedByUid: uid, via: 'qr', spaceId: null, surveyId: null, ...extra,
+    });
+
+    it('#C1 마지막 확인은 같은 기관 구성원이 본인 이름으로만 남기고, 같은 기관만 읽는다', async () => {
+      const id = 'org-A__1';
+      await assertSucceeds(emp('A', 1).collection('assetChecks').doc(id).set(checkDoc('A', id, 'emp_A1')));
+      await assertSucceeds(admin('A').collection('assetChecks').doc(id).set(checkDoc('A', id, 'admin_A', { via: 'survey', spaceId: 'sp-1', surveyId: 'sv1' })));
+      await assertSucceeds(emp('A', 2).collection('assetChecks').doc(id).get());
+      await assertSucceeds(emp('A', 2).collection('assetChecks').where('organizationId', '==', 'org-A').get());
+      await assertFails(emp('B', 1).collection('assetChecks').doc(id).get());
+      await assertFails(anon().collection('assetChecks').doc(id).get());
+      await assertFails(emp('A', 1).collection('assetChecks').doc(id).delete());
+    });
+
+    it('#C2 다른 사람 이름·다른 기관 자리·정해지지 않은 값은 막힌다', async () => {
+      const db = emp('A', 1);
+      await assertFails(db.collection('assetChecks').doc('org-A__2').set(checkDoc('A', 'org-A__2', 'emp_A2')));
+      await assertFails(db.collection('assetChecks').doc('org-B__2').set(checkDoc('B', 'org-B__2', 'emp_A1')));
+      await assertFails(db.collection('assetChecks').doc('org-B__3').set(checkDoc('A', 'org-B__3', 'emp_A1')));
+      await assertFails(db.collection('assetChecks').doc('org-A__4').set(checkDoc('A', 'org-A__5', 'emp_A1')));
+      await assertFails(db.collection('assetChecks').doc('org-A__6').set(checkDoc('A', 'org-A__6', 'emp_A1', { via: 'manual' })));
+      await assertFails(db.collection('assetChecks').doc('org-A__7').set(checkDoc('A', 'org-A__7', 'emp_A1', { memo: 'x' })));
+      await assertFails(db.collection('assetChecks').doc('org-A__8').set(checkDoc('A', 'org-A__8', 'emp_A1', { checkedAt: new Date(2020, 0, 1) })));
+    });
+
     it('#S6 조사 방식(surveyMode)은 정해진 값만 저장된다', async () => {
       const db = admin('A');
       await assertSucceeds(db.collection('organizations').doc('org-A').update({ surveyMode: 'solo' }));

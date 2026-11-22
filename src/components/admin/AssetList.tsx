@@ -6,7 +6,8 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import useAssetList, { buildingFilter, floorFilter, type AssetFilters } from '../../hooks/useAssetList';
+import useAssetList, { buildingFilter, floorFilter, checkedAtOf, type AssetFilters } from '../../hooks/useAssetList';
+import { toLocalDateStr } from '../../lib/dateUtils';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { StatusBadge, MissingBadge } from '../common/AssetBadges';
 import LabelPrintDialog from './LabelPrintDialog';
@@ -23,6 +24,8 @@ export default function AssetList() {
     const { filters, setFilter } = al;
 
     const where = (a: Asset) => (a.spaceId ? al.spaceName.get(a.spaceId) ?? '(지운 공간)' : null);
+    /** 마지막 확인 날짜 — 한 번도 확인하지 않았으면 null */
+    const checked = (a: Asset) => { const at = checkedAtOf(al.checks, a.id); return at ? toLocalDateStr(at) : null; };
     const allVisibleSelected = al.visible.length > 0 && al.visible.every((a) => al.selected.has(a.id));
     const filteredSelected = al.filtered.filter((a) => al.selected.has(a.id)).length;
 
@@ -98,6 +101,7 @@ export default function AssetList() {
                                             <th className="p-3 font-medium">공간</th>
                                             <th className="p-3 font-medium">상태</th>
                                             <th className="p-3 font-medium">라벨</th>
+                                            <th className="p-3 font-medium">마지막 확인</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
@@ -118,6 +122,7 @@ export default function AssetList() {
                                                 </td>
                                                 <td className="p-3"><StatusBadge status={a.status} /></td>
                                                 <td className="p-3">{a.tagId ? <span className="text-surface-700 dark:text-surface-300">발급</span> : <span className={sub}>없음</span>}</td>
+                                                <td className="p-3 whitespace-nowrap">{checked(a) ?? <span className={sub}>없음</span>}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -137,7 +142,7 @@ export default function AssetList() {
                                             </div>
                                             <p className="text-sm text-surface-800 dark:text-surface-200 truncate">{a.name ?? '-'}</p>
                                             <p className={sub}>
-                                                {where(a) ?? `미지정${a.locationRaw ? ` · ${a.locationRaw}` : ''}`} · 라벨 {a.tagId ? '발급' : '없음'}
+                                                {where(a) ?? `미지정${a.locationRaw ? ` · ${a.locationRaw}` : ''}`} · 라벨 {a.tagId ? '발급' : '없음'} · 확인 {checked(a) ?? '없음'}
                                             </p>
                                         </Link>
                                     </li>
@@ -208,7 +213,7 @@ function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProp
     const label = 'text-xs text-surface-600 dark:text-surface-300';
     return (
         <div className="glass-card p-4 mb-3">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <label className={`${label} sm:col-span-2 lg:col-span-1`}>
                     검색
                     <input type="search" className="input min-h-[48px] mt-1" placeholder="자산코드·품명·위치"
@@ -237,6 +242,15 @@ function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProp
                         <option value="all">전체</option>
                         <option value="untagged">아직 안 뽑음</option>
                         <option value="tagged">뽑음</option>
+                    </select>
+                </label>
+                <label className={label}>
+                    마지막 확인
+                    <select className="input min-h-[48px] mt-1" value={filters.checked} onChange={(e) => setFilter('checked', e.target.value as AssetFilters['checked'])}>
+                        <option value="all">전체</option>
+                        <option value="over6m">6개월 넘게 못 봄</option>
+                        <option value="over1y">1년 넘게 못 봄</option>
+                        <option value="never">한 번도 확인 안 됨</option>
                     </select>
                 </label>
             </div>

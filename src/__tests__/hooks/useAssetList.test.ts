@@ -6,7 +6,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Asset } from '../../types/asset';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ userData: { organizationId: 'org-A' } }) }));
-vi.mock('../../lib/firestore', () => ({ getAssets: vi.fn(), getSpaces: vi.fn(), getBuildings: vi.fn(async () => []) }));
+vi.mock('../../lib/firestore', () => ({ getAssets: vi.fn(), getSpaces: vi.fn(), getBuildings: vi.fn(async () => []), getAssetChecks: vi.fn(async () => new Map()) }));
 
 import * as firestore from '../../lib/firestore';
 import useAssetList, { filterAssets, sortAssets, DEFAULT_FILTERS, LIST_PAGE, buildingFilter, floorFilter } from '../../hooks/useAssetList';
@@ -56,6 +56,23 @@ describe('sortAssets·filterAssets', () => {
         expect(pick(floorFilter('b1', '2'))).toEqual(['b']);
         expect(pick(buildingFilter('b9'))).toEqual([]);
     });
+    it('마지막 확인으로 거른다 — 6개월·1년 넘게 못 본 것에는 한 번도 안 본 것도 든다', () => {
+        const all = [asset('a'), asset('b'), asset('c'), asset('d')];
+        const now = new Date(2026, 10, 22);
+        const at = (y: number, m: number) => ({ checkedAt: new Date(y, m, 1) }) as never;
+        const checks = new Map([
+            [all[0].id, at(2026, 10)], // 이번 달
+            [all[1].id, at(2026, 2)],  // 8개월 전
+            [all[2].id, at(2025, 5)],  // 1년 넘게 전
+        ]);
+        const pick = (checked: typeof DEFAULT_FILTERS.checked) =>
+            filterAssets(all, { ...DEFAULT_FILTERS, checked }, undefined, checks, now).map((x) => x.code);
+        expect(pick('all')).toEqual(['a', 'b', 'c', 'd']);
+        expect(pick('over6m')).toEqual(['b', 'c', 'd']);
+        expect(pick('over1y')).toEqual(['c', 'd']);
+        expect(pick('never')).toEqual(['d']);
+    });
+
     it('대장에 없음만·라벨 발급 여부', () => {
         expect(codes({ onlyMissing: true })).toEqual(['4']);
         expect(codes({ label: 'untagged' })).toEqual(['1', '3']);

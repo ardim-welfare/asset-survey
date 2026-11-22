@@ -4,11 +4,14 @@
  * 휴대폰 기본 카메라로 라벨을 찍으면 이 주소가 열린다. 로그인한 사람의 기관 안에서만 찾는다 —
  * 다른 기관 라벨이면 "이 기관에 없는 라벨"로 안내한다(어느 기관 것인지도 알려 주지 않는다).
  * 로그인 전이었다면 main.tsx가 태그를 보관했다가 로그인 뒤 이리로 다시 보낸다(pendingTag.ts).
+ *
+ * 라벨을 찍었다는 것은 물건이 눈앞에 있다는 뜻이라, 찾으면 '마지막 확인'을 남긴다(2026-11-22, 상시 확인 기록).
+ * 재물 목록에서 눌러 여는 것은 확인으로 치지 않는다 — 이 경로(실물 QR)만 남긴다.
  */
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { findAssetByTag } from '../../lib/firestore';
+import { findAssetByTag, recordAssetCheck } from '../../lib/firestore';
 import { parseTag } from '../../lib/labels/tag';
 import { clearPendingTag } from '../../lib/pendingTag';
 
@@ -30,12 +33,16 @@ export default function TagRedirect() {
         let cancelled = false;
         setState({ kind: 'loading' });
         findAssetByTag(orgId, tag)
-            .then((a) => { if (!cancelled) setState(a ? { kind: 'found', path: `${base}/assets/${encodeURIComponent(a.id)}` } : { kind: 'notFound' }); })
+            .then((a) => {
+                if (cancelled) return;
+                if (a) recordAssetCheck({ orgId, assetId: a.id, via: 'qr' });
+                setState(a ? { kind: 'found', path: `${base}/assets/${encodeURIComponent(a.id)}` } : { kind: 'notFound' });
+            })
             .catch(() => { if (!cancelled) setState({ kind: 'error' }); });
         return () => { cancelled = true; };
     }, [tag, orgId, base, attempt]);
 
-    if (state.kind === 'found') return <Navigate to={state.path} replace />;
+    if (state.kind === 'found') return <Navigate to={state.path} replace state={{ justChecked: true }} />;
 
     return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-surface-50 dark:bg-surface-950">

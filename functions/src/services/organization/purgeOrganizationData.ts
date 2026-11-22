@@ -49,6 +49,8 @@ const ORG_SCOPED: ReadonlyArray<readonly [collection: string, field: string]> = 
     ["history", "organizationId"],
     ["imports", "organizationId"],
     ["assetAccounting", "organizationId"],
+    // 재물 마지막 확인 — 재물을 가리키므로 재물 앞
+    ["assetChecks", "organizationId"],
     ["assets", "organizationId"],
     // 공간 — 재물·조사 컬렉션을 만들면 이보다 앞에 둔다(기록이 공간을 가리킨다)
     ["spaces", "organizationId"],

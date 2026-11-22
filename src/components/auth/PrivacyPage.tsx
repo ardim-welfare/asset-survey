@@ -292,6 +292,7 @@ export default function PrivacyPage() {
                                 <ul className="list-disc list-inside space-y-1 ml-2 text-purple-700 dark:text-purple-400 text-xs">
                                     <li>재물 대장을 가져올 때 <strong>사람 이름이 든 열(현 사용자·운영담당자 등)은 가져오지 않습니다</strong>.</li>
                                     <li>스캔·제출·승인 기록에는 그 일을 한 계정과 시각이 남습니다(조사 결과의 책임 추적용).</li>
+                                    <li>조사 기간이 아니어도 라벨 QR을 찍어 재물을 열면 그 재물의 <strong>마지막 확인(계정·시각)</strong>이 재물마다 한 건 남습니다(오래 확인하지 못한 재물을 찾는 용도). 새로 찍으면 이전 확인은 덮어씁니다.</li>
                                     <li>결과 보고서에는 <strong>제출·승인한 사람의 이름만</strong> 담고, 누가 찍었는지는 담지 않습니다.</li>
                                     <li>재물 금액은 기관 관리자만 볼 수 있습니다.</li>
                                 </ul>
@@ -439,7 +440,7 @@ export default function PrivacyPage() {
                             <ul className="list-disc list-inside space-y-1 ml-2">
                                 <li>
                                     기관을 삭제하면(해지 후 30일의 복구 기간이 지나거나 운영자가 영구 삭제하면) 재물·금액·공간 정보,
-                                    가져오기 기록·변경 이력, 재물조사 회차·대상·스캔·제출·승인 기록과 희망이음 반영 목록,
+                                    가져오기 기록·변경 이력, 재물조사 회차·대상·스캔·제출·승인 기록과 재물 마지막 확인 기록, 희망이음 반영 목록,
                                     소속 사용자 정보, 증빙서류 사본 등 <strong>해당 기관의 데이터를 파기</strong>합니다.
                                     다만 다음 기록은 아래 기간이 지나면 자동으로 파기됩니다.
                                     <ul className="list-disc list-inside space-y-1 ml-5 mt-1">

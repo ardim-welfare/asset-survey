@@ -22,6 +22,7 @@ import {
 import { captureError } from '../sentry';
 import { actorStamp } from './actorStamp';
 import { trackWrite } from '../offline/syncQueue';
+import { recordAssetCheck } from './assetChecks';
 import type { Asset } from '../../types/asset';
 import type {
     Survey, SurveyTarget, SurveyTargetItem, Scan, ScanCondition, ScanMethod, SurveySubmission, SurveyEvent,
@@ -189,6 +190,8 @@ export function saveScan({ orgId, surveyId, spaceId, method, draft, onRejected }
     };
     const write = setDoc(doc(db, 'scans', draft.scanId), data);
     void trackWrite('CREATE', 'scans', draft.scanId, data, write, { callerAwaits: false });
+    // 조사에서 찍은 재물도 '마지막 확인'을 갱신한다(상시 확인 기록, 2026-11-22). 미등록은 재물이 없어 남기지 않는다
+    if (draft.assetId) recordAssetCheck({ orgId, assetId: draft.assetId, via: 'survey', spaceId, surveyId });
     write.catch((error) => {
         captureError(error, { context: 'saveScan', orgId, surveyId, result: draft.result });
         onRejected?.(error);

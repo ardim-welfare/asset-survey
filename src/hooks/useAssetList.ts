@@ -5,10 +5,13 @@
  * 기준으로, 거를 때마다 서버를 다시 읽지 않는 쪽이 읽기 비용이 적다. 그리는 것은 100건씩 늘린다.
  *
  * 공간 거르기는 건물·층 단위로도 된다(2026-11-22) — 건물 하나를 거른 뒤 '모두 고르기'로 그 건물 라벨을 한 번에 뽑는다.
+ * 마지막 확인(상시 확인 기록, 같은 날)으로도 거른다 — "6개월 넘게 못 본 재물"을 찾아 점검한다.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './useAuth';
-import { getAssets, getSpaces, getBuildings } from '../lib/firestore';
+import { getAssets, getSpaces, getBuildings, getAssetChecks } from '../lib/firestore';
+import { toDateOrNull } from '../lib/dateUtils';
+import type { AssetCheck } from '../types/assetCheck';
 import { spaceLocationMap } from '../lib/spaceGroups';
 import type { Asset, AssetStatus } from '../types/asset';
 import type { Space } from '../types/space';
@@ -46,6 +49,21 @@ function matchesSpace(a: Asset, filter: SpaceFilter, places?: SpacePlaceIndex): 
 }
 export type StatusFilter = AssetStatus | 'all';
 export type LabelFilter = 'all' | 'untagged' | 'tagged';
+/** 마지막 확인 거르기 — 전체 / 6개월 넘게 안 봄(한 번도 안 본 것 포함) / 1년 넘게 안 봄(포함) / 한 번도 안 봄 */
+export type CheckedFilter = 'all' | 'over6m' | 'over1y' | 'never';
+
+/** 마지막 확인 시각(없으면 null) */
+export const checkedAtOf = (checks: Map<string, AssetCheck> | undefined, assetId: string): Date | null =>
+    toDateOrNull(checks?.get(assetId)?.checkedAt ?? null);
+
+const monthsAgo = (now: Date, n: number) => { const d = new Date(now); d.setMonth(d.getMonth() - n); return d; };
+
+function matchesChecked(at: Date | null, f: CheckedFilter, now: Date): boolean {
+    if (f === 'all') return true;
+    if (f === 'never') return at === null;
+    const limit = monthsAgo(now, f === 'over6m' ? 6 : 12);
+    return at === null || at < limit;
+}
 
 export interface AssetFilters {
     search: string;
@@ -53,9 +71,10 @@ export interface AssetFilters {
     status: StatusFilter;
     onlyMissing: boolean;
     label: LabelFilter;
+    checked: CheckedFilter;
 }
 
-export const DEFAULT_FILTERS: AssetFilters = { search: '', space: 'all', status: 'active', onlyMissing: false, label: 'all' };
+export const DEFAULT_FILTERS: AssetFilters = { search: '', space: 'all', status: 'active', onlyMissing: false, label: 'all', checked: 'all' };
 
 const collator = new Intl.Collator('ko', { numeric: true });
 
@@ -63,9 +82,12 @@ const collator = new Intl.Collator('ko', { numeric: true });
 export const sortAssets = (list: Asset[]): Asset[] => [...list].sort((a, b) => collator.compare(a.code, b.code));
 
 /** 거르기 — 검색은 자산코드·품명·원본 위치에서 띄어쓰기·대소문자 무시하고 찾는다 */
-export function filterAssets(list: Asset[], f: AssetFilters, places?: SpacePlaceIndex): Asset[] {
+export function filterAssets(
+    list: Asset[], f: AssetFilters, places?: SpacePlaceIndex, checks?: Map<string, AssetCheck>, now = new Date(),
+): Asset[] {
     const q = f.search.replace(/\s+/g, '').toLowerCase();
     return list.filter((a) => {
+        if (!matchesChecked(checkedAtOf(checks, a.id), f.checked ?? 'all', now)) return false;
         if (f.status !== 'all' && a.status !== f.status) return false;
         if (!matchesSpace(a, f.space, places)) return false;
         if (f.onlyMissing && !a.missingFromSource) return false;
@@ -85,6 +107,7 @@ export default function useAssetList() {
     const [assets, setAssets] = useState<Asset[]>([]);
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [buildings, setBuildings] = useState<Building[]>([]);
+    const [checks, setChecks] = useState<Map<string, AssetCheck>>(new Map());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [filters, setFilters] = useState<AssetFilters>(DEFAULT_FILTERS);
@@ -96,10 +119,15 @@ export default function useAssetList() {
         setLoading(true);
         setError(false);
         try {
-            const [a, s, b] = await Promise.all([getAssets(orgId), getSpaces(orgId), getBuildings(orgId)]);
+            const [a, s, b, c] = await Promise.all([
+                getAssets(orgId), getSpaces(orgId), getBuildings(orgId),
+                // 마지막 확인은 못 읽어도 목록은 보인다
+                getAssetChecks(orgId).catch(() => new Map<string, AssetCheck>()),
+            ]);
             setAssets(sortAssets(a));
             setSpaces(s);
             setBuildings(b);
+            setChecks(c);
         } catch {
             setError(true);
         } finally {
@@ -110,7 +138,7 @@ export default function useAssetList() {
     useEffect(() => { void load(); }, [load]);
 
     const places = useMemo(() => spacePlaceIndex(spaces), [spaces]);
-    const filtered = useMemo(() => filterAssets(assets, filters, places), [assets, filters, places]);
+    const filtered = useMemo(() => filterAssets(assets, filters, places, checks), [assets, filters, places, checks]);
     /** 공간 표시 이름 — 건물을 등록했으면 "본관 2층 상담실" */
     const spaceName = useMemo(() => {
         const loc = spaceLocationMap(spaces, buildings);
@@ -153,7 +181,7 @@ export default function useAssetList() {
     }, []);
 
     return {
-        orgId, assets, spaces, buildings, spaceName, loading, error, reload: load,
+        orgId, assets, spaces, buildings, spaceName, checks, loading, error, reload: load,
         filters, setFilter, resetFilters, filtered,
         visible: filtered.slice(0, shown), hasMore: filtered.length > shown, showMore: () => setShown((n) => n + LIST_PAGE),
         selected, toggle, setMany, selectFiltered, clearSelection, selectedAssets, applyTags,

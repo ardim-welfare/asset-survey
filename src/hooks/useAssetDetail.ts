@@ -6,8 +6,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './useAuth';
-import { getAsset, getAssetAccounting, getAssetHistory, getSpaces } from '../lib/firestore';
+import { getAsset, getAssetAccounting, getAssetHistory, getSpaces, getAssetCheck } from '../lib/firestore';
 import type { Asset, AssetAccounting, HistoryEntry } from '../types/asset';
+import type { AssetCheck } from '../types/assetCheck';
 import type { Space } from '../types/space';
 
 export default function useAssetDetail(assetId: string | undefined, { admin }: { admin: boolean }) {
@@ -17,6 +18,7 @@ export default function useAssetDetail(assetId: string | undefined, { admin }: {
     const [space, setSpace] = useState<Space | null>(null);
     const [accounting, setAccounting] = useState<AssetAccounting | null>(null);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [check, setCheck] = useState<AssetCheck | null>(null);
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -36,11 +38,14 @@ export default function useAssetDetail(assetId: string | undefined, { admin }: {
                 return;
             }
             setAsset(found);
-            const [list, acc, hist] = await Promise.all([
+            const [list, acc, hist, chk] = await Promise.all([
                 getSpaces(orgId),
                 admin ? getAssetAccounting(assetId) : Promise.resolve(null),
                 admin ? getAssetHistory(orgId, assetId) : Promise.resolve([] as HistoryEntry[]),
+                // 마지막 확인은 못 읽어도 화면은 연다
+                getAssetCheck(assetId).catch(() => null),
             ]);
+            setCheck(chk);
             setSpaces(list);
             setSpace(list.find((s) => s.id === found.spaceId) ?? null);
             setAccounting(acc);
@@ -59,5 +64,5 @@ export default function useAssetDetail(assetId: string | undefined, { admin }: {
         setAsset((prev) => (prev && !prev.tagId && tags.has(prev.id) ? { ...prev, tagId: tags.get(prev.id) ?? null } : prev));
     }, []);
 
-    return { orgId, asset, space, spaces, accounting, history, loading, error, notFound, reload: load, applyTags };
+    return { orgId, asset, space, spaces, accounting, history, check, loading, error, notFound, reload: load, applyTags };
 }

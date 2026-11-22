@@ -214,6 +214,25 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // === 재물 마지막 확인 (2026-11-22, 상시 확인 기록) ===
+    // 라벨 QR을 찍어 재물을 열거나 조사에서 찍으면 '마지막 확인'을 남긴다. 재물마다 한 건(문서 ID = 재물 ID).
+    // 직원도 남겨야 해서 재물(관리자만 씀)과 따로 둔다. 같은 기관 구성원만, 본인 이름·서버 시각으로만 쓴다.
+    // 재물이 정말 있는지는 확인하지 않는다(get() 비용) — 문서 ID가 내 기관 접두사라 다른 기관 자리에는 못 쓴다.
+    match /assetChecks/{assetId} {
+      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      allow create, update: if isOrgMember(request.resource.data.organizationId)
+                    && assetId.matches(request.resource.data.organizationId + '__.+')
+                    && request.resource.data.keys().hasOnly(['organizationId', 'assetId', 'checkedAt', 'checkedByUid',
+                                                             'via', 'spaceId', 'surveyId'])
+                    && request.resource.data.assetId == assetId
+                    && request.resource.data.checkedAt == request.time
+                    && request.resource.data.checkedByUid == request.auth.uid
+                    && request.resource.data.via in ['qr', 'survey']
+                    && nullableString(request.resource.data.spaceId, 100)
+                    && nullableString(request.resource.data.surveyId, 100);
+      allow delete: if false;
+    }
+
     // === 건물 (2026-11-22) ===
     // 공간을 묶는 위 단계(건물 → 층 → 공간). 층은 건물 문서의 floors 목록이다.
     // 읽기·쓰기 경계는 공간과 같다 — 같은 기관 구성원이 읽고, 관리자만 쓰며, 지우지 않는다(공간이 가리킨다).
