@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, Suspense, type ReactNode } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { logout } from '../../lib/auth';
@@ -7,7 +7,9 @@ import { getOrgMemberCounts } from '../../lib/firestore/users';
 import { getPendingOrganizationsCount, getApprovedOrganizationsCount } from '../../lib/firestore/organizations';
 import { getUnreadFeedbacksCount } from '../../lib/firestore/feedbacks';
 import { getSuperAdminsCount } from '../../lib/firestore/superAdmin';
-import { SA_TEST_ROLE_KEY } from '../../App';
+import { enterSaTestMode, type SaTestRole } from '../../lib/saTestMode';
+import { useToast } from '../../hooks/useToast';
+import TestOrgPickerModal, { type TestOrgOption } from './TestOrgPickerModal';
 import { useTheme } from '../../hooks/useTheme';
 import Toggle from '../common/Toggle';
 import ErrorBoundary from '../common/ErrorBoundary';
@@ -57,6 +59,34 @@ export default function SuperAdminLayout() {
     const [feedbackCount, setFeedbackCount] = useState(0);
     const [adminCount, setAdminCount] = useState(0);
     const { isDark, toggleTheme } = useTheme();
+    const { showToast } = useToast();
+    // 관리자·직원 화면 보기 — 볼 기관 목록과 고르는 중인 역할
+    const [testOrgs, setTestOrgs] = useState<TestOrgOption[] | null>(null);
+    const [pickerRole, setPickerRole] = useState<SaTestRole | null>(null);
+
+    /** 관리자·직원 화면으로 들어간다. 기관이 하나면 바로, 여럿이면 고르는 창을 연다 */
+    const startTestMode = useCallback(async (role: SaTestRole) => {
+        let orgs = testOrgs;
+        if (!orgs) {
+            try {
+                orgs = (await getApprovedOrganizations()).map(o => ({ id: o.id, name: o.name || o.id }));
+                setTestOrgs(orgs);
+            } catch {
+                showToast('기관 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+                return;
+            }
+        }
+        if (orgs.length === 0) {
+            showToast('승인된 기관이 없어 관리자·직원 화면을 볼 수 없습니다.', 'info');
+            return;
+        }
+        if (orgs.length === 1) {
+            enterSaTestMode(role, orgs[0].id);
+            return;
+        }
+        setPickerRole(role);
+    }, [testOrgs, showToast]);
+    const closePicker = useCallback(() => setPickerRole(null), []);
 
     // 사이드바 배지 카운트 단발성 조회 (비용 절감)
     useEffect(() => {
@@ -78,6 +108,7 @@ export default function SuperAdminLayout() {
 
                 try {
                     const approved = await getApprovedOrganizations();
+                    if (isMounted) setTestOrgs(approved.map(o => ({ id: o.id, name: o.name || o.id })));
                     const counts = await getOrgMemberCounts(approved.map(o => o.id));
                     if (isMounted) {
                         const active = approved.filter(o => counts[o.id] > 0).length;
@@ -109,6 +140,13 @@ export default function SuperAdminLayout() {
 
     return (
         <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex">
+            <TestOrgPickerModal
+                open={pickerRole !== null}
+                roleLabel={pickerRole === 'employee' ? '직원' : '관리자'}
+                orgs={testOrgs ?? []}
+                onSelect={(orgId) => { if (pickerRole) enterSaTestMode(pickerRole, orgId); }}
+                onClose={closePicker}
+            />
             {/* 모바일 오버레이 */}
             {sidebarOpen && (
                 <div
@@ -254,13 +292,13 @@ export default function SuperAdminLayout() {
                     {/* 테스트 모드 버튼 (전체 화면) */}
                     <div className="flex items-center gap-1.5 mr-2">
                         <button
-                            onClick={() => { sessionStorage.setItem(SA_TEST_ROLE_KEY, 'admin'); window.location.href = '/admin'; }}
+                            onClick={() => { void startTestMode('admin'); }}
                             className="py-2 px-3 rounded-lg text-sm font-medium bg-primary-50 text-primary-700 active:bg-primary-100 dark:bg-primary-900/40 dark:text-primary-300 dark:active:bg-primary-900/60"
                         >
                             🏢 관리자
                         </button>
                         <button
-                            onClick={() => { sessionStorage.setItem(SA_TEST_ROLE_KEY, 'employee'); window.location.href = '/employee'; }}
+                            onClick={() => { void startTestMode('employee'); }}
                             className="py-2 px-3 rounded-lg text-sm font-medium badge-neutral active:bg-surface-200 dark:bg-surface-700 dark:text-surface-300 dark:active:bg-surface-600"
                         >
                             🙋 직원

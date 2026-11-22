@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useRef, useMemo, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db, authReady } from '../lib/firebase';
@@ -8,6 +8,7 @@ import { refreshTokenSilently, refreshToken } from '../lib/tokenRefresh';
 import { handleRedirectResult, wasIntentionalLogout } from '../lib/auth';
 import { clearSessionMarkers } from '../lib/sessionBoot';
 import { setSentryUser } from '../lib/sentry';
+import { getSaTestOrgId } from '../lib/saTestMode';
 import type { User as UserDoc } from '../types/user';
 import {
     reportUnexpectedSignOut,
@@ -415,10 +416,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const isSuperAdmin = userData?.role === 'superAdmin';
 
+    // 슈퍼관리자 테스트 모드: 고른 기관을 소속 기관 자리에 넣어 관리자·직원 화면이 그 기관을 읽게 한다
+    // (시스템 관리자 계정은 소속 기관이 없다 — 이유는 lib/saTestMode.ts). 테스트 모드 진입은
+    // 화면 전체를 다시 불러오므로 값은 렌더 때 한 번 읽으면 된다.
+    const saTestOrgId = isSuperAdmin ? getSaTestOrgId() : null;
+    const effectiveUserData = useMemo(
+        () => (userData && saTestOrgId ? { ...userData, organizationId: saTestOrgId } : userData),
+        [userData, saTestOrgId],
+    );
 
     const value = {
         user,
-        userData,
+        userData: effectiveUserData,
         userDocState,
         loading,
         isSuperAdmin,

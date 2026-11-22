@@ -14,6 +14,7 @@ import { adminHomePath } from './lib/lastArea';
 import { updateUser } from './lib/firestore/users';
 import InAppBrowserGuard from './components/common/InAppBrowserGuard';
 import { captureInviteCodeFromUrl } from './lib/inviteCodeCapture';
+import { SA_TEST_ROLE_KEY } from './lib/saTestMode';
 
 // 레이아웃 (기존)
 const SuperAdminLayout = lazyWithRetry(() => import('./components/superAdmin/SuperAdminLayout'));
@@ -39,7 +40,8 @@ const FAQPage = lazyWithRetry(() => import('./components/auth/FAQPage'));
 // 바꾸면 **다른 탭이 리로드되는 순간 그 역할로 끌려갔다**(AuthGuard가 렌더 시점에 이 값을
 // 읽어 리다이렉트한다). 직원 화면과 관리자 화면을 나란히 띄워 보는 것이 이 기능의 용도인데
 // 그게 불가능했다. sessionStorage는 탭 단위라 각 탭이 자기 역할을 유지한다.
-export const SA_TEST_ROLE_KEY = 'sa-test-role' as const;
+// 키 정의와 기관 선택은 lib/saTestMode.ts에 있다(useAuth가 App을 거치지 않고 읽도록)
+export { SA_TEST_ROLE_KEY } from './lib/saTestMode';
 
 // 옮기기 전 localStorage에 남은 값을 1회 정리한다. 읽는 곳이 없어졌으므로 그냥 두면
 // 모든 슈퍼관리자 브라우저에 영구히 남고, 나중에 이 키를 다시 읽는 코드가 생기면

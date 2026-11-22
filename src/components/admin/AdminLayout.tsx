@@ -3,7 +3,7 @@ import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'reac
 import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import { useAuth } from '../../hooks/useAuth';
 import { logout } from '../../lib/auth';
-import { SA_TEST_ROLE_KEY } from '../../App';
+import { SA_TEST_ROLE_KEY, exitSaTestMode } from '../../lib/saTestMode';
 import { rememberAdminArea } from '../../lib/lastArea';
 import NotificationBell from '../common/NotificationBell';
 import Toggle from '../common/Toggle';
@@ -208,8 +208,7 @@ export default function AdminLayout() {
                             <button
                                 onClick={() => {
                                     startTransition(() => {
-                                        sessionStorage.removeItem(SA_TEST_ROLE_KEY);
-                                        window.location.href = '/super-admin';
+                                        exitSaTestMode();
                                     });
                                 }}
                                 className="flex items-center gap-1 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 px-3 py-2 rounded-lg transition-colors font-medium"

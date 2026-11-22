@@ -144,6 +144,19 @@ describe('AuthGuard — 슈퍼관리자 테스트 역할은 탭 단위(sessionSt
     expect(screen.queryByText('EMP_CONTENT')).not.toBeInTheDocument();
   });
 
+  it('볼 기관이 없으면 테스트 역할이 있어도 기관 화면을 열지 않는다 (빈 대시보드 로딩 회귀 차단)', () => {
+    // 시스템 관리자 계정은 소속 기관이 없다. 기관을 고르지 않고 관리자 화면을 열면
+    // 화면마다 읽을 기관 ID가 없어 로딩 표시만 돌았다(2026-11-22).
+    mockAuth.userData = { role: 'superAdmin', organizationId: null };
+    sessionStorage.setItem('sa-test-role', 'admin');
+    renderAt('/admin', (
+      <AuthGuard requireAuth requireOrgSetup allowedRoles={['admin']}>
+        <div>ADMIN_CONTENT</div>
+      </AuthGuard>
+    ));
+    expect(screen.queryByText('ADMIN_CONTENT')).not.toBeInTheDocument();
+  });
+
   it('지정이 없으면 슈퍼관리자 그대로다 (직원 전용 라우트 접근 불가)', () => {
     renderAt('/employee', (
       <AuthGuard requireAuth requireOrgSetup allowedRoles={['employee']}>

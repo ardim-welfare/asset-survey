@@ -23,7 +23,8 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!userData?.organizationId) return;
+        // 기관이 없으면 읽을 것이 없다 — 로딩 표시만 끝없이 돌지 않게 끝낸다
+        if (!userData?.organizationId) { setLoading(false); return; }
         const orgId = userData.organizationId;
 
         const load = async (retryCount = 0): Promise<void> => {

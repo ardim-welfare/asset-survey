@@ -3,7 +3,7 @@ import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'reac
 import { useAuth } from '../../hooks/useAuth';
 import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import { getOrganization } from '../../lib/firestore';
-import { SA_TEST_ROLE_KEY } from '../../App';
+import { SA_TEST_ROLE_KEY, exitSaTestMode } from '../../lib/saTestMode';
 import { rememberAdminArea } from '../../lib/lastArea';
 import NotificationBell from '../common/NotificationBell';
 import AdminNotice from '../admin/AdminNotice';
@@ -97,7 +97,7 @@ export default function EmployeeLayout() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                     {isSuperAdmin && (
                         <button
-                            onClick={() => { sessionStorage.removeItem(SA_TEST_ROLE_KEY); window.location.href = '/super-admin'; }}
+                            onClick={exitSaTestMode}
                             className="flex items-center justify-center gap-1 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 px-3 py-2 rounded-lg transition-colors font-medium"
                             title="슈퍼관리자 화면으로 복귀"
                             aria-label="슈퍼관리자 화면으로 복귀"

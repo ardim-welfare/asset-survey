@@ -161,7 +161,10 @@ export function AuthGuard({
     // 슈퍼관리자 테스트 모드 적용
     let effectiveRole = userData.role;
     if (isSuperAdmin) {
-      if (saTestRole === 'admin') effectiveRole = 'admin';
+      // 볼 기관을 고르지 않은 테스트 모드(이 변경 전에 들어간 탭 등)는 기관 화면이 빈 채로 열리므로
+      // 시스템 관리자 화면으로 돌려보낸다 — useAuth가 고른 기관을 organizationId에 넣어 준다(lib/saTestMode.ts)
+      if (!userData.organizationId) effectiveRole = 'superAdmin';
+      else if (saTestRole === 'admin') effectiveRole = 'admin';
       else if (saTestRole === 'employee') effectiveRole = 'employee';
       else effectiveRole = 'superAdmin';
     }
