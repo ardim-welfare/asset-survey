@@ -17,7 +17,7 @@ function LegalLink({ href, children }: { href: string; children: React.ReactNode
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary-600 dark:text-primary-400 underline underline-offset-2 font-medium hover:text-primary-700 dark:hover:text-primary-300"
+            className="text-primary-700 dark:text-primary-300 underline underline-offset-2 font-medium hover:text-primary-800 dark:hover:text-primary-200"
         >
             {children}
         </a>
@@ -40,10 +40,10 @@ export default function ConsentGate() {
                     <p className="text-sm text-surface-700 dark:text-surface-300 mb-1">
                         <LegalLink href="/terms">이용약관</LegalLink>이 개정되었습니다.
                     </p>
-                    <p className="text-xs text-surface-500 dark:text-surface-400 mb-3 leading-relaxed">
+                    <p className="text-xs text-surface-600 dark:text-surface-400 mb-3 leading-relaxed">
                         개인정보의 수집·이용 안내는 소속 기관에서 받으실 수 있습니다.
                     </p>
-                    {error && <p className="text-xs text-red-700 dark:text-red-300 mb-2">{error}</p>}
+                    {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300 mb-2">{error}</p>}
                     <button
                         type="button"
                         onClick={accept}
@@ -80,7 +80,7 @@ export default function ConsentGate() {
                         바뀐 내용은 각 문서 끝의 개정 이력에서 확인할 수 있어요.
                     </p>
                     <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 dark:bg-blue-900/20 dark:border-blue-800">
-                        <p className="text-xs text-blue-700 dark:text-blue-400">
+                        <p className="text-xs text-blue-800 dark:text-blue-300">
                             소속 <strong>기관이 개인정보처리자</strong>이며, 서비스 제공자는 기관의 위탁을 받아
                             개인정보를 처리하는 <strong>수탁자</strong>입니다. 기관 관리자로서 위탁에 동의해 주세요.
                         </p>
@@ -89,7 +89,7 @@ export default function ConsentGate() {
                         동의하시면 기관의 위탁 동의와 관리자 본인의 약관 동의가 함께 기록됩니다.
                     </p>
                 </div>
-                {error && <p className="text-sm text-red-700 dark:text-red-300 mb-3">{error}</p>}
+                {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300 mb-3">{error}</p>}
                 <button
                     type="button"
                     onClick={accept}

@@ -93,11 +93,13 @@ export default function PrivacyPage() {
             />
             <div className="w-full max-w-2xl mx-auto animate-fade-in">
                 {/* 뒤로가기 */}
+                {/* 새 탭(약관 동의 칸의 링크)으로 열리면 되돌아갈 기록이 없다 — 그때는 첫 화면으로 보낸다 */}
                 <button
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-1.5 text-sm text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 dark:text-surface-300 mb-6 transition-colors min-h-[48px] px-2 -ml-2"
+                    type="button"
+                    onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+                    className="flex items-center gap-1.5 text-sm text-surface-700 dark:text-surface-300 hover:text-surface-900 dark:hover:text-surface-100 mb-6 transition-colors min-h-[48px] px-2 -ml-2"
                 >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                     </svg>
                     돌아가기
@@ -106,7 +108,7 @@ export default function PrivacyPage() {
                 <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-soft p-6 md:p-8 space-y-8">
                     <div className="text-center border-b border-surface-100 dark:border-surface-700 pb-6">
                         <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">개인정보 처리방침</h1>
-                        <p className="text-sm text-surface-500 dark:text-surface-400">시행일: {EFFECTIVE_DATE}</p>
+                        <p className="text-sm text-surface-600 dark:text-surface-400">시행일: {EFFECTIVE_DATE}</p>
                     </div>
 
                     {/*
@@ -148,7 +150,7 @@ export default function PrivacyPage() {
                                     <li>이름 (Google 계정 표시 이름. 기관관리자가 직원 이름을 미리 등록한 경우 그 이름)</li>
                                     <li>전화번호 (기관 신청 시 신청자의 휴대전화번호 — 신청 접수·승인·반려 결과를 카카오 알림톡으로 안내하는 데 사용)</li>
                                 </ul>
-                                <p className="text-xs text-surface-500 dark:text-surface-400">
+                                <p className="text-xs text-surface-600 dark:text-surface-400">
                                     Google 계정의 프로필 사진은 가입 화면 표시에만 사용하며 저장하지 않습니다.
                                 </p>
                             </div>
@@ -158,7 +160,7 @@ export default function PrivacyPage() {
                                 <ul className="list-disc list-inside space-y-1 ml-2">
                                     <li>푸시 알림 토큰 (알림 수신을 허용한 경우에만, 공지·문의 답변 알림을 기기로 보내는 데 사용)</li>
                                 </ul>
-                                <p className="text-xs text-surface-500 dark:text-surface-400">
+                                <p className="text-xs text-surface-600 dark:text-surface-400">
                                     알림을 허용하지 않아도 서비스 이용에는 제한이 없으며, 브라우저·기기 설정에서 언제든 알림을 끌 수 있습니다.
                                 </p>
                             </div>
@@ -170,7 +172,7 @@ export default function PrivacyPage() {
                                     {/* 직원에게는 개인정보 동의를 받지 않는다(legal-consent.md §2) — 이용약관 동의만 기록됨을 분명히 한다 */}
                                     <li>직원이 초대 코드로 가입하거나 개정된 이용약관을 확인할 때 그 이용약관 동의 사실, 약관의 시행일 버전, 동의 일시 (직원에게는 개인정보 수집·이용 동의를 따로 받지 않습니다)</li>
                                 </ul>
-                                <p className="text-xs text-surface-500 dark:text-surface-400">
+                                <p className="text-xs text-surface-600 dark:text-surface-400">
                                     위탁 계약(이용약관 제9조)의 성립과 동의 사실을 입증하기 위한 항목으로, 기관 신청 기록은 해당 기관 정보와 함께,
                                     직원 동의 기록은 해당 계정 정보와 함께 보관되며 기관 삭제·회원 탈퇴 시 <strong>본 처리방침 제9조(파기)</strong>에 따릅니다.
                                     동의 시점의 IP 주소는 수집하지 않습니다.
@@ -182,7 +184,7 @@ export default function PrivacyPage() {
                                 <ul className="list-disc list-inside space-y-1 ml-2">
                                     <li>서비스 이용 통계 분석을 위해 Google Analytics for Firebase가 쿠키 등 자동 수집 장치로 수집하는 기기·브라우저 식별자, 접속 일시, 이용 이벤트(예: 페이지 조회, 앱 설치 안내 표시·설치)</li>
                                 </ul>
-                                <p className="text-xs text-surface-500 dark:text-surface-400">
+                                <p className="text-xs text-surface-600 dark:text-surface-400">
                                     이름·이메일 등 이용자를 직접 식별하는 정보는 통계에 넣지 않으며, 서비스 제공자는 이 정보를 광고 목적으로 이용하지 않습니다.
                                     브라우저 설정에서 쿠키 저장을 거부하거나 삭제할 수 있고, 거부하더라도 서비스 이용에는 제한이 없습니다.
                                 </p>
@@ -195,7 +197,7 @@ export default function PrivacyPage() {
                                     <li>직원 정보 등 개인정보에 해당하는 항목을 변경한 경우 그 계정·일시·변경한 항목명</li>
                                     <li>개인정보가 담긴 자료(접속기록, 제출·승인한 사람 이름이 담긴 재물조사 결과 보고서)를 내려받은 경우 그 계정·일시·형식·건수</li>
                                 </ul>
-                                <p className="text-xs text-surface-500 dark:text-surface-400">
+                                <p className="text-xs text-surface-600 dark:text-surface-400">
                                     「개인정보의 안전성 확보조치 기준」 제16조에 따라 <strong>법령상 반드시 보관해야 하는 기록</strong>으로,
                                     동의를 근거로 수집하지 않으며 거부할 수 없습니다. 비정상적인 접근을 확인하는 목적 외에는 이용하지 않고,
                                     <strong>1년간 보관 후 자동으로 파기</strong>됩니다.
@@ -340,11 +342,11 @@ export default function PrivacyPage() {
                                             <span>{p.name}</span>
                                         </p>
                                         <p className="text-xs">
-                                            <span className="text-surface-500 dark:text-surface-400">위탁 업무 · </span>
+                                            <span className="text-surface-600 dark:text-surface-400">위탁 업무 · </span>
                                             {p.task}
                                         </p>
                                         <p className="text-xs">
-                                            <span className="text-surface-500 dark:text-surface-400">처리 항목 · </span>
+                                            <span className="text-surface-600 dark:text-surface-400">처리 항목 · </span>
                                             {p.items}
                                         </p>
                                     </div>
@@ -376,20 +378,20 @@ export default function PrivacyPage() {
                                     <div key={`overseas-${p.name}-${p.task}`} className="p-4 space-y-1.5 bg-surface-50 dark:bg-surface-800/60">
                                         <p className="font-medium text-surface-700 dark:text-surface-300 flex flex-wrap items-center gap-x-2 gap-y-1">
                                             <span>{p.name}</span>
-                                            <span className="text-[11px] font-normal px-1.5 py-0.5 rounded-md bg-surface-200 text-surface-600 dark:bg-surface-700 dark:text-surface-300">
+                                            <span className="text-xs font-normal px-1.5 py-0.5 rounded-md bg-surface-200 text-surface-700 dark:bg-surface-700 dark:text-surface-300">
                                                 {p.country}
                                             </span>
                                         </p>
                                         <p className="text-xs">
-                                            <span className="text-surface-500 dark:text-surface-400">이전 항목 · </span>
+                                            <span className="text-surface-600 dark:text-surface-400">이전 항목 · </span>
                                             {p.items}
                                         </p>
                                         <p className="text-xs">
-                                            <span className="text-surface-500 dark:text-surface-400">이용 목적 · </span>
+                                            <span className="text-surface-600 dark:text-surface-400">이용 목적 · </span>
                                             {p.task}
                                         </p>
                                         <p className="text-xs break-all">
-                                            <span className="text-surface-500 dark:text-surface-400">문의처 · </span>
+                                            <span className="text-surface-600 dark:text-surface-400">문의처 · </span>
                                             {p.contact}
                                         </p>
                                     </div>
@@ -497,9 +499,9 @@ export default function PrivacyPage() {
                             </p>
 
                             <div className="bg-surface-50 dark:bg-surface-800 rounded-xl p-4 space-y-1 text-xs">
-                                <p><span className="text-surface-500 dark:text-surface-400">운영 주체 · </span>소셜프리즘</p>
-                                <p><span className="text-surface-500 dark:text-surface-400">개인정보 보호책임자 · </span>김종원</p>
-                                <p className="break-all"><span className="text-surface-500 dark:text-surface-400">연락처 · </span>ehsheh@gmail.com</p>
+                                <p><span className="text-surface-600 dark:text-surface-400">운영 주체 · </span>소셜프리즘</p>
+                                <p><span className="text-surface-600 dark:text-surface-400">개인정보 보호책임자 · </span>김종원</p>
+                                <p className="break-all"><span className="text-surface-600 dark:text-surface-400">연락처 · </span>ehsheh@gmail.com</p>
                             </div>
 
                             <p className="text-xs">
@@ -510,8 +512,8 @@ export default function PrivacyPage() {
                     </section>
 
                     <div className="border-t border-surface-100 dark:border-surface-700 pt-4 space-y-2 text-center">
-                        <p className="text-xs text-surface-500 dark:text-surface-400">본 개인정보 처리방침은 {EFFECTIVE_DATE}부터 시행됩니다.</p>
-                        <p className="text-xs text-surface-500 dark:text-surface-400">
+                        <p className="text-xs text-surface-600 dark:text-surface-400">본 개인정보 처리방침은 {EFFECTIVE_DATE}부터 시행됩니다.</p>
+                        <p className="text-xs text-surface-600 dark:text-surface-400">
                             {/* 다음 개정부터는 지난 개정의 날짜를 고정해 적는다 — EFFECTIVE_DATE로 쓰면 과거 내용이 새 날짜로 바뀐다 */}
                             개정 이력 · {EFFECTIVE_DATE} 최초 시행
                         </p>

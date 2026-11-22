@@ -1,6 +1,9 @@
 /**
  * OrgCardHeader — 기관 카드 접힌 상태 헤더
- * 기관명, 뱃지(직원 수, 등록일, 경과일, 초대코드), 삭제 버튼
+ * 기관명, 뱃지(직원 수, 신청일, 직원 없이 승인 뒤 지난 날, 초대코드), 삭제 버튼
+ *
+ * 펼치기 버튼과 삭제 버튼을 나란히 둔다 — 예전에는 div role="button" 안에 삭제 버튼이 들어 있어
+ * 화면 읽기 프로그램에서 버튼 안의 버튼이 됐다.
  */
 import { memo, useMemo, useState } from 'react';
 import { formatTimestampFull, toDateOrNull } from '../../../lib/dateUtils';
@@ -16,8 +19,8 @@ interface Props {
 }
 
 function getDaysBadgeStyle(days: number) {
-    if (days >= 14) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-    if (days >= 7) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+    if (days >= 14) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+    if (days >= 7) return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
     return 'bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300';
 }
 
@@ -33,64 +36,53 @@ export default memo(function OrgCardHeader({ org, memberCount, isExpanded, editi
     const appliedDate = formatTimestampFull(org.createdAt);
 
     return (
-        <div
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!editing) onToggle(org.id); } }}
-            className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
-            onClick={() => !editing && onToggle(org.id)}
-        >
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-                {/* 펼침/접힘 화살표 */}
-                <svg
-                    className={`w-4 h-4 text-surface-400 dark:text-surface-500 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
-                    fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
-                >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                </svg>
+        <div className="flex items-center justify-between gap-2 px-2 py-1">
+            <button
+                type="button"
+                onClick={() => { if (!editing) onToggle(org.id); }}
+                aria-expanded={isExpanded}
+                className="flex-1 min-w-0 flex items-start gap-3 text-left px-2 py-2 min-h-[48px] rounded-xl hover:bg-surface-50 dark:hover:bg-surface-700/40 transition-colors"
+            >
+                {/* 펼침/접힘 표시 */}
+                <span aria-hidden="true" className="mt-0.5 w-4 shrink-0 text-surface-600 dark:text-surface-400">
+                    {isExpanded ? '▾' : '▸'}
+                </span>
 
-                {/* 기관명 */}
-                <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">
-                    {org.name}
-                </h3>
-
-                {/* 요약 뱃지들 */}
-                <div className="flex items-center gap-2 shrink-0">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-                        </svg>
-                        {memberCount}명
+                <span className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                    {/* 기관명 — 휴대폰에서 잘리지 않게 줄바꿈한다 */}
+                    <span className="text-sm font-semibold text-surface-900 dark:text-surface-100 break-keep">
+                        {org.name}
                     </span>
 
-                    {appliedDate && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300">
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-                            </svg>
-                            {appliedDate}
-                        </span>
-                    )}
+                    {/* 요약 뱃지들 */}
+                    <span className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
+                        <span className="badge-neutral">직원 {memberCount}명</span>
 
-                    {daysSinceApproval !== null && (
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold ${getDaysBadgeStyle(daysSinceApproval)}`}>
-                            D+{daysSinceApproval}
-                        </span>
-                    )}
+                        {appliedDate && (
+                            <span className="badge-neutral">신청 {appliedDate}</span>
+                        )}
 
-                    <code className="hidden sm:inline-block bg-surface-100 dark:bg-surface-700 px-1.5 py-0.5 rounded text-primary-700 dark:text-primary-300 font-mono text-xs">
-                        {org.inviteCode}
-                    </code>
-                </div>
-            </div>
+                        {daysSinceApproval !== null && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${getDaysBadgeStyle(daysSinceApproval)}`}>
+                                승인 후 {daysSinceApproval}일
+                            </span>
+                        )}
+
+                        <code className="hidden sm:inline-block bg-surface-100 dark:bg-surface-700 px-1.5 py-0.5 rounded text-primary-700 dark:text-primary-300 font-mono text-xs">
+                            <span className="sr-only">초대코드 </span>{org.inviteCode}
+                        </code>
+                    </span>
+                </span>
+            </button>
 
             {/* 삭제 버튼 */}
             <button
-                onClick={(e) => { e.stopPropagation(); onDelete(org); }}
-                className="btn-ghost btn-sm text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0 ml-2"
-                aria-label="기관 삭제"
+                type="button"
+                onClick={() => onDelete(org)}
+                className="btn-icon btn-ghost text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
+                aria-label={`${org.name} 기관 삭제`}
             >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                 </svg>
             </button>

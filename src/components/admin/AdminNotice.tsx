@@ -2,12 +2,13 @@
  * AdminNotice — 관리자 공지사항 전송 컴포넌트
  * 기관 전체 직원에게 공지 알림을 전송합니다.
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { httpsCallable } from 'firebase/functions';
 import { firebaseFunctions } from '../../lib/firebase';
+import PanelModal from './space/PanelModal';
 
 export default function AdminNotice() {
     const { userData } = useAuth();
@@ -16,16 +17,11 @@ export default function AdminNotice() {
     const [title, setTitle] = useState('');
     const [message, setMessage] = useState('');
     const [sending, setSending] = useState(false);
-    const titleRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        if (isOpen) setTimeout(() => titleRef.current?.focus(), 100);
-    }, [isOpen]);
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim() || !message.trim()) {
-            showToast('제목과 내용을 모두 입력해주세요.', 'error');
+            showToast('제목과 내용을 모두 적어 주세요.', 'warning');
             return;
         }
 
@@ -40,103 +36,92 @@ export default function AdminNotice() {
                 message: message.trim(),
             });
 
-            showToast('공지사항이 전송되었습니다.', 'success');
+            showToast('공지를 보냈습니다.', 'success');
             setTitle('');
             setMessage('');
             setIsOpen(false);
         } catch (err) {
             console.error('공지 전송 실패:', err);
-            showToast('공지 전송에 실패했습니다.', 'error');
+            showToast('공지를 보내지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
         } finally {
             setSending(false);
         }
     };
 
+    // 보내는 중에는 닫지 않는다 — 닫혀도 전송은 계속되어 보냈는지 알 수 없게 된다
+    const close = () => { if (!sending) setIsOpen(false); };
+
     return (
         <>
+            {/* 아이콘만 있는 버튼 — 휴대폰에는 마우스 말풍선(title)이 없어 aria-label로 이름을 준다 */}
             <button
+                type="button"
                 onClick={() => setIsOpen(true)}
-                className="btn-icon min-h-[48px] min-w-[48px] text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400"
-                title="공지 보내기"
+                className="btn-icon min-h-[48px] min-w-[48px] text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400"
+                aria-label="직원에게 공지 보내기"
+                title="직원에게 공지 보내기"
             >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 0 8.835-2.535m0 0A23.74 23.74 0 0 0 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
                 </svg>
             </button>
 
+            {/* 예전 창은 role이 없고 Esc가 안 먹었다(안쪽에서 키 입력을 막음) — 공용 대화상자 껍데기로 바꿨다.
+                쓰던 글은 닫아도 남아 있어 다시 열면 이어 쓸 수 있다 */}
             {isOpen && createPortal(
-                <div role="presentation" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" onClick={() => !sending && setIsOpen(false)} onKeyDown={(e) => { if (e.key === 'Escape' && !sending) setIsOpen(false); }}>
-                    <div
-                        role="presentation"
-                        className="bg-white dark:bg-surface-800 rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 animate-scale-in"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-surface-900 dark:text-surface-100">📢 공지사항 보내기</h3>
+                <PanelModal open title="직원에게 공지 보내기" titleId="admin-notice-title" onClose={close}>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
+                        우리 기관 직원 모두에게 앱 알림으로 갑니다.
+                    </p>
+
+                    <form onSubmit={handleSend} className="space-y-3">
+                        <div>
+                            <label htmlFor="admin-notice-subject" className="label">제목</label>
+                            <input
+                                id="admin-notice-subject"
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="예: 다음 주 재물조사 안내"
+                                className="input w-full min-h-[48px]"
+                                maxLength={100}
+                                disabled={sending}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="admin-notice-message" className="label">내용</label>
+                            <textarea
+                                id="admin-notice-message"
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                placeholder="공지 내용을 적어 주세요"
+                                className="input w-full"
+                                rows={4}
+                                maxLength={500}
+                                disabled={sending}
+                                aria-describedby="admin-notice-count"
+                            />
+                            <p id="admin-notice-count" className="text-xs text-surface-600 dark:text-surface-400 mt-1 text-right">{message.length}/500자</p>
+                        </div>
+                        <div className="flex gap-2 pt-2">
                             <button
-                                onClick={() => setIsOpen(false)}
-                                className="btn-icon min-h-[48px] min-w-[48px] text-surface-500 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-300"
-                                aria-label="닫기"
+                                type="button"
+                                onClick={close}
+                                className="btn-secondary flex-1 min-h-[48px]"
                                 disabled={sending}
                             >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                </svg>
+                                취소
+                            </button>
+                            <button
+                                type="submit"
+                                className="btn-primary flex-1 min-h-[48px]"
+                                disabled={sending}
+                            >
+                                {sending ? '보내는 중…' : '공지 보내기'}
                             </button>
                         </div>
-
-                        <p className="text-xs text-surface-500 dark:text-surface-400 mb-4">
-                            기관 소속 전체 직원에게 알림이 전송됩니다.
-                        </p>
-
-                        <form onSubmit={handleSend} className="space-y-3">
-                            <div>
-                                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">제목</label>
-                                <input
-                                    ref={titleRef}
-                                    type="text"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    placeholder="공지 제목을 입력하세요"
-                                    className="input w-full min-h-[48px]"
-                                    maxLength={100}
-                                    disabled={sending}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">내용</label>
-                                <textarea
-                                    value={message}
-                                    onChange={(e) => setMessage(e.target.value)}
-                                    placeholder="공지 내용을 입력하세요"
-                                    className="input w-full"
-                                    rows={4}
-                                    maxLength={500}
-                                    disabled={sending}
-                                />
-                                <p className="text-xs text-surface-500 dark:text-surface-400 mt-1 text-right">{message.length}/500</p>
-                            </div>
-                            <div className="flex gap-2 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsOpen(false)}
-                                    className="btn-secondary flex-1 min-h-[48px]"
-                                    disabled={sending}
-                                >
-                                    취소
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn-primary flex-1 min-h-[48px]"
-                                    disabled={sending}
-                                >
-                                    {sending ? '전송 중...' : '📢 공지 전송'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>,
+                    </form>
+                </PanelModal>,
                 document.body
             )}
         </>

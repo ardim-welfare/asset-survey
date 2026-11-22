@@ -166,7 +166,7 @@ describe('AuditLogViewer', () => {
         render(<AuditLogViewer />);
 
         expect(screen.getByRole('button', { name: '최근 30일' })).toHaveAttribute('aria-pressed', 'false');
-        expect(screen.getByRole('button', { name: '초기화' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '직접 지정 지우기' })).toBeInTheDocument();
     });
 
     it('조회 실패 문구를 그대로 노출한다', () => {

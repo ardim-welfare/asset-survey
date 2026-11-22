@@ -59,7 +59,7 @@ export default function TestOrgPickerModal({ open, roleLabel, orgs, onSelect, on
                 <h2 id="test-org-picker-title" className="text-lg font-bold text-surface-900 dark:text-surface-100">
                     어느 기관의 {roleLabel} 화면을 볼까요?
                 </h2>
-                <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
+                <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                     시스템 관리자 계정은 소속 기관이 없어 볼 기관을 골라야 합니다. 화면에서 바꾼 내용은 그 기관에 그대로 저장됩니다.
                 </p>
                 <input
@@ -84,7 +84,7 @@ export default function TestOrgPickerModal({ open, roleLabel, orgs, onSelect, on
                         </li>
                     ))}
                     {filtered.length === 0 && (
-                        <li className="px-3 py-6 text-center text-sm text-surface-500 dark:text-surface-400">맞는 기관이 없습니다</li>
+                        <li className="px-3 py-6 text-center text-sm text-surface-600 dark:text-surface-400">맞는 기관이 없습니다</li>
                     )}
                 </ul>
                 <div className="mt-4 flex justify-end">

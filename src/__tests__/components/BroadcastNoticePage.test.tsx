@@ -170,7 +170,9 @@ describe('BroadcastNoticePage', () => {
         mocks.callable.mockRejectedValue(new Error('internal'));
         fireEvent.click(btn('발송'));
 
-        await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith('공지 발송에 실패했습니다.', 'error'));
+        // 일부만 나갔을 수 있으므로 다시 보내기 전에 이력을 확인하라고 안내한다
+        await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining('공지를 발송하지 못했습니다'), 'error'));
+        expect(mocks.showToast.mock.calls[0][0]).toContain('발송 이력');
         expect(mocks.captureError).toHaveBeenCalled();
     });
 
@@ -228,6 +230,12 @@ describe('BroadcastNoticePage', () => {
 
         await waitFor(() => expect(mocks.captureError).toHaveBeenCalled());
         expect(btn('대상 확인')).toBeEnabled();
-        expect(screen.getByText('아직 발송한 공지가 없습니다.')).toBeInTheDocument();
+        // "보낸 공지 없음"으로 보이면 이미 보낸 공지를 또 보낼 수 있다 — 실패를 알리고 다시 불러오게 한다
+        expect(screen.queryByText('아직 발송한 공지가 없습니다.')).not.toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent('발송 이력을 불러오지 못했습니다');
+
+        mocks.getRecentBroadcasts.mockResolvedValue([]);
+        fireEvent.click(btn('이력 다시 불러오기'));
+        await waitFor(() => expect(screen.getByText('아직 발송한 공지가 없습니다.')).toBeInTheDocument());
     });
 });

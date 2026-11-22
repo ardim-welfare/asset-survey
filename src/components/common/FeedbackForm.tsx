@@ -35,6 +35,25 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
 
+    /**
+     * 바깥(어두운 배경)을 눌러 닫기 — 쓰던 내용이 있으면 닫지 않는다.
+     * 휴대폰에서 스크롤하다 배경을 잘못 건드려 긴 글이 통째로 사라지던 것을 막는다.
+     * 닫기·취소 버튼과 Esc는 그대로 닫는다.
+     */
+    const handleBackdropClick = () => {
+        if (message.trim() || images.length > 0) return;
+        onClose();
+    };
+
+    // Esc로 닫는다 (보내는 중에는 닫지 않는다)
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !sending) onClose();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose, sending]);
+
     const compressImage = async (file: File): Promise<File> => {
         try {
             return await imageCompression(file, {
@@ -150,7 +169,7 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
             }, 2000);
         } catch (err) {
             console.error('피드백 전송 실패:', err);
-            setError('전송 중 오류가 발생했습니다. 다시 시도해주세요.');
+            setError('보내지 못했습니다. 쓰신 내용은 그대로 있으니 인터넷 연결을 확인하고 다시 눌러 주세요.');
         } finally {
             setSending(false);
         }
@@ -160,21 +179,26 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose} role="presentation">
                 {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
-                <div className="bg-white dark:bg-surface-800 rounded-2xl p-8 max-w-sm mx-4 text-center animate-scale-in" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="feedback-success-title">
+                <div className="relative bg-white dark:bg-surface-800 rounded-2xl p-8 max-w-sm mx-4 text-center animate-scale-in" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="feedback-success-title">
+                    <button type="button" onClick={onClose} aria-label="창 닫기" className="absolute top-2 right-2 btn-icon min-w-[44px] min-h-[44px] flex items-center justify-center text-surface-600 dark:text-surface-400">
+                        <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                     <div className="w-16 h-16 mx-auto mb-4 bg-accent-100 dark:bg-accent-900/40 rounded-full flex items-center justify-center">
                         <svg aria-hidden="true" className="w-8 h-8 text-accent-600 dark:text-accent-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                         </svg>
                     </div>
                     <h3 id="feedback-success-title" className="text-lg font-bold text-surface-900 dark:text-surface-100 mb-1">건의가 전송되었습니다!</h3>
-                    <p className="text-sm text-surface-500 dark:text-surface-400">소중한 의견 감사합니다.</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400">소중한 의견 감사합니다.</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose} role="presentation">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleBackdropClick} role="presentation">
             {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
             <div
                 className="bg-white dark:bg-surface-800 rounded-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-scale-in"
@@ -186,7 +210,7 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
                 {/* 헤더 */}
                 <div className="flex items-center justify-between p-5 border-b border-surface-100 dark:border-surface-700">
                     <h2 id="feedback-form-title" className="text-lg font-bold text-surface-900 dark:text-surface-100">개발자에게 건의하기</h2>
-                    <button onClick={onClose} aria-label="닫기" className="btn-icon text-surface-500 hover:text-surface-600 dark:hover:text-surface-300 dark:text-surface-400 min-w-[48px] min-h-[48px] flex items-center justify-center">
+                    <button type="button" onClick={onClose} aria-label="창 닫기" className="btn-icon text-surface-600 hover:text-surface-800 dark:hover:text-surface-200 dark:text-surface-400 min-w-[48px] min-h-[48px] flex items-center justify-center">
                         <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
@@ -194,16 +218,17 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
                 </div>
 
                 {/* 답변 알림 안내 */}
-                <div className="mx-5 mt-2 flex items-center gap-1.5 text-xs text-surface-500 dark:text-surface-400">
-                    <span>💬</span>
-                    <span>보내신 의견에 대한 답변은 화면 우상단 알림으로 전달됩니다.</span>
+                <div className="mx-5 mt-2 flex items-center gap-1.5 text-xs text-surface-600 dark:text-surface-400">
+                    <span aria-hidden="true">💬</span>
+                    <span>보내신 의견에 대한 답변은 화면 오른쪽 위 알림(종 모양)으로 전달됩니다.</span>
                 </div>
 
                 {/* 폼 */}
                 <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     <div>
-                        <label className="label">건의 내용 <span className="text-red-700 dark:text-red-300">*</span></label>
+                        <label htmlFor="feedback-message" className="label">건의 내용 <span className="text-red-700 dark:text-red-300">*</span></label>
                         <textarea
+                            id="feedback-message"
                             ref={textareaRef}
                             value={message}
                             onChange={e => setMessage(e.target.value)}
@@ -211,23 +236,24 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
                             placeholder={`개발자 김종원이 직접 답변합니다.\n개선 사항, 요청 기능, 오류 신고를 자세하게 작성해서 보내주세요.`}
                             maxLength={2000}
                         />
-                        <p className="text-xs text-surface-500 dark:text-surface-400 mt-1 text-right">{message.length}/2000</p>
+                        <p className="text-xs text-surface-600 dark:text-surface-400 mt-1 text-right">{message.length}/2000</p>
                     </div>
 
                     {/* 이미지 첨부 */}
                     <div>
-                        <label className="label">이미지 첨부 (선택, 최대 3장)</label>
+                        <p className="label">이미지 첨부 (선택, 최대 3장)</p>
                         <div className="flex gap-3 flex-wrap">
                             {images.map((img, idx) => (
                                 <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-surface-200 dark:border-surface-600 group">
                                     <img src={img.preview} alt={`첨부 ${idx + 1}`} className="w-full h-full object-cover" />
                                     <button
                                         type="button"
-                                        aria-label="이미지 삭제"
+                                        aria-label={`첨부 ${idx + 1} 지우기`}
                                         onClick={() => removeImage(idx)}
-                                        className="absolute -top-2 -right-2 w-10 h-10 bg-transparent text-red-500 dark:text-red-600 rounded-full flex items-center justify-center opacity-100 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 transition-opacity min-w-[48px] min-h-[48px]"
+                                        className="absolute -top-2 -right-2 flex items-center justify-center opacity-100 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity min-w-[44px] min-h-[44px]"
                                     >
-                                        <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                        {/* 사진 위에서도 보이도록 흰 원 위에 X를 그린다 */}
+                                        <svg aria-hidden="true" className="w-6 h-6 p-1 rounded-full bg-white/95 dark:bg-surface-800/95 shadow text-red-700 dark:text-red-300" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                         </svg>
                                     </button>
@@ -237,19 +263,21 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
                             {images.length < 3 && (
                                 <button
                                     type="button"
+                                    aria-label="이미지 추가"
                                     onClick={() => fileInputRef.current?.click()}
                                     className="w-20 h-20 rounded-xl border-2 border-dashed border-surface-200 dark:border-surface-600 hover:border-primary-300 dark:hover:border-primary-700/50 hover:bg-primary-50/30 flex flex-col items-center justify-center transition-all"
                                 >
-                                    <svg aria-hidden="true" className="w-6 h-6 text-surface-300 dark:text-surface-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                    <svg aria-hidden="true" className="w-6 h-6 text-surface-600 dark:text-surface-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
-                                    <span className="text-[10px] text-surface-500 dark:text-surface-400 mt-0.5">추가</span>
+                                    <span aria-hidden="true" className="text-xs text-surface-600 dark:text-surface-400 mt-0.5">추가</span>
                                 </button>
                             )}
                         </div>
                         <input
                             ref={fileInputRef}
                             type="file"
+                            aria-label="첨부할 이미지 고르기"
                             accept="image/jpeg,image/png"
                             multiple
                             onChange={handleImageChange}
@@ -258,7 +286,7 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
                     </div>
 
                     {error && (
-                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3 text-sm text-red-600 dark:text-red-400 animate-slide-down">
+                        <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3 text-sm text-red-700 dark:text-red-300 animate-slide-down">
                             {error}
                         </div>
                     )}

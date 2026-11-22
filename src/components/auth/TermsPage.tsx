@@ -20,11 +20,13 @@ export default function TermsPage() {
             />
             <div className="w-full max-w-2xl mx-auto animate-fade-in">
                 {/* 뒤로가기 */}
+                {/* 새 탭(약관 동의 칸의 링크)으로 열리면 되돌아갈 기록이 없다 — 그때는 첫 화면으로 보낸다 */}
                 <button
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-1.5 text-sm text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 dark:text-surface-300 mb-6 transition-colors min-h-[48px] px-2 -ml-2"
+                    type="button"
+                    onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/'))}
+                    className="flex items-center gap-1.5 text-sm text-surface-700 dark:text-surface-300 hover:text-surface-900 dark:hover:text-surface-100 mb-6 transition-colors min-h-[48px] px-2 -ml-2"
                 >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                     </svg>
                     돌아가기
@@ -33,7 +35,7 @@ export default function TermsPage() {
                 <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-soft p-6 md:p-8 space-y-8">
                     <div className="text-center border-b border-surface-100 dark:border-surface-700 pb-6">
                         <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">이용약관</h1>
-                        <p className="text-sm text-surface-500 dark:text-surface-400">시행일: {EFFECTIVE_DATE}</p>
+                        <p className="text-sm text-surface-600 dark:text-surface-400">시행일: {EFFECTIVE_DATE}</p>
                     </div>
 
                     {/* 제1조 */}
@@ -255,8 +257,8 @@ export default function TermsPage() {
                     </section>
 
                     <div className="border-t border-surface-100 dark:border-surface-700 pt-4 space-y-2 text-center">
-                        <p className="text-xs text-surface-500 dark:text-surface-400">본 약관은 {EFFECTIVE_DATE}부터 시행됩니다.</p>
-                        <p className="text-xs text-surface-500 dark:text-surface-400">
+                        <p className="text-xs text-surface-600 dark:text-surface-400">본 약관은 {EFFECTIVE_DATE}부터 시행됩니다.</p>
+                        <p className="text-xs text-surface-600 dark:text-surface-400">
                             {/* 지난 개정의 날짜는 고정한다 — EFFECTIVE_DATE로 쓰면 다음 개정 때 과거 내용이 새 날짜로 바뀐다 */}
                             개정 이력 · {EFFECTIVE_DATE} 최초 시행
                         </p>

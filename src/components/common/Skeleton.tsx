@@ -5,7 +5,7 @@ interface SkeletonBoxProps {
 
 export function SkeletonBox({ className = '' }: SkeletonBoxProps) {
     return (
-        <div className={`animate-pulse bg-gray-200 dark:bg-gray-800/40 rounded ${className}`} />
+        <div aria-hidden="true" className={`animate-pulse bg-gray-200 dark:bg-gray-800/40 rounded ${className}`} />
     );
 }
 

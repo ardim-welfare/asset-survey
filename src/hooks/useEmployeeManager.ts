@@ -234,7 +234,7 @@ export default function useEmployeeManager() {
         const typed = await confirm({
             type: 'input',
             title: '직원 완전 삭제',
-            message: `${emp.name || emp.email} 직원의 계정을 영구 삭제합니다.\n\n• 계정과 개인 데이터(즐겨찾기 등)가 삭제되며 되돌릴 수 없습니다.\n• 과거 운행 기록은 그대로 보존됩니다.\n\n삭제하려면 아래에 "${confirmKey}"를 입력하세요.`,
+            message: `${emp.name || emp.email} 직원의 계정을 영구 삭제합니다.\n\n• 계정이 삭제되며 되돌릴 수 없습니다.\n• 이 직원이 남긴 재물조사(스캔) 기록과 변경 이력은 그대로 남습니다.\n\n삭제하려면 아래에 "${confirmKey}"를 입력하세요.`,
             inputPlaceholder: confirmKey,
             confirmColor: 'danger',
             confirmText: '완전 삭제',

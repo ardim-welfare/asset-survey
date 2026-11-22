@@ -2,7 +2,7 @@
  * LandingPage — 서비스 소개 (비로그인 첫 화면)
  */
 import { Suspense, lazy, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import useForceLightMode from '../../hooks/useForceLightMode';
 import SEOHead from '../common/SEOHead';
 import PublicNav from '../common/PublicNav';
@@ -105,7 +105,7 @@ export default function LandingPage() {
                 isHome
             />
             {/* 배경 장식 */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
                 <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-400/20 rounded-full blur-3xl" />
                 <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-primary-300/10 rounded-full blur-3xl" />
                 <div className="absolute top-1/3 left-1/4 w-64 h-64 bg-accent-400/10 rounded-full blur-3xl" />
@@ -124,19 +124,21 @@ export default function LandingPage() {
                 <p className="text-primary-200 text-base sm:text-lg max-w-md mb-2 animate-fade-in">
                     사회복지기관·비영리단체 전용
                 </p>
-                <p className="text-primary-300/80 text-sm max-w-sm mb-8 animate-fade-in">
+                <p className="text-primary-100 text-sm max-w-sm mb-8 animate-fade-in">
                     엑셀 대장을 올리고, QR 라벨을 붙이고, 휴대폰으로 찍으면 끝.<br />
                     연 1회 재물조사를 공간 담당자와 함께 나눠서 합니다.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-md animate-fade-in">
                     <button
+                        type="button"
                         onClick={() => navigate('/apply')}
                         className="flex-1 btn bg-white dark:bg-surface-800 text-primary-700 dark:text-primary-300 font-bold hover:bg-primary-50 dark:hover:bg-primary-900/30 shadow-lg hover:shadow-xl transition-all min-h-[48px]"
                     >
                         서비스 도입 신청
                     </button>
                     <button
+                        type="button"
                         onClick={() => navigate('/login')}
                         className="flex-1 btn bg-white/10 dark:bg-surface-800/10 backdrop-blur-sm text-white border border-white/20 hover:bg-white/20 transition-all min-h-[48px]"
                     >
@@ -145,10 +147,11 @@ export default function LandingPage() {
                 </div>
 
                 <div className="mt-4 flex flex-col items-center gap-2">
-                    <p className="text-primary-300/60 text-xs">✨ 완전 무료 · 광고 없음 · 지금은 서비스를 준비하고 있어요</p>
-                    <button 
+                    <p className="text-primary-100 text-xs"><span aria-hidden="true">✨ </span>완전 무료 · 광고 없음 · 신청하면 바로 쓸 수 있어요</p>
+                    <button
+                        type="button"
                         onClick={() => setIsFeedbackModalOpen(true)}
-                        className="text-primary-300/80 hover:text-white text-sm underline underline-offset-4 transition-colors min-h-[48px] px-4 py-2"
+                        className="text-primary-100 hover:text-white text-sm underline underline-offset-4 transition-colors min-h-[48px] px-4 py-2"
                     >
                         이용 문의하기
                     </button>
@@ -166,7 +169,7 @@ export default function LandingPage() {
                                     {s.num}
                                 </div>
                                 <h3 className="text-lg font-semibold mb-2">{s.title}</h3>
-                                <p className="text-primary-200/80 text-sm leading-relaxed">{s.desc}</p>
+                                <p className="text-primary-100 text-sm leading-relaxed">{s.desc}</p>
                             </div>
                         ))}
                     </div>
@@ -177,16 +180,16 @@ export default function LandingPage() {
             <section className="relative bg-white dark:bg-surface-800 text-surface-900 dark:text-surface-100 px-4 py-16 sm:py-20">
                 <div className="max-w-4xl mx-auto">
                     <h2 className="text-2xl font-bold text-center mb-2">주요 기능</h2>
-                    <p className="text-center text-sm text-surface-500 dark:text-surface-400 mb-10">아래 기능은 차례로 준비하고 있습니다.</p>
+                    <p className="text-center text-sm text-surface-600 dark:text-surface-400 mb-10">아래 기능을 지금 바로 쓸 수 있습니다.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         {FEATURES.map((f) => (
                             <div
                                 key={f.title}
-                                className="bg-surface-50 dark:bg-surface-800 rounded-2xl p-6 text-center hover:shadow-lg transition-shadow"
+                                className="bg-surface-50 dark:bg-surface-800 rounded-2xl p-6 text-center"
                             >
-                                <div className="text-4xl mb-4">{f.icon}</div>
+                                <div className="text-4xl mb-4" aria-hidden="true">{f.icon}</div>
                                 <h3 className="text-lg font-semibold mb-2">{f.title}</h3>
-                                <p className="text-sm text-surface-500 dark:text-surface-400 leading-relaxed">{f.desc}</p>
+                                <p className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed">{f.desc}</p>
                             </div>
                         ))}
                     </div>
@@ -198,7 +201,7 @@ export default function LandingPage() {
                                 key={s.label}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-sm font-medium"
                             >
-                                {s.icon} {s.label}
+                                <span aria-hidden="true">{s.icon}</span> {s.label}
                             </span>
                         ))}
                     </div>
@@ -214,7 +217,7 @@ export default function LandingPage() {
                         <strong>고유번호증 또는 사업자등록증을 보유한 비영리단체</strong>라면 누구나 신청할 수 있습니다.
                     </p>
                     <div className="inline-flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200 rounded-xl px-4 py-2 text-sm">
-                        <span>⚠️</span>
+                        <span aria-hidden="true">⚠️</span>
                         <span>영리 기업 및 종교단체, 학교, 병원은 이용 대상이 아닙니다</span>
                     </div>
                 </div>
@@ -223,8 +226,9 @@ export default function LandingPage() {
             {/* ─── CTA ─── */}
             <section className="relative bg-primary-800 text-white px-4 py-12 sm:py-16 text-center">
                 <h2 className="text-xl font-bold mb-2">재물조사, 올해는 함께 나눠서 해 볼까요?</h2>
-                <p className="text-primary-300 text-sm mb-6">신청 후 영업일 기준 1~2일 안에 꼼꼼히 확인하고 승인해 드립니다.</p>
+                <p className="text-primary-100 text-sm mb-6">AI가 서류를 먼저 확인하고, 확인이 더 필요하면 영업일 기준 1~2일 안에 직접 살펴 승인해 드립니다.</p>
                 <button
+                    type="button"
                     onClick={() => navigate('/apply')}
                     className="btn bg-white dark:bg-surface-800 text-primary-700 dark:text-primary-300 font-bold hover:bg-primary-50 dark:hover:bg-primary-900/30 shadow-lg hover:shadow-xl transition-all min-h-[48px]"
                 >
@@ -233,11 +237,11 @@ export default function LandingPage() {
             </section>
 
             {/* ─── 푸터 ─── */}
-            <footer className="relative bg-primary-900 text-primary-300/60 text-center text-xs px-4 py-6 space-y-2" role="contentinfo">
+            <footer className="relative bg-primary-900 text-primary-200 text-center text-xs px-4 py-6 space-y-2" role="contentinfo">
                 <nav className="space-x-2 flex items-center justify-center min-h-[48px]" aria-label="법적 고지">
-                    <a href="/terms" className="hover:text-white underline underline-offset-2 transition-colors p-2">이용약관</a>
-                    <span className="text-primary-300/30" aria-hidden="true">|</span>
-                    <a href="/privacy" className="hover:text-white underline underline-offset-2 transition-colors p-2">개인정보 처리방침</a>
+                    <Link to="/terms" className="hover:text-white underline underline-offset-2 transition-colors p-2 min-h-[44px] inline-flex items-center">이용약관</Link>
+                    <span className="text-primary-300/60" aria-hidden="true">|</span>
+                    <Link to="/privacy" className="hover:text-white underline underline-offset-2 transition-colors p-2 min-h-[44px] inline-flex items-center">개인정보 처리방침</Link>
                 </nav>
                 <p>© 2026 재물조사. All rights reserved.</p>
             </footer>

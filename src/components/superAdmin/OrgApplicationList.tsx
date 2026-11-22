@@ -17,6 +17,8 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
     const [applications, setApplications] = useState<Organization[]>([]);
     const [rejectedApps, setRejectedApps] = useState<Organization[]>([]);
     const [loading, setLoading] = useState(true);
+    // 목록을 못 읽었을 때 "대기 중인 신청이 없습니다"로 오해하지 않게 오류를 따로 보여 준다
+    const [loadError, setLoadError] = useState(false);
     const [actionLoading, setActionLoading] = useState<Record<string, string | null>>({});
     const [selectedApp, setSelectedApp] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -24,6 +26,7 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
     const { confirm } = useConfirm();
 
     const fetchData = async () => {
+        setLoadError(false);
         try {
             const [pending, rejected] = await Promise.all([
                 getPendingOrganizations(),
@@ -31,9 +34,9 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
             ]);
             setApplications(pending as Organization[]);
             setRejectedApps(rejected as Organization[]);
-            onCountChange?.();
         } catch (err) {
             console.error('데이터 조회 실패:', err);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -42,10 +45,16 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
     // 최초 1회 데이터 조회
     useEffect(() => {
         fetchData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 때 한 번만 조회한다. 이후 갱신은 승인·반려 핸들러가 fetchData를 직접 부른다
+        // 마운트 때 한 번만 조회한다. 이후 갱신은 승인·반려 핸들러가 목록 상태를 직접 고친다
     }, []);
 
     const handleApprove = async (app: Organization) => {
+        // 승인하면 신청자에게 이메일·알림톡이 바로 나가고 되돌릴 수 없다 — 한 번 더 묻는다
+        if (!await confirm({
+            title: '기관 승인',
+            message: `${app.name} 기관을 승인하시겠습니까?\n\n• 초대 코드가 만들어지고 신청자에게 승인 이메일·알림톡이 바로 발송됩니다.\n• 발송한 안내는 되돌릴 수 없습니다.`,
+            confirmText: '승인',
+        })) return;
         setActionLoading(prev => ({ ...prev, [app.id]: 'approve' }));
         try {
             const inviteCode = generateInviteCode();
@@ -102,10 +111,11 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
             // 상태 업데이트
             setApplications(prev => prev.filter(a => a.id !== app.id));
             onCountChange?.();
+            showToast(`${app.name} 기관을 승인했습니다. 초대 코드: ${inviteCode}`, 'success');
 
         } catch (err) {
             console.error('승인 실패:', err);
-            showToast('기관 승인 처리에 실패했습니다.', 'error');
+            showToast('기관을 승인하지 못했습니다. 잠시 후 다시 시도해 주세요. 계속 안 되면 화면을 새로고침해 승인 여부를 확인해 주세요.', 'error');
         } finally {
             setActionLoading(prev => ({ ...prev, [app.id]: null }));
         }
@@ -118,16 +128,21 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
         try {
             await rejectOrganization(app.id, reason);
 
-            // In-app 알림 생성
-            const admins = await getOrganizationAdmins(app.id);
-            for (const admin of admins) {
-                await createNotification({
-                    targetUid: admin.id,
-                    type: 'rejection',
-                    title: '기관 승인 거절',
-                    message: `${app.name} 기관 신청이 거절되었습니다.\n사유: ${reason}`,
-                    organizationId: app.id,
-                });
+            // In-app 알림 생성 — best-effort. 반려는 이미 저장됐으므로 여기서 실패해도
+            // "반려 실패"로 알리면 운영자가 다시 눌러 같은 안내가 두 번 나간다
+            try {
+                const admins = await getOrganizationAdmins(app.id);
+                for (const admin of admins) {
+                    await createNotification({
+                        targetUid: admin.id,
+                        type: 'rejection',
+                        title: '기관 승인 거절',
+                        message: `${app.name} 기관 신청이 거절되었습니다.\n사유: ${reason}`,
+                        organizationId: app.id,
+                    });
+                }
+            } catch (notifyErr) {
+                console.warn('반려 알림 생성 실패 (반려는 완료됨):', notifyErr);
             }
 
             // 반려 이메일 발송
@@ -170,25 +185,28 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
             setApplications(prev => prev.filter(a => a.id !== app.id));
             setRejectedApps(prev => [{ ...app, status: 'rejected' }, ...prev]);
             onCountChange?.();
+            showToast(`${app.name} 기관 신청을 거절했습니다. 거절됨 탭에서 볼 수 있습니다.`, 'success');
 
         } catch (err) {
             console.error('거절 실패:', err);
-            showToast('기관 반려 처리에 실패했습니다.', 'error');
+            showToast('기관 신청을 거절하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         } finally {
             setActionLoading(prev => ({ ...prev, [app.id]: null }));
         }
     };
 
     const handleDelete = async (app: Organization) => {
-        if (!await confirm({ message: `${app.name} 기관의 신청 기록을 완전히 삭제하시겠습니까?`, confirmColor: 'danger' })) return;
+        if (!await confirm({ title: '신청 기록 삭제', message: `${app.name} 기관의 신청 기록을 완전히 삭제하시겠습니까?\n\n삭제한 기록은 되돌릴 수 없습니다.`, confirmText: '삭제', confirmColor: 'danger' })) return;
 
         setActionLoading(prev => ({ ...prev, [app.id]: 'delete' }));
         try {
             await deleteOrganization(app.id);
 
             setRejectedApps(prev => prev.filter(a => a.id !== app.id));
+            showToast(`${app.name} 기관의 신청 기록을 삭제했습니다.`, 'success');
         } catch (err) {
             console.error('삭제 실패:', err);
+            showToast('신청 기록을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         } finally {
             setActionLoading(prev => ({ ...prev, [app.id]: null }));
         }
@@ -196,7 +214,7 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
 
     // 거절된 신청을 대기중으로 되돌리기
     const handleMoveToPending = async (app: Organization) => {
-        if (!await confirm({ message: `${app.name} 기관의 신청을 대기 중 상태로 되돌리시겠습니까?` })) return;
+        if (!await confirm({ title: '대기 중으로 되돌리기', message: `${app.name} 기관의 신청을 대기 중 상태로 되돌리시겠습니까?`, confirmText: '되돌리기' })) return;
 
         setActionLoading(prev => ({ ...prev, [app.id]: 'moveToPending' }));
         try {
@@ -210,7 +228,7 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
             onCountChange?.();
         } catch (err) {
             console.error('대기중 이동 실패:', err);
-            showToast('대기중으로 이동하는데 실패했습니다.', 'error');
+            showToast('대기 중으로 되돌리지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         } finally {
             setActionLoading(prev => ({ ...prev, [app.id]: null }));
         }
@@ -279,7 +297,7 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-20">
+            <div className="flex items-center justify-center py-20" role="status" aria-label="신청 목록 불러오는 중">
                 <div className="w-8 h-8 spinner" />
             </div>
         );
@@ -289,34 +307,54 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
         <div className="max-w-4xl mx-auto animate-fade-in">
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">기관 신청 관리</h1>
-                <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">기관 신청을 검토하고 관리하세요</p>
+                <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">기관 신청을 검토하고 관리하세요</p>
             </div>
+
+            {loadError && (
+                <div className="glass-card p-5 mb-4 border border-red-200 dark:border-red-800" role="alert">
+                    <p className="font-semibold text-red-700 dark:text-red-300">신청 목록을 불러오지 못했습니다</p>
+                    <p className="mt-1 text-sm text-surface-700 dark:text-surface-300">
+                        인터넷 연결을 확인한 뒤 다시 시도해 주세요. 계속 안 되면 화면을 새로고침해 주세요.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => { setLoading(true); void fetchData(); }}
+                        className="btn-secondary btn-sm min-h-[44px] mt-3"
+                    >
+                        다시 시도
+                    </button>
+                </div>
+            )}
 
             {/* 탭 */}
             <div className="flex gap-1 mb-4 bg-surface-100 dark:bg-surface-800 rounded-xl p-1">
                 <button
+                    type="button"
+                    aria-pressed={tab === 'pending'}
                     onClick={() => setTab('pending')}
                     className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all min-h-[48px] ${tab === 'pending'
                         ? 'bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 shadow-sm'
-                        : 'text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:text-surface-300'
+                        : 'text-surface-600 dark:text-surface-400 hover:text-surface-800 dark:hover:text-surface-200'
                         }`}
                 >
                     대기 중 {applications.length > 0 && (
-                        <span className="ml-1 inline-flex items-center justify-center w-5 h-5 text-xs rounded-full badge-warning dark:text-amber-300">
-                            {applications.length}
+                        <span className="ml-1 badge-warning min-w-[20px] justify-center">
+                            {applications.length}<span className="sr-only">건</span>
                         </span>
                     )}
                 </button>
                 <button
+                    type="button"
+                    aria-pressed={tab === 'rejected'}
                     onClick={() => setTab('rejected')}
                     className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all min-h-[48px] ${tab === 'rejected'
-                        ? 'bg-white dark:bg-surface-700 text-red-600 dark:text-red-400 shadow-sm'
-                        : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:text-surface-300'
+                        ? 'bg-white dark:bg-surface-700 text-red-700 dark:text-red-300 shadow-sm'
+                        : 'text-surface-600 dark:text-surface-400 hover:text-surface-800 dark:hover:text-surface-200'
                         }`}
                 >
                     거절됨 {rejectedApps.length > 0 && (
-                        <span className="ml-1 inline-flex items-center justify-center w-5 h-5 text-xs rounded-full badge-danger dark:text-red-300">
-                            {rejectedApps.length}
+                        <span className="ml-1 badge-danger min-w-[20px] justify-center">
+                            {rejectedApps.length}<span className="sr-only">건</span>
                         </span>
                     )}
                 </button>
@@ -326,7 +364,7 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
             {(applications.length > 0 || rejectedApps.length > 0) && (
                 <div className="mb-4">
                     <div className="relative">
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 dark:text-surface-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500 dark:text-surface-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
                         <input
@@ -334,18 +372,19 @@ export default function OrgApplicationList({ onCountChange }: OrgApplicationList
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="input pl-10 min-h-[48px]"
+                            aria-label="신청 검색"
                             placeholder="기관명, 신청자, 이메일, 전화번호 검색"
                         />
                     </div>
                 </div>
             )}
 
-            {currentList.length === 0 ? (
+            {loadError ? null : currentList.length === 0 ? (
                 <div className="glass-card p-12 text-center">
-                    <svg className="w-16 h-16 mx-auto text-surface-200 dark:text-surface-600 mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                    <svg className="w-16 h-16 mx-auto text-surface-200 dark:text-surface-600 mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
                     </svg>
-                    <p className="text-surface-500 dark:text-surface-400 text-lg font-medium">
+                    <p className="text-surface-600 dark:text-surface-400 text-lg font-medium">
                         {searchQuery.trim()
                             ? '검색 결과가 없습니다'
                             : tab === 'pending' ? '대기 중인 신청이 없습니다' : '거절된 신청 내역이 없습니다'

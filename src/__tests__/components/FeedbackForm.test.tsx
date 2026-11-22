@@ -76,7 +76,19 @@ describe('FeedbackForm 접근성', () => {
         const onClose = vi.fn();
         render(<FeedbackForm onClose={onClose} />);
 
-        fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+        fireEvent.click(screen.getByRole('button', { name: '창 닫기' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('쓰던 내용이 있으면 백드롭을 눌러도 닫히지 않는다 — Esc·닫기 버튼으로만 닫는다', () => {
+        const onClose = vi.fn();
+        render(<FeedbackForm onClose={onClose} />);
+
+        fireEvent.change(screen.getByLabelText(/건의 내용/), { target: { value: '라벨 인쇄 여백이 어긋나요' } });
+        fireEvent.click(screen.getByRole('dialog').parentElement!);
+        expect(onClose).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 });

@@ -66,14 +66,25 @@ export default function BroadcastNoticePage() {
     const [preview, setPreview] = useState<PreviewResult | null>(null);
     const [busy, setBusy] = useState(false);
     const [history, setHistory] = useState<Broadcast[] | null>(null);
+    // 이력 조회 실패 — "아직 발송한 공지가 없습니다"로 보이면 이미 보낸 공지를 다시 보낼 수 있다
+    const [historyError, setHistoryError] = useState(false);
+    // 전문을 펼친 이력 — 두 줄로 잘린 본문을 끝까지 볼 수 있게 한다
+    const [openHistory, setOpenHistory] = useState<Set<string>>(() => new Set());
+    const toggleHistory = (id: string) => setOpenHistory(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
 
     /** 발송 이력을 다시 읽는다. 실패해도 발송 화면은 계속 쓸 수 있어야 한다. */
     const loadHistory = useCallback(async () => {
         try {
             setHistory(await getRecentBroadcasts());
+            setHistoryError(false);
         } catch (err) {
             captureError(err, { context: 'BroadcastNoticePage.history' });
             setHistory([]);
+            setHistoryError(true);
         }
     }, []);
 
@@ -107,7 +118,7 @@ export default function BroadcastNoticePage() {
             setPreview(res.data as PreviewResult);
         } catch (err) {
             captureError(err, { context: 'BroadcastNoticePage.preview' });
-            showToast('대상 확인에 실패했습니다.', 'error');
+            showToast('대상을 확인하지 못했습니다. 인터넷 연결을 확인한 뒤 [대상 확인]을 다시 눌러 주세요.', 'error');
         } finally {
             setBusy(false);
         }
@@ -122,7 +133,7 @@ export default function BroadcastNoticePage() {
                 `${preview.recipientCount}명에게 앱 내 알림이 남고, 그중 ${preview.pushableCount}명에게 푸시가 발송됩니다. ` +
                 '발송 후에는 취소할 수 없습니다.',
             confirmText: '발송',
-            confirmColor: 'warning',
+            confirmColor: 'danger',
         });
         if (!ok) return;
 
@@ -146,7 +157,9 @@ export default function BroadcastNoticePage() {
             void loadHistory();
         } catch (err) {
             captureError(err, { context: 'BroadcastNoticePage.send' });
-            showToast('공지 발송에 실패했습니다.', 'error');
+            // 서버에서 일부만 나갔을 수 있다 — 다시 보내기 전에 이력부터 보게 한다
+            showToast('공지를 발송하지 못했습니다. 아래 최근 발송 이력에 올라왔는지 먼저 확인한 뒤 다시 시도해 주세요.', 'error');
+            void loadHistory();
         } finally {
             setBusy(false);
         }
@@ -155,8 +168,8 @@ export default function BroadcastNoticePage() {
     return (
         <div className="max-w-2xl space-y-6">
             <div>
-                <h1 className="text-xl font-bold text-surface-900 dark:text-surface-100 mb-1">전체 공지</h1>
-                <p className="text-sm text-surface-500 dark:text-surface-400">
+                <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">전체 공지</h1>
+                <p className="text-sm text-surface-600 dark:text-surface-400">
                     승인된 전체 기관의 관리자·직원에게 앱 내 알림과 푸시를 보냅니다.
                     비활성 계정과 기관 미소속 계정은 제외됩니다.
                 </p>
@@ -164,7 +177,7 @@ export default function BroadcastNoticePage() {
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/20">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
-                    ⚠️ 발송한 공지는 <strong>취소할 수 없습니다.</strong> [대상 확인]으로 인원을 먼저 확인한 뒤 발송하세요.
+                    <span aria-hidden="true">⚠️ </span>발송한 공지는 <strong>취소할 수 없습니다.</strong> [대상 확인]으로 인원을 먼저 확인한 뒤 발송하세요.
                     내용을 수정하면 확인 결과가 초기화됩니다.
                 </p>
             </div>
@@ -183,7 +196,7 @@ export default function BroadcastNoticePage() {
                         className="input w-full min-h-[48px]"
                         placeholder="공지 제목"
                     />
-                    <p className="mt-1 text-xs text-surface-500 dark:text-surface-400 text-right">
+                    <p className="mt-1 text-xs text-surface-600 dark:text-surface-400 text-right">
                         {trimmedTitle.length} / {MAX_TITLE}
                     </p>
                 </div>
@@ -201,7 +214,7 @@ export default function BroadcastNoticePage() {
                         className="input w-full resize-y"
                         placeholder="공지 내용"
                     />
-                    <p className="mt-1 text-xs text-surface-500 dark:text-surface-400 text-right">
+                    <p className="mt-1 text-xs text-surface-600 dark:text-surface-400 text-right">
                         {trimmedMessage.length} / {MAX_MESSAGE}
                     </p>
                 </div>
@@ -216,7 +229,7 @@ export default function BroadcastNoticePage() {
                         수신 대상 <strong>{preview.recipientCount}명</strong>
                         <span className="text-xs"> · 푸시 가능 {preview.pushableCount}명</span>
                     </p>
-                    <p className="mt-1 text-xs text-primary-700 dark:text-primary-400">
+                    <p className="mt-1 text-xs text-primary-700 dark:text-primary-300">
                         푸시 알림을 허용하지 않은 분에게도 앱 내 알림은 남습니다.
                     </p>
                 </div>
@@ -242,7 +255,7 @@ export default function BroadcastNoticePage() {
             </div>
 
             {!preview && (
-                <p className="text-xs text-surface-500 dark:text-surface-400">
+                <p className="text-xs text-surface-600 dark:text-surface-400">
                     발송하려면 먼저 [대상 확인]을 눌러 인원을 확인하세요.
                 </p>
             )}
@@ -253,11 +266,22 @@ export default function BroadcastNoticePage() {
                 </h2>
 
                 {history === null && (
-                    <p className="text-sm text-surface-500 dark:text-surface-400">불러오는 중...</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400" role="status">불러오는 중...</p>
                 )}
 
-                {history?.length === 0 && (
-                    <p className="text-sm text-surface-500 dark:text-surface-400">아직 발송한 공지가 없습니다.</p>
+                {historyError && (
+                    <div role="alert">
+                        <p className="text-sm text-red-700 dark:text-red-300">
+                            발송 이력을 불러오지 못했습니다. 같은 공지를 두 번 보내지 않도록 다시 불러와 확인한 뒤 발송하세요.
+                        </p>
+                        <button type="button" onClick={() => void loadHistory()} className="btn-secondary btn-sm min-h-[44px] mt-2">
+                            이력 다시 불러오기
+                        </button>
+                    </div>
+                )}
+
+                {!historyError && history?.length === 0 && (
+                    <p className="text-sm text-surface-600 dark:text-surface-400">아직 발송한 공지가 없습니다.</p>
                 )}
 
                 {history && history.length > 0 && (
@@ -271,14 +295,23 @@ export default function BroadcastNoticePage() {
                                     <p className="text-sm font-medium text-surface-800 dark:text-surface-200 break-all">
                                         {b.title}
                                     </p>
-                                    <span className="shrink-0 text-xs text-surface-500 dark:text-surface-400">
+                                    <span className="shrink-0 text-xs text-surface-600 dark:text-surface-400">
                                         {formatTimestampFull(b.sentAt as never) ?? '-'}
                                     </span>
                                 </div>
-                                <p className="mt-1 text-xs text-surface-500 dark:text-surface-400 line-clamp-2 break-all">
+                                <p className={`mt-1 text-xs text-surface-600 dark:text-surface-400 break-all ${openHistory.has(b.id) ? 'whitespace-pre-wrap' : 'line-clamp-2'}`}>
                                     {b.message}
                                 </p>
-                                <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleHistory(b.id)}
+                                    aria-expanded={openHistory.has(b.id)}
+                                    className="btn-secondary btn-sm min-h-[44px] mt-2"
+                                >
+                                    <span aria-hidden="true">{openHistory.has(b.id) ? '▾' : '▸'}</span>
+                                    {openHistory.has(b.id) ? '본문 접기' : '본문 전체 보기'}
+                                </button>
+                                <p className="mt-2 text-xs text-surface-600 dark:text-surface-400">
                                     수신 {b.recipientCount}명
                                     {b.status === 'sent'
                                         ? <> · 푸시 성공 {b.pushSent ?? 0}
@@ -287,7 +320,7 @@ export default function BroadcastNoticePage() {
                                         : (
                                             // 함수가 푸시 도중 죽으면 이 상태로 남는다.
                                             // "알림은 나갔고 푸시 결과만 모른다"는 뜻이라 재발송 판단의 근거가 된다.
-                                            <span className="text-amber-600 dark:text-amber-400"> · 푸시 결과 미확인</span>
+                                            <span className="text-amber-800 dark:text-amber-300"> · 푸시 결과 미확인</span>
                                         )}
                                 </p>
                             </li>

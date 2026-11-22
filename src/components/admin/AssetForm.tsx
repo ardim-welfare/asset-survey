@@ -12,7 +12,7 @@ import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
 import type { AssetStatus } from '../../types/asset';
 
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
 const labelCls = 'block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1';
 
 export default function AssetForm() {
@@ -25,12 +25,12 @@ export default function AssetForm() {
         if (f.errorField) document.getElementById(`asset-${f.errorField}`)?.focus();
     }, [f.error, f.errorField]);
 
-    if (f.loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
+    if (f.loading) return <div className="flex justify-center py-20" role="status" aria-label="재물 정보를 불러오는 중"><div className="w-8 h-8 spinner" aria-hidden="true" /></div>;
     if (f.loadError) {
         return (
             <div className="max-w-lg mx-auto glass-card p-6 text-center">
-                <p className="text-surface-700 dark:text-surface-300 mb-4">재물 정보를 불러오지 못했습니다.</p>
-                <div className="flex justify-center gap-2">
+                <p className="text-surface-700 dark:text-surface-300 mb-4 break-keep" role="alert">재물 정보를 불러오지 못했습니다. 인터넷 연결을 확인하고 [다시 불러오기]를 눌러 주세요.</p>
+                <div className="flex flex-wrap justify-center gap-2">
                     <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={() => void f.reload()}>다시 불러오기</button>
                     <Link to="/admin/assets" className="btn-primary min-h-[48px] px-5">목록으로</Link>
                 </div>
@@ -57,11 +57,11 @@ export default function AssetForm() {
 
     return (
         <div className="max-w-2xl mx-auto animate-fade-in">
-            <Link to={f.isNew ? '/admin/assets' : detailPath(assetId!)} className="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 min-h-[44px]">
+            <Link to={f.isNew ? '/admin/assets' : detailPath(assetId!)} className="inline-flex items-center gap-1 text-sm font-medium text-primary-700 dark:text-primary-300 min-h-[44px] pr-2">
                 <span aria-hidden="true">←</span> {f.isNew ? '재물 목록' : '재물 정보'}
             </Link>
             <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mt-1 mb-2">{f.isNew ? '재물 등록' : '재물 고치기'}</h1>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mb-4">
+            <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
                 {f.isNew
                     ? '대장 엑셀에 없는 물건을 한 건씩 등록합니다. 여러 건이면 [재물 가져오기]로 엑셀을 올리는 편이 빠릅니다.'
                     : '고친 내용은 변경 이력에 남습니다.'}
@@ -169,7 +169,7 @@ function DepartmentField({ value, options, onChange, fromSpace }: { value: strin
     return (
         <Field id="asset-department" label="부서" hint={hint}>
             {!direct && options.length > 0 ? (
-                <select id="asset-department" className="input w-full min-h-[48px]" value={inList ? value : ''}
+                <select id="asset-department" className="input w-full min-h-[48px]" value={inList ? value : ''} aria-describedby="asset-department-hint"
                     onChange={(e) => {
                         if (e.target.value === DIRECT) { setDirect(true); onChange(''); return; }
                         onChange(e.target.value);
@@ -180,7 +180,7 @@ function DepartmentField({ value, options, onChange, fromSpace }: { value: strin
                 </select>
             ) : (
                 <div className="flex gap-2">
-                    <input id="asset-department" type="text" className="input flex-1 min-h-[48px]" value={value} maxLength={ASSET_LIMITS.department}
+                    <input id="asset-department" type="text" className="input flex-1 min-h-[48px]" value={value} maxLength={ASSET_LIMITS.department} aria-describedby="asset-department-hint"
                         placeholder="부서 이름" onChange={(e) => onChange(e.target.value)} />
                     {options.length > 0 && (
                         <button type="button" className="btn-secondary min-h-[48px] px-3 flex-shrink-0" onClick={() => { setDirect(false); onChange(''); }}>목록에서 고르기</button>
@@ -206,7 +206,7 @@ function PhotoPicker({ file, onChange }: { file: File | null; onChange: (f: File
     }, [file]);
     return (
         <div>
-            <p className={labelCls}>사진 <span className="text-xs font-normal text-surface-500 dark:text-surface-400">(선택)</span></p>
+            <p className={labelCls}>사진 <span className="text-xs font-normal text-surface-600 dark:text-surface-400">(선택)</span></p>
             <input ref={inputRef} type="file" accept="image/*" className="hidden" aria-label="재물 사진 고르기"
                 onChange={(e) => { onChange(e.target.files?.[0] ?? null); e.target.value = ''; }} />
             {preview ? (
@@ -214,7 +214,7 @@ function PhotoPicker({ file, onChange }: { file: File | null; onChange: (f: File
                     <img src={preview} alt="고른 사진 미리보기" className="w-32 h-32 object-cover rounded-xl border border-surface-200 dark:border-surface-700" />
                     <div className="flex flex-col gap-2">
                         <button type="button" className="btn-secondary min-h-[44px] px-4" onClick={() => inputRef.current?.click()}>다른 사진</button>
-                        <button type="button" className="btn-secondary min-h-[44px] px-4" onClick={() => onChange(null)}>빼기</button>
+                        <button type="button" className="btn-secondary min-h-[44px] px-4" onClick={() => onChange(null)}>사진 빼기</button>
                     </div>
                 </div>
             ) : (
@@ -222,10 +222,10 @@ function PhotoPicker({ file, onChange }: { file: File | null; onChange: (f: File
                     className="w-full min-h-[96px] rounded-xl border-2 border-dashed border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-300 flex flex-col items-center justify-center gap-1">
                     <span className="text-2xl" aria-hidden="true">📷</span>
                     <span className="font-medium">사진 고르기</span>
-                    <span className="text-xs text-surface-500 dark:text-surface-400">휴대폰에서는 바로 찍을 수도 있어요</span>
+                    <span className="text-xs text-surface-600 dark:text-surface-400">휴대폰에서는 바로 찍을 수도 있어요</span>
                 </button>
             )}
-            <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">등록할 때 함께 올립니다. 사람이 찍히지 않게 물건만 찍어 주세요.</p>
+            <p className="text-xs text-surface-600 dark:text-surface-400 mt-1">등록할 때 함께 올립니다. 사람이 찍히지 않게 물건만 찍어 주세요.</p>
         </div>
     );
 }

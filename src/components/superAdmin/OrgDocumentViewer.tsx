@@ -18,6 +18,8 @@ interface OrgDocumentViewerProps {
 export default function OrgDocumentViewer({ orgId, stopPropagation }: OrgDocumentViewerProps) {
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState(false);
+    // 다시 시도를 누를 때마다 올려 서명 URL을 새로 받는다
+    const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
         let active = true;
@@ -27,13 +29,24 @@ export default function OrgDocumentViewer({ orgId, stopPropagation }: OrgDocumen
             .then((signedUrl) => { if (active) setUrl(signedUrl); })
             .catch(() => { if (active) setError(true); });
         return () => { active = false; };
-    }, [orgId]);
+    }, [orgId, attempt]);
 
     if (error) {
-        return <p className="mt-2 text-xs text-red-700 dark:text-red-300">증빙서류를 불러오지 못했습니다.</p>;
+        return (
+            <div className="mt-2" role="alert">
+                <p className="text-xs text-red-700 dark:text-red-300">증빙서류를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>
+                <button
+                    type="button"
+                    onClick={() => setAttempt(n => n + 1)}
+                    className="btn-secondary btn-sm min-h-[44px] mt-2"
+                >
+                    다시 시도
+                </button>
+            </div>
+        );
     }
     if (!url) {
-        return <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">증빙서류 불러오는 중…</p>;
+        return <p className="mt-2 text-xs text-surface-600 dark:text-surface-400" role="status">증빙서류 불러오는 중…</p>;
     }
     return <DocumentViewer url={url} stopPropagation={stopPropagation} />;
 }

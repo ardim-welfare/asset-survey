@@ -5,6 +5,7 @@
  * 닫히면 창을 연 버튼으로 초점을 돌려준다(2026-11-22 점검: 초점이 창 밖으로 빠져 길을 잃었다).
  */
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Props {
     open: boolean;
@@ -50,7 +51,9 @@ export default function PanelModal({ open, title, titleId, onClose, children }: 
 
     if (!open) return null;
 
-    return (
+    // body에 바로 그린다 — 반투명 카드(glass-card의 backdrop-filter) 안에 놓이면 fixed가 화면이 아니라
+    // 그 카드를 기준으로 잡혀, 창이 카드 안에 갇히고 아래 카드에 가려졌다(2026-11-22 팀 고치기 창)
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={onClose}>
             {/* ESC는 위 keydown이 처리한다 — 창 안 클릭이 바깥 닫기로 번지지 않게만 막는다 (ConfirmModal과 같은 방식) */}
             {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
@@ -73,5 +76,5 @@ export default function PanelModal({ open, title, titleId, onClose, children }: 
                 {children}
             </div>
         </div>
-    );
+    , document.body);
 }

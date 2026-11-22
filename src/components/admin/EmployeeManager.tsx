@@ -122,11 +122,24 @@ export default function EmployeeManager() {
                     <div>
                         <label htmlFor="new-employee-team" className="label">팀</label>
                         {creatingTeam ? (
-                            <div className="flex gap-2">
-                                <input id="new-employee-team" type="text" value={newTeamName} maxLength={TEAM_NAME_MAX} placeholder="새 팀 이름 (예: 행정지원팀)"
-                                    onChange={(e) => setNewTeamName(e.target.value)} className="input flex-1 min-h-[48px]" />
-                                <button type="button" className="btn-secondary min-h-[48px] px-3 flex-shrink-0" disabled={teams.busy || !newTeamName.trim()} onClick={() => void createTeamInDialog()}>만들기</button>
-                            </div>
+                            <>
+                                <div className="flex gap-2">
+                                    {/* 팀 이름 칸에서 Enter(휴대폰 '완료')를 누르면 직원 등록이 먼저 제출됐다 — 팀 만들기로 돌린다 */}
+                                    <input id="new-employee-team" type="text" value={newTeamName} maxLength={TEAM_NAME_MAX} placeholder="새 팀 이름 (예: 행정지원팀)"
+                                        enterKeyHint="done"
+                                        onKeyDown={(e) => {
+                                            if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                                            e.preventDefault();
+                                            if (!teams.busy && newTeamName.trim()) void createTeamInDialog();
+                                        }}
+                                        onChange={(e) => setNewTeamName(e.target.value)} className="input flex-1 min-w-0 min-h-[48px]" />
+                                    <button type="button" className="btn-primary min-h-[48px] px-3 flex-shrink-0" disabled={teams.busy || !newTeamName.trim()} onClick={() => void createTeamInDialog()}>팀 만들기</button>
+                                </div>
+                                {/* 잘못 골랐을 때 돌아갈 길 — 예전엔 창을 닫아야만 팀 고르기로 돌아갔다 */}
+                                <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3 mt-2" onClick={() => { setCreatingTeam(false); setNewTeamName(''); }}>
+                                    있는 팀에서 고르기
+                                </button>
+                            </>
                         ) : (
                             <select id="new-employee-team" value={newEmployee.teamId} className="input min-h-[48px]"
                                 onChange={(e) => {

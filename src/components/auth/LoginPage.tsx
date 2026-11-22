@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { signInWithGoogle, handleRedirectResult } from '../../lib/auth';
 import useForceLightMode from '../../hooks/useForceLightMode';
 import SEOHead from '../common/SEOHead';
@@ -10,12 +10,11 @@ function loginErrorMessage(code: string | undefined): string {
     if (code === 'auth/user-disabled') {
         return '계정이 비활성화되었습니다. 기관 관리자에게 다시 활성화를 요청하세요.';
     }
-    return '로그인에 실패했습니다. 다시 시도해주세요.';
+    return '로그인에 실패했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요. 계속 안 되면 크롬·사파리 같은 기본 브라우저로 열어 보세요.';
 }
 
 export default function LoginPage() {
     useForceLightMode();
-    const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -55,7 +54,7 @@ export default function LoginPage() {
                 path="/login"
             />
             {/* 배경 장식 */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
                 <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-400/20 rounded-full blur-3xl" />
                 <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-primary-300/10 rounded-full blur-3xl" />
                 <div className="absolute top-1/3 left-1/4 w-64 h-64 bg-accent-400/10 rounded-full blur-3xl" />
@@ -63,19 +62,19 @@ export default function LoginPage() {
 
             <div className="relative w-full max-w-sm animate-scale-in">
                 {/* 첫 페이지로 돌아가기 */}
-                <button
-                    onClick={() => navigate('/')}
-                    className="flex items-center gap-1.5 text-primary-200/80 hover:text-white text-sm mb-4 transition-colors group min-h-[48px] px-2 -ml-2"
+                <Link
+                    to="/"
+                    className="flex items-center gap-1.5 text-primary-100 hover:text-white text-sm mb-4 transition-colors group min-h-[48px] px-2 -ml-2 w-fit"
                 >
-                    <svg className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <svg aria-hidden="true" className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                     </svg>
                     첫 페이지로
-                </button>
+                </Link>
 
                 {/* 로고 / 아이콘 영역 */}
                 <div className="text-center mb-8">
-                    <div className="w-20 h-20 mx-auto mb-4 bg-white/10 dark:bg-surface-800/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
+                    <div className="w-20 h-20 mx-auto mb-4 bg-white/10 dark:bg-surface-800/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20" aria-hidden="true">
                         <AppIcon className="w-10 h-10 text-white" />
                     </div>
                     <h1 className="text-3xl font-bold text-white mb-2">재물조사</h1>
@@ -86,16 +85,17 @@ export default function LoginPage() {
                 <div className="glass-card p-6 space-y-6">
                     <div className="text-center">
                                 <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-200 mb-1">시작하기</h2>
-                                <p className="text-sm text-surface-500 dark:text-surface-400">Google 계정으로 로그인하세요</p>
+                                <p className="text-sm text-surface-600 dark:text-surface-400">Google 계정으로 로그인하세요</p>
                             </div>
 
                             {error && (
-                                <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-xl px-4 py-3 text-sm text-red-600 dark:text-red-400 animate-slide-down">
+                                <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-xl px-4 py-3 text-sm text-red-700 dark:text-red-300 animate-slide-down">
                                     {error}
                                 </div>
                             )}
 
                             <button
+                                type="button"
                                 onClick={handleGoogleLogin}
                                 disabled={loading}
                                 className="w-full flex items-center justify-center gap-3 px-4 py-3 min-h-[48px] bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-600 rounded-xl font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-800/50 dark:bg-surface-800 hover:shadow-md transition-all duration-200 disabled:opacity-50 active:scale-[0.98]"
@@ -103,7 +103,7 @@ export default function LoginPage() {
                                 {loading ? (
                                     <div className="w-5 h-5 spinner" />
                                 ) : (
-                                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                    <svg aria-hidden="true" className="w-5 h-5" viewBox="0 0 24 24">
                                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
                                         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                                         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -114,17 +114,17 @@ export default function LoginPage() {
                             </button>
                 </div>
 
-                <p className="text-center text-primary-200/80 text-xs mt-6 flex flex-wrap justify-center gap-x-2 gap-y-2 items-center min-h-[48px]">
-                    <a href="/terms" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">이용약관</a>
-                    <span className="text-primary-300/40">|</span>
-                    <a href="/privacy" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">개인정보 처리방침</a>
-                    <span className="text-primary-300/40">|</span>
-                    <a href="/release-notes" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">업데이트 소식</a>
-                    <span className="text-primary-300/40">|</span>
-                    <a href="/faq" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">자주 하는 질문</a>
+                <p className="text-center text-primary-100 text-xs mt-6 flex flex-wrap justify-center gap-x-2 gap-y-2 items-center min-h-[48px]">
+                    <Link to="/terms" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">이용약관</Link>
+                    <span className="text-primary-300/60" aria-hidden="true">|</span>
+                    <Link to="/privacy" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">개인정보 처리방침</Link>
+                    <span className="text-primary-300/60" aria-hidden="true">|</span>
+                    <Link to="/release-notes" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">업데이트 소식</Link>
+                    <span className="text-primary-300/60" aria-hidden="true">|</span>
+                    <Link to="/faq" className="hover:text-white underline underline-offset-2 transition-colors p-2 -m-2">자주 하는 질문</Link>
                 </p>
 
-                <p className="text-center text-primary-300/60 text-xs mt-2">
+                <p className="text-center text-primary-200 text-xs mt-2">
                     © 2026 재물조사. All rights reserved.
                 </p>
             </div>

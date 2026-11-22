@@ -44,21 +44,35 @@ export default function TagRedirect() {
 
     if (state.kind === 'found') return <Navigate to={state.path} replace state={{ justChecked: true }} />;
 
+    // 사용자 정보는 왔는데 소속 기관이 없으면(시스템 관리자 등) 찾을 기관이 없어 영영 '찾는 중'에 머물렀다
+    if (tag && userData && !orgId) {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-4 bg-surface-50 dark:bg-surface-950">
+                <div className="glass-card p-6 max-w-sm w-full text-center">
+                    <p className="text-4xl mb-3" aria-hidden="true">🏷️</p>
+                    <p className="font-medium text-surface-900 dark:text-surface-100 mb-1">기관을 고른 뒤에 라벨을 열 수 있습니다</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">지금 계정에는 소속 기관이 없어 이 라벨의 재물을 찾을 수 없습니다.</p>
+                    <Link to="/" className="btn-primary min-h-[48px] px-5">첫 화면으로</Link>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-surface-50 dark:bg-surface-950">
             <div className="glass-card p-6 max-w-sm w-full text-center">
                 {state.kind === 'loading' ? (
-                    <>
-                        <div className="w-8 h-8 spinner mx-auto mb-3" />
+                    <div role="status">
+                        <div className="w-8 h-8 spinner mx-auto mb-3" aria-hidden="true" />
                         <p className="text-surface-600 dark:text-surface-300">재물을 찾는 중…</p>
-                    </>
+                    </div>
                 ) : (
                     <>
                         <p className="text-4xl mb-3" aria-hidden="true">🏷️</p>
                         <p className="font-medium text-surface-900 dark:text-surface-100 mb-1">
                             {state.kind === 'error' ? '재물을 찾지 못했습니다' : '이 기관에 없는 라벨입니다'}
                         </p>
-                        <p className="text-sm text-surface-500 dark:text-surface-400 mb-4">
+                        <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
                             {state.kind === 'error'
                                 ? '인터넷 연결을 확인하고 다시 시도해 주세요.'
                                 : '다른 기관의 라벨이거나 잘못 읽힌 QR입니다. 라벨의 자산코드로 재물 목록에서 찾아 주세요.'}

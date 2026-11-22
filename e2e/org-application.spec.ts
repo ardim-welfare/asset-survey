@@ -34,7 +34,7 @@ test.describe('기관 사용 신청 플로우', () => {
         await expect(page.getByPlaceholder('홍길동')).toBeVisible({ timeout: 10000 });
         await expect(page.getByPlaceholder('○○복지관')).toBeVisible();
         // 파일 업로드 영역 확인
-        await expect(page.getByText(/클릭 또는 드래그하여 업로드/)).toBeVisible();
+        await expect(page.getByText(/눌러서 사진을 찍거나 파일을 고르세요/)).toBeVisible();
     });
 
     test('필수 항목 미입력 시 에러 표시', async ({ page }) => {

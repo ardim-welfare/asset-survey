@@ -19,7 +19,7 @@ export default function ReleaseNotesBanner() {
                     <span className="flex-shrink-0 text-xl" aria-hidden="true">📢</span>
                     <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-surface-800 dark:text-surface-100">새로운 업데이트 소식이 있어요</p>
-                        <p className="text-xs text-surface-500 dark:text-surface-400">추가·개선된 기능을 확인해 보세요.</p>
+                        <p className="text-xs text-surface-600 dark:text-surface-400">추가·개선된 기능을 확인해 보세요.</p>
                     </div>
                     <button
                         type="button"
@@ -31,8 +31,8 @@ export default function ReleaseNotesBanner() {
                     <button
                         type="button"
                         onClick={() => markSeen()}
-                        aria-label="닫기"
-                        className="flex-shrink-0 btn-icon min-h-[44px] min-w-[44px] text-surface-500 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-300"
+                        aria-label="업데이트 소식 알림 닫기"
+                        className="flex-shrink-0 btn-icon min-h-[44px] min-w-[44px] text-surface-600 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-300"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />

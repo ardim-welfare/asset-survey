@@ -63,7 +63,7 @@ export default function AdminDashboard() {
         load();
     }, [userData?.organizationId, reloadKey]);
 
-    const value = (text: string) => (loading ? <span className="w-5 h-5 spinner inline-block" aria-label="불러오는 중" /> : loadError ? '—' : text);
+    const value = (text: string) => (loading ? <span className="w-5 h-5 spinner inline-block" role="img" aria-label="불러오는 중" /> : loadError ? '—' : text);
 
     return (
         <div className="max-w-4xl mx-auto animate-fade-in">

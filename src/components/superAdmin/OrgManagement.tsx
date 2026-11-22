@@ -21,6 +21,10 @@ export default function OrgManagement() {
     const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [deletedOrgs, setDeletedOrgs] = useState<Organization[]>([]);
     const [loading, setLoading] = useState(true);
+    // 목록을 못 읽었을 때 "등록된 기관이 없습니다"로 오해하지 않게 오류 화면을 따로 둔다
+    const [loadError, setLoadError] = useState(false);
+    // 펼친 기관의 멤버를 못 읽은 경우 — "소속된 멤버가 없습니다"와 구분한다
+    const [memberErrors, setMemberErrors] = useState<Record<string, boolean>>({});
     const [membersMap, setMembersMap] = useState<Record<string, User[]>>({});
     const [memberCountMap, setMemberCountMap] = useState<Record<string, number>>({});
     const [loadingMembers, setLoadingMembers] = useState<Record<string, boolean>>({});
@@ -34,6 +38,7 @@ export default function OrgManagement() {
 
     const fetchOrganizations = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         let retryCount = 0;
         while (retryCount <= 2) {
             try {
@@ -69,23 +74,25 @@ export default function OrgManagement() {
                     continue;
                 }
                 console.error('기관 목록 로드 실패:', err);
-                showToast('기관 목록을 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.', 'error');
+                setLoadError(true);
                 break;
             } finally {
                 setLoading(false);
             }
         }
-    }, [showToast]);
+    }, []);
 
     // 특정 기관의 멤버를 레이지 로드
     const loadMembers = useCallback(async (orgId: string) => {
         if (membersMap[orgId] || loadingMembers[orgId]) return;
         setLoadingMembers(prev => ({ ...prev, [orgId]: true }));
+        setMemberErrors(prev => ({ ...prev, [orgId]: false }));
         try {
             const members = await getOrganizationMembers(orgId);
             setMembersMap(prev => ({ ...prev, [orgId]: members as User[] }));
         } catch (err) {
             captureError(err, { context: 'OrgManagement.loadMembers', orgId });
+            setMemberErrors(prev => ({ ...prev, [orgId]: true }));
         } finally {
             setLoadingMembers(prev => ({ ...prev, [orgId]: false }));
         }
@@ -107,26 +114,26 @@ export default function OrgManagement() {
     }, [membersMap, loadMembers]);
 
     const handleDelete = useCallback(async (org: Organization) => {
-        if (!await confirm({ message: `${org.name} 기관을 삭제하시겠습니까?\n\n• 30일 내 복구 가능합니다.\n• 소속 직원은 기능 접근이 차단됩니다.`, confirmColor: 'danger' })) return;
+        if (!await confirm({ title: '기관 삭제', message: `${org.name} 기관을 삭제하시겠습니까?\n\n• 30일 내 복구 가능합니다.\n• 소속 직원은 기능 접근이 차단됩니다.`, confirmText: '삭제', confirmColor: 'danger' })) return;
         try {
             await deleteOrganization(org.id);
             showToast('기관이 삭제되었습니다. 30일 내 복구 가능합니다.', 'success');
             await fetchOrganizations();
         } catch (err) {
             console.error('삭제 실패:', err);
-            showToast('삭제에 실패했습니다.', 'error');
+            showToast('기관을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         }
     }, [confirm, showToast, fetchOrganizations]);
 
     const handleRestore = async (org: Organization) => {
-        if (!await confirm({ message: `${org.name} 기관을 복구하시겠습니까?` })) return;
+        if (!await confirm({ title: '기관 복구', message: `${org.name} 기관을 복구하시겠습니까?\n\n소속 직원이 다시 기능을 쓸 수 있게 됩니다.`, confirmText: '복구' })) return;
         try {
             await restoreOrganization(org.id);
             showToast('기관이 복구되었습니다.', 'success');
             await fetchOrganizations();
         } catch (err) {
             console.error('복구 실패:', err);
-            showToast('복구에 실패했습니다.', 'error');
+            showToast('기관을 복구하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         }
     };
 
@@ -150,7 +157,7 @@ export default function OrgManagement() {
     const handleRoleChange = useCallback(async (member: User, orgId: string, newRole: UserRole) => {
         if (member.role === newRole) return;
         const roleLabel = newRole === 'admin' ? '기관관리자' : '직원';
-        if (!await confirm({ message: `${member.name || member.email}의 역할을 "${roleLabel}"(으)로 변경하시겠습니까?` })) return;
+        if (!await confirm({ title: '역할 변경', message: `${member.name || member.email}의 역할을 "${roleLabel}"(으)로 변경하시겠습니까?`, confirmText: '변경' })) return;
 
         setChangingRole(member.id);
         try {
@@ -163,14 +170,14 @@ export default function OrgManagement() {
             }));
         } catch (err) {
             console.error('역할 변경 실패:', err);
-            showToast('역할 변경에 실패했습니다.', 'error');
+            showToast('역할을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         } finally {
             setChangingRole(null);
         }
     }, [confirm, showToast]);
 
     const handleRemoveMember = useCallback(async (member: User, orgId: string) => {
-        if (!await confirm({ message: `${member.name || member.email || '이 사용자'}를 기관에서 제거하시겠습니까?\n\n제거된 사용자는 초대 코드를 통해 다시 가입할 수 있습니다.`, confirmColor: 'danger' })) return;
+        if (!await confirm({ title: '직원 제거', message: `${member.name || member.email || '이 사용자'}를 기관에서 제거하시겠습니까?\n\n제거된 사용자는 초대 코드를 통해 다시 가입할 수 있습니다.`, confirmText: '제거', confirmColor: 'danger' })) return;
         try {
             await leaveOrganization(member.id);
             setMembersMap(prev => ({
@@ -180,7 +187,7 @@ export default function OrgManagement() {
             showToast('직원이 제거되었습니다.', 'success');
         } catch (err) {
             console.error('직원 제거 실패:', err);
-            showToast('직원 제거에 실패했습니다.', 'error');
+            showToast('직원을 제거하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         }
     }, [confirm, showToast]);
 
@@ -193,13 +200,13 @@ export default function OrgManagement() {
             showToast('기관 정보가 수정되었습니다.', 'success');
         } catch (err) {
             console.error('기관 정보 수정 실패:', err);
-            showToast('기관 정보 수정에 실패했습니다.', 'error');
+            showToast('기관 정보를 저장하지 못했습니다. 입력한 내용은 그대로 있으니 다시 저장해 주세요.', 'error');
             throw err;
         }
     }, [showToast]);
 
     const handleRestoreUser = useCallback(async (email: string, orgId: string, name: string) => {
-        if (!await confirm({ message: `${email} 계정을 복원하시겠습니까?\n\n• Auth 계정이 다시 활성화됩니다.\n• 이 기관의 직원으로 복원됩니다.` })) return;
+        if (!await confirm({ title: '계정 복원', message: `${email} 계정을 복원하시겠습니까?\n\n• 로그인 계정이 다시 활성화됩니다.\n• 이 기관의 직원으로 복원됩니다.`, confirmText: '복원' })) return;
         try {
             const restoreUser = httpsCallable(getFunctions(undefined, 'asia-northeast3'), 'restoreUser');
             const result = await restoreUser({ email, organizationId: orgId, name: name || undefined });
@@ -218,7 +225,7 @@ export default function OrgManagement() {
             showToast(`${data.name || email} 계정이 복원되었습니다.`, 'success');
         } catch (err: unknown) {
             console.error('계정 복원 실패:', err);
-            const msg = (err as Error)?.message || '계정 복원에 실패했습니다.';
+            const msg = (err as Error)?.message || '계정을 복원하지 못했습니다. 이메일이 맞는지 확인한 뒤 다시 시도해 주세요.';
             showToast(msg, 'error');
             throw err;
         }
@@ -238,8 +245,25 @@ export default function OrgManagement() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-20">
+            <div className="flex items-center justify-center py-20" role="status" aria-label="기관 목록 불러오는 중">
                 <div className="w-8 h-8 spinner" />
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div className="max-w-4xl mx-auto animate-fade-in">
+                <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-6">기관 관리</h1>
+                <div className="glass-card p-5 border border-red-200 dark:border-red-800" role="alert">
+                    <p className="font-semibold text-red-700 dark:text-red-300">기관 목록을 불러오지 못했습니다</p>
+                    <p className="mt-1 text-sm text-surface-700 dark:text-surface-300">
+                        인터넷 연결을 확인한 뒤 다시 시도해 주세요. 계속 안 되면 화면을 새로고침해 주세요.
+                    </p>
+                    <button type="button" onClick={() => void fetchOrganizations()} className="btn-secondary btn-sm min-h-[44px] mt-3">
+                        다시 시도
+                    </button>
+                </div>
             </div>
         );
     }
@@ -277,29 +301,35 @@ export default function OrgManagement() {
         <div className="max-w-4xl mx-auto animate-fade-in">
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">기관 관리</h1>
-                <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">승인된 기관 목록을 관리하세요</p>
+                <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">승인된 기관 목록을 관리하세요. 직원이 한 명이라도 가입한 기관은 활성, 아직 없는 기관은 미활성으로 나눕니다.</p>
             </div>
 
             {/* 탭 */}
             <div className="flex gap-1 mb-4 bg-surface-100 dark:bg-surface-800 rounded-xl p-1">
                 <button
+                    type="button"
+                    aria-pressed={activeTab === 'active'}
                     onClick={() => setActiveTab('active')}
-                    className={`flex-1 py-2 px-4 min-h-[48px] rounded-lg text-sm font-medium transition-all
-                        ${activeTab === 'active' ? 'bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 shadow-sm' : 'text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:text-surface-300'}`}
+                    className={`flex-1 py-2 px-2 sm:px-4 min-h-[48px] rounded-lg text-sm font-medium transition-all
+                        ${activeTab === 'active' ? 'bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 shadow-sm' : 'text-surface-600 dark:text-surface-400 hover:text-surface-800 dark:hover:text-surface-200'}`}
                 >
                     활성 기관 ({activeOrgs.length})
                 </button>
                 <button
+                    type="button"
+                    aria-pressed={activeTab === 'inactive'}
                     onClick={() => setActiveTab('inactive')}
-                    className={`flex-1 py-2 px-4 min-h-[48px] rounded-lg text-sm font-medium transition-all
-                        ${activeTab === 'inactive' ? 'bg-white dark:bg-surface-700 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:text-surface-300'}`}
+                    className={`flex-1 py-2 px-2 sm:px-4 min-h-[48px] rounded-lg text-sm font-medium transition-all
+                        ${activeTab === 'inactive' ? 'bg-white dark:bg-surface-700 text-amber-800 dark:text-amber-300 shadow-sm' : 'text-surface-600 dark:text-surface-400 hover:text-surface-800 dark:hover:text-surface-200'}`}
                 >
                     미활성 기관 ({inactiveOrgs.length})
                 </button>
                 <button
+                    type="button"
+                    aria-pressed={activeTab === 'deleted'}
                     onClick={() => setActiveTab('deleted')}
-                    className={`flex-1 py-2 px-4 min-h-[48px] rounded-lg text-sm font-medium transition-all
-                        ${activeTab === 'deleted' ? 'bg-white dark:bg-surface-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:text-surface-300'}`}
+                    className={`flex-1 py-2 px-2 sm:px-4 min-h-[48px] rounded-lg text-sm font-medium transition-all
+                        ${activeTab === 'deleted' ? 'bg-white dark:bg-surface-700 text-red-700 dark:text-red-300 shadow-sm' : 'text-surface-600 dark:text-surface-400 hover:text-surface-800 dark:hover:text-surface-200'}`}
                 >
                     삭제된 기관 ({deletedOrgs.length})
                 </button>
@@ -309,14 +339,15 @@ export default function OrgManagement() {
             {(activeTab === 'active' || activeTab === 'inactive') && baseOrgs.length > 0 && (
                 <div className="mb-4">
                     <div className="relative">
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 dark:text-surface-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500 dark:text-surface-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
                         <input
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            className="input pl-10"
+                            className="input pl-10 min-h-[44px]"
+                            aria-label="기관 검색"
                             placeholder="기관명, 고유번호, 주소, 신청자 검색"
                         />
                     </div>
@@ -329,22 +360,23 @@ export default function OrgManagement() {
                     <div className="glass-card p-12 text-center">
                         {activeTab === 'inactive' ? (
                             <>
-                                <div className="text-4xl mb-3">🎉</div>
-                                <p className="text-surface-500 dark:text-surface-400 text-lg font-medium">모든 기관에 직원이 등록되어 있습니다</p>
+                                <div className="text-4xl mb-3" aria-hidden="true">🎉</div>
+                                <p className="text-surface-600 dark:text-surface-400 text-lg font-medium">모든 기관에 직원이 등록되어 있습니다</p>
                             </>
                         ) : (
                             <>
-                                <svg className="w-16 h-16 mx-auto text-surface-200 dark:text-surface-600 mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                                <svg className="w-16 h-16 mx-auto text-surface-200 dark:text-surface-600 mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" aria-hidden="true">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 3v18m16.5-18v18M5.25 3h13.5M5.25 21h13.5" />
                                 </svg>
-                                <p className="text-surface-500 dark:text-surface-400 text-lg font-medium">등록된 기관이 없습니다</p>
+                                <p className="text-surface-600 dark:text-surface-400 text-lg font-medium">등록된 기관이 없습니다</p>
                             </>
                         )}
                     </div>
                 ) : filteredOrgs.length === 0 ? (
                     <div className="glass-card p-12 text-center">
-                        <div className="text-4xl mb-3">🔍</div>
-                        <p className="text-surface-500 dark:text-surface-400 font-medium">검색 결과가 없습니다</p>
+                        <div className="text-4xl mb-3" aria-hidden="true">🔍</div>
+                        <p className="text-surface-600 dark:text-surface-400 font-medium">검색 결과가 없습니다</p>
+                        <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">다른 탭(활성·미활성)에 있는지, 검색어 철자가 맞는지 확인해 보세요.</p>
                     </div>
                 ) : (
                     <div className="grid gap-2">
@@ -357,6 +389,8 @@ export default function OrgManagement() {
                                 isExpanded={expandedOrg === org.id}
                                 changingRole={changingRole}
                                 loadingMembers={loadingMembers[org.id] || false}
+                                memberLoadError={memberErrors[org.id] || false}
+                                onRetryMembers={loadMembers}
                                 onToggle={toggleExpand}
                                 onDelete={handleDelete}
                                 onEditOrg={handleEditOrg}
@@ -373,8 +407,8 @@ export default function OrgManagement() {
             {activeTab === 'deleted' && (
                 deletedOrgs.length === 0 ? (
                     <div className="glass-card p-12 text-center">
-                        <div className="text-4xl mb-3">✨</div>
-                        <p className="text-surface-500 dark:text-surface-400 font-medium">삭제된 기관이 없습니다</p>
+                        <div className="text-4xl mb-3" aria-hidden="true">✨</div>
+                        <p className="text-surface-600 dark:text-surface-400 font-medium">삭제된 기관이 없습니다</p>
                     </div>
                 ) : (
                     <div className="grid gap-2">
@@ -382,18 +416,18 @@ export default function OrgManagement() {
                         <div className="glass-card p-4 mb-2">
                             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                                 <div>
-                                    <span className="text-xs text-surface-500 dark:text-surface-400">자발적 탈퇴</span>
-                                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{withdrawalStats.voluntaryCount}<span className="text-sm font-normal text-surface-500 dark:text-surface-400 ml-1">건</span></p>
+                                    <span className="text-xs text-surface-600 dark:text-surface-400">자발적 탈퇴</span>
+                                    <p className="text-xl font-bold text-amber-800 dark:text-amber-300">{withdrawalStats.voluntaryCount}<span className="text-sm font-normal text-surface-600 dark:text-surface-400 ml-1">건</span></p>
                                 </div>
                                 <div>
-                                    <span className="text-xs text-surface-500 dark:text-surface-400">운영자 정리</span>
-                                    <p className="text-xl font-bold text-surface-600 dark:text-surface-300">{withdrawalStats.byAdminCount}<span className="text-sm font-normal text-surface-500 dark:text-surface-400 ml-1">건</span></p>
+                                    <span className="text-xs text-surface-600 dark:text-surface-400">운영자 정리</span>
+                                    <p className="text-xl font-bold text-surface-600 dark:text-surface-300">{withdrawalStats.byAdminCount}<span className="text-sm font-normal text-surface-600 dark:text-surface-400 ml-1">건</span></p>
                                 </div>
                             </div>
                             {withdrawalStats.voluntaryCount > 0 && (
                                 <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-surface-100 dark:border-surface-700">
                                     {(Object.keys(withdrawalStats.reasonCounts) as WithdrawReason[]).map((reason) => (
-                                        <span key={reason} className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">
+                                        <span key={reason} className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300">
                                             {WITHDRAW_REASON_LABELS[reason] ?? reason} {withdrawalStats.reasonCounts[reason]}
                                         </span>
                                     ))}

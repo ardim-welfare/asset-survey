@@ -31,7 +31,7 @@ export default function ReleaseNoteItems({ items }: { items: readonly ReleaseIte
                 <div key={group.area ?? `_${groupIdx}`}>
                     {group.area && (
                         <h4 className="text-sm font-semibold text-surface-800 dark:text-surface-200 mb-2 pb-1 border-b border-surface-100 dark:border-surface-700">
-                            {group.area} <span className="font-normal text-surface-500 dark:text-surface-400">· {group.items.length}</span>
+                            {group.area} <span className="font-normal text-surface-600 dark:text-surface-400">· {group.items.length}</span>
                         </h4>
                     )}
                     <ul className="space-y-2 pl-1">
@@ -40,7 +40,7 @@ export default function ReleaseNoteItems({ items }: { items: readonly ReleaseIte
                             return (
                                 <li key={idx} className="flex items-start gap-2.5 text-sm text-surface-600 dark:text-surface-400 leading-relaxed">
                                     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap mt-0.5 ${cfg.color}`}>
-                                        {cfg.emoji} {cfg.label}
+                                        <span aria-hidden="true">{cfg.emoji}</span> {cfg.label}
                                     </span>
                                     <ItemText text={item.text} />
                                 </li>

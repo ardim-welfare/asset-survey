@@ -95,6 +95,8 @@ export default function InstallPrompt() {
 
     return (
         <div
+            role="region"
+            aria-label="앱 설치 안내"
             style={{
                 position: 'fixed',
                 bottom: '4.5rem',
@@ -114,16 +116,17 @@ export default function InstallPrompt() {
                 animation: 'installSlideUp 0.35s ease-out',
             }}
         >
-            <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>📲</span>
+            <span aria-hidden="true" style={{ fontSize: '1.5rem', lineHeight: 1 }}>📲</span>
             <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>
                     홈 화면에 추가
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: '0.125rem' }}>
+                <div style={{ fontSize: '0.8125rem', marginTop: '0.125rem' }}>
                     앱처럼 빠르게 실행할 수 있습니다
                 </div>
             </div>
             <button
+                type="button"
                 onClick={handleInstall}
                 style={{
                     backgroundColor: 'white',
@@ -131,7 +134,7 @@ export default function InstallPrompt() {
                     border: 'none',
                     borderRadius: '0.5rem',
                     padding: '0.4rem 0.875rem',
-                    fontSize: '0.8rem',
+                    fontSize: '0.875rem',
                     fontWeight: 700,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
@@ -142,11 +145,12 @@ export default function InstallPrompt() {
                 설치
             </button>
             <button
+                type="button"
                 onClick={handleDismiss}
                 style={{
                     background: 'none',
                     border: 'none',
-                    color: 'rgba(255,255,255,0.7)',
+                    color: 'white',
                     cursor: 'pointer',
                     fontSize: '1rem',
                     padding: '0.25rem',
@@ -155,9 +159,9 @@ export default function InstallPrompt() {
                     minWidth: '48px',
                     minHeight: '48px',
                 }}
-                aria-label="닫기"
+                aria-label="설치 안내 닫기"
             >
-                ✕
+                <span aria-hidden="true">✕</span>
             </button>
             <style>{`
                 @keyframes installSlideUp {

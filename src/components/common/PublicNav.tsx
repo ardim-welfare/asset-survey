@@ -3,7 +3,7 @@
  * 랜딩·업데이트 소식·FAQ 등 공개 페이지에서 공유하는 상단 메뉴
  */
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 interface NavItem {
     href: string;
@@ -51,8 +51,8 @@ export default function PublicNav({ variant = 'solid' }: PublicNavProps) {
             aria-label="메인 메뉴"
         >
             <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between">
-                <a
-                    href="/"
+                <Link
+                    to="/"
                     className={`text-sm font-semibold tracking-tight transition-colors min-h-[48px] flex items-center px-2 -ml-2 ${
                         isOverlay
                             ? isScrolled ? 'text-surface-800 dark:text-surface-200 hover:text-primary-600 dark:hover:text-primary-400' : 'text-white/90 hover:text-white'
@@ -60,30 +60,31 @@ export default function PublicNav({ variant = 'solid' }: PublicNavProps) {
                     }`}
                 >
                     재물조사
-                </a>
+                </Link>
                 <div className="flex items-center gap-1">
                     {NAV_ITEMS.map((item) => {
                         const isActive = pathname === item.href;
                         return (
-                            <a
+                            <Link
                                 key={item.href}
-                                href={item.href}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors min-h-[48px] flex items-center ${
+                                to={item.href}
+                                aria-current={isActive ? 'page' : undefined}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[48px] flex items-center ${
                                     isOverlay
                                         ? isScrolled
                                             ? isActive
                                                 ? 'text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/30'
-                                                : 'text-surface-500 hover:text-surface-800 dark:text-surface-400 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800'
+                                                : 'text-surface-600 hover:text-surface-800 dark:text-surface-400 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800'
                                             : isActive
                                                 ? 'text-white bg-white/15'
-                                                : 'text-white/80 hover:text-white hover:bg-white/10'
+                                                : 'text-white hover:bg-white/10'
                                         : isActive
                                           ? 'text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/30'
-                                          : 'text-surface-500 hover:text-surface-800 dark:text-surface-400 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800'
+                                          : 'text-surface-600 hover:text-surface-800 dark:text-surface-400 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800'
                                 }`}
                             >
                                 {item.label}
-                            </a>
+                            </Link>
                         );
                     })}
                 </div>

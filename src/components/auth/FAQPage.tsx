@@ -122,8 +122,8 @@ export default function FAQPage() {
             <div className="w-full max-w-2xl mx-auto animate-fade-in">
                 <div className="bg-white dark:bg-surface-900 rounded-2xl shadow-soft p-6 md:p-8 space-y-6">
                     <div className="text-center border-b border-surface-100 dark:border-surface-700 pb-6">
-                        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">❓ 자주 하는 질문</h1>
-                        <p className="text-sm text-surface-500 dark:text-surface-400">
+                        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1"><span aria-hidden="true">❓ </span>자주 하는 질문</h1>
+                        <p className="text-sm text-surface-600 dark:text-surface-400">
                             평소에 궁금하셨던 점들을 모아두었어요.
                         </p>
                     </div>
@@ -131,13 +131,15 @@ export default function FAQPage() {
                     {/* 검색 */}
                     <div className="relative">
                         <svg
-                            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400 dark:text-surface-500 pointer-events-none"
+                            aria-hidden="true"
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500 dark:text-surface-400 pointer-events-none"
                             fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
                         >
                             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
                         <input
-                            type="text"
+                            type="search"
+                            aria-label="질문 검색"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             placeholder="어떤 점이 궁금하신가요?"
@@ -145,10 +147,12 @@ export default function FAQPage() {
                         />
                         {search && (
                             <button
+                                type="button"
+                                aria-label="검색어 지우기"
                                 onClick={() => { setSearch(''); setOpenIndex(null); }}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-500 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center -mr-3"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-600 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center -mr-3"
                             >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
                             </button>
@@ -157,7 +161,7 @@ export default function FAQPage() {
 
                     {/* 검색 결과 요약 */}
                     {search.trim() && (
-                        <p className="text-xs text-surface-500 dark:text-surface-400 -mt-2">
+                        <p role="status" className="text-xs text-surface-600 dark:text-surface-400 -mt-2">
                             {filtered.length > 0
                                 ? `총 ${filtered.length}개의 질문을 찾았어요.`
                                 : '앗, 일치하는 질문이 없네요. 다른 단어로 검색해 보시겠어요?'}
@@ -188,51 +192,51 @@ export default function FAQPage() {
                                     className={`border rounded-xl overflow-hidden transition-all duration-700 ease-out origin-center ${containerClasses}`}
                                 >
                                     <div
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={() => toggle(idx)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                toggle(idx);
-                                            }
-                                        }}
-                                        className={`cursor-pointer w-full flex items-center gap-3 px-4 py-3.5 text-left outline-none focus-visible:bg-primary-50 dark:focus-visible:bg-surface-700 transition-colors min-h-[48px] ${
+                                        className={`flex items-stretch transition-colors ${
                                             isHighlighted ? 'bg-transparent' : 'bg-surface-50 hover:bg-primary-50/50 dark:bg-surface-800 dark:hover:bg-surface-700'
                                         }`}
                                     >
-                                        <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center text-xs font-bold">
-                                            Q{idx + 1}
-                                        </span>
-                                        <span className="flex-1 text-sm font-semibold text-surface-800 dark:text-surface-200 leading-snug">
-                                            {item.question}
-                                        </span>
-                                        {/* 링크 복사 버튼 */}
+                                        {/* 질문 — 펼치기/접기 버튼 (해시 이동 시 첫 버튼으로 포커스가 간다) */}
                                         <button
+                                            type="button"
+                                            onClick={() => toggle(idx)}
+                                            aria-expanded={isOpen}
+                                            aria-controls={`${qId}-answer`}
+                                            className="flex-1 min-w-0 flex items-center gap-3 pl-4 pr-2 py-3.5 text-left outline-none focus-visible:bg-primary-50 dark:focus-visible:bg-surface-700 min-h-[48px]"
+                                        >
+                                            <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 flex items-center justify-center text-xs font-bold">
+                                                Q{idx + 1}
+                                            </span>
+                                            <span className="flex-1 text-sm font-semibold text-surface-800 dark:text-surface-200 leading-snug">
+                                                {item.question}
+                                            </span>
+                                            <span aria-hidden="true" className="flex-shrink-0 text-surface-600 dark:text-surface-400">
+                                                {isOpen ? '▾' : '▸'}
+                                            </span>
+                                        </button>
+                                        {/* 링크 복사 버튼 — 질문 버튼과 겹치지 않는 별도 버튼 */}
+                                        <button
+                                            type="button"
                                             onClick={(e) => copyLink(idx, e)}
-                                            className="flex-shrink-0 w-12 h-12 -my-2 -ml-2 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 flex items-center justify-center transition-colors group relative"
-                                            title="이 질문 링크 복사"
+                                            aria-label={copiedIdx === idx ? `Q${idx + 1} 링크 복사됨` : `Q${idx + 1} 링크 복사`}
+                                            className="flex-shrink-0 w-12 min-h-[48px] mr-1 my-auto h-12 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 flex items-center justify-center transition-colors group"
                                         >
                                             {copiedIdx === idx ? (
-                                                <svg className="w-3.5 h-3.5 text-green-500 dark:text-green-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                                                <svg aria-hidden="true" className="w-4 h-4 text-emerald-700 dark:text-emerald-300" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                                 </svg>
                                             ) : (
-                                                <svg className="w-3.5 h-3.5 text-surface-400 dark:text-surface-500 group-hover:text-primary-500 dark:group-hover:text-primary-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                                <svg aria-hidden="true" className="w-4 h-4 text-surface-600 dark:text-surface-400 group-hover:text-primary-700 dark:group-hover:text-primary-300" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                                                 </svg>
                                             )}
                                         </button>
-                                        <svg
-                                            className={`w-4 h-4 text-surface-400 dark:text-surface-500 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                                            fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
-                                        >
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                                        </svg>
                                     </div>
 
-                                    {/* 답변 영역 */}
+                                    {/* 답변 영역 — 접혀 있을 때는 스크린리더에서도 숨긴다 */}
                                     <div
+                                        id={`${qId}-answer`}
+                                        aria-hidden={!isOpen}
                                         className="grid transition-all duration-200 ease-in-out"
                                         style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}
                                     >
@@ -252,8 +256,8 @@ export default function FAQPage() {
                     </div>
 
                     <div className="border-t border-surface-100 dark:border-surface-700 pt-4 text-center">
-                        <p className="text-xs text-surface-500 dark:text-surface-400">
-                            여기에 없는 내용이 궁금하시다면 '더보기 → 건의하기'를 통해 편하게 물어보세요!
+                        <p className="text-xs text-surface-600 dark:text-surface-400">
+                            여기에 없는 내용은 로그인 후 '더보기 → 개발자에게 건의하기'로 물어보세요. 로그인 전이라면 첫 화면의 '이용 문의하기'를 눌러 주세요.
                         </p>
                     </div>
                 </div>
@@ -262,9 +266,9 @@ export default function FAQPage() {
 
             {/* 복사 완료 토스트 */}
             {copiedIdx !== null && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+                <div role="status" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
                     <div className="bg-surface-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2">
-                        <svg className="w-4 h-4 text-green-400 dark:text-green-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                        <svg aria-hidden="true" className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                         </svg>
                         Q{copiedIdx + 1} 링크가 복사되었어요!

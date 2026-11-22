@@ -1,4 +1,4 @@
-import { ReactNode, useMemo } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { SA_TEST_ROLE_KEY, LoadingScreen } from '../../App';
@@ -21,29 +21,41 @@ export function BlockedScreen({ emoji, title, description, uid, allowTransfer = 
    */
   allowTransfer?: boolean;
 }) {
+  const [transferError, setTransferError] = useState('');
+  const [transferring, setTransferring] = useState(false);
   const handleTransferOrg = async () => {
+    setTransferError('');
+    setTransferring(true);
     try {
       await clearUserOrganization(uid);
     } catch (err) {
       console.error('기관 이동 실패:', err);
+      // 실패를 조용히 삼키면 버튼이 아무 반응 없는 것처럼 보인다 — 다음 할 일을 알려 준다
+      setTransferError('처리하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요. 계속되면 로그아웃 후 다시 로그인해 주세요.');
+    } finally {
+      setTransferring(false);
     }
   };
   return (
     <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex items-center justify-center p-4">
       <div className="glass-card max-w-md w-full p-8 text-center">
-        <div className="text-5xl mb-4">{emoji}</div>
+        <div className="text-5xl mb-4" aria-hidden="true">{emoji}</div>
         <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100 mb-2">{title}</h2>
-        <p className="text-surface-500 dark:text-surface-400 text-sm mb-6">{description}</p>
+        <p className="text-surface-600 dark:text-surface-400 text-sm mb-6">{description}</p>
         <div className="space-y-3">
           {allowTransfer && (
-            <button onClick={handleTransferOrg} className="btn-primary w-full min-h-[48px]">
-              다른 기관으로 가입
+            <button type="button" onClick={handleTransferOrg} disabled={transferring} className="btn-primary w-full min-h-[48px]">
+              {transferring ? '처리 중...' : '다른 기관으로 가입'}
             </button>
           )}
+          {transferError && (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-300">{transferError}</p>
+          )}
           <button
+            type="button"
             onClick={() => { logout(); }}
             className={allowTransfer
-              ? 'btn-ghost w-full text-surface-500 dark:text-surface-400 min-h-[48px]'
+              ? 'btn-secondary w-full min-h-[48px]'
               : 'btn-primary w-full min-h-[48px]'}
           >
             로그아웃

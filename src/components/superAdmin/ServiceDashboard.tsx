@@ -33,7 +33,7 @@ function Delta({ now, prev }: { now: number; prev: number }) {
     const diff = Math.round(((now - prev) / prev) * 100);
     const up = diff >= 0;
     return (
-        <span className={`text-xs font-medium ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+        <span className={`text-xs font-medium ${up ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
             지난달 대비 {up ? '+' : ''}{diff}%
         </span>
     );
@@ -42,9 +42,9 @@ function Delta({ now, prev }: { now: number; prev: number }) {
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
     return (
         <div className="glass-card p-4">
-            <p className="text-xs font-medium text-surface-500 dark:text-surface-400">{label}</p>
+            <p className="text-xs font-medium text-surface-600 dark:text-surface-400">{label}</p>
             <p className="mt-1 text-2xl font-bold text-surface-900 dark:text-surface-100">{value}</p>
-            {sub && <div className="mt-1 text-xs text-surface-500 dark:text-surface-400">{sub}</div>}
+            {sub && <div className="mt-1 text-xs text-surface-600 dark:text-surface-400">{sub}</div>}
         </div>
     );
 }
@@ -95,7 +95,7 @@ function Funnel({ s }: { s: DashboardStats }) {
     return (
         <section className="glass-card p-5">
             <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">도입 단계</h2>
-            <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
+            <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                 기관이 신청부터 첫 조사 마감까지 어디서 멈추는지 봅니다(해지 기관 제외).
                 {worst && s.funnel[0].value > 0 && <> 가장 많이 멈추는 곳은 <strong className="text-surface-700 dark:text-surface-200">{worst.label}</strong>({worst.conv}%만 넘어감)입니다.</>}
             </p>
@@ -106,7 +106,7 @@ function Funnel({ s }: { s: DashboardStats }) {
                             <span className="font-medium text-surface-700 dark:text-surface-200">{i + 1}. {f.label}</span>
                             <span className="text-surface-600 dark:text-surface-300">
                                 <strong className="text-surface-900 dark:text-surface-100">{fmt(f.value)}곳</strong>
-                                {i > 0 && <span className="ml-2 text-xs text-surface-500 dark:text-surface-400">앞 단계의 {f.conversionFromPrev}%</span>}
+                                {i > 0 && <span className="ml-2 text-xs text-surface-600 dark:text-surface-400">앞 단계의 {f.conversionFromPrev}%</span>}
                             </span>
                         </div>
                         <div className="mt-1 h-2.5 w-full rounded-full bg-surface-200 dark:bg-surface-700 overflow-hidden">
@@ -128,12 +128,17 @@ function Funnel({ s }: { s: DashboardStats }) {
 function DailyScans({ s }: { s: DashboardStats }) {
     const max = Math.max(1, ...s.dailyScans.map((d) => d.scans));
     const total = s.dailyScans.reduce((n, d) => n + d.scans, 0);
+    // 막대 툴팁(title)은 휴대폰에서 볼 수 없어 가장 많은 날과 날짜별 표를 글로도 보여 준다
+    const busiest = s.dailyScans.reduce<DashboardStats['dailyScans'][number] | null>((acc, d) => (!acc || d.scans > acc.scans ? d : acc), null);
+    const scanDays = s.dailyScans.filter((d) => d.scans > 0);
     return (
         <section className="glass-card p-5">
             <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">최근 30일 스캔</h2>
-            <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">합계 {fmt(total)}건 · 막대에 마우스를 올리면 그날 스캔한 사람 수가 보입니다.</p>
+            <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
+                합계 {fmt(total)}건{busiest && busiest.scans > 0 && <> · 가장 많은 날 {busiest.date.slice(5).replace('-', '/')} {fmt(busiest.scans)}건({fmt(busiest.users)}명)</>}
+            </p>
             {total === 0 ? (
-                <p className="mt-6 text-center text-sm text-surface-500 dark:text-surface-400">최근 30일 동안 스캔이 없습니다.</p>
+                <p className="mt-6 text-center text-sm text-surface-600 dark:text-surface-400">최근 30일 동안 스캔이 없습니다.</p>
             ) : (
                 <div className="mt-4 flex h-36 items-end gap-[3px]" role="img" aria-label={`최근 30일 스캔 합계 ${total}건`}>
                     {s.dailyScans.map((d) => (
@@ -147,10 +152,37 @@ function DailyScans({ s }: { s: DashboardStats }) {
                 </div>
             )}
             {s.dailyScans.length > 0 && (
-                <div className="mt-1 flex justify-between text-[11px] text-surface-500 dark:text-surface-400">
+                <div className="mt-1 flex justify-between text-[11px] text-surface-600 dark:text-surface-400">
                     <span>{s.dailyScans[0].date.slice(5).replace('-', '/')}</span>
                     <span>{s.dailyScans[s.dailyScans.length - 1].date.slice(5).replace('-', '/')}</span>
                 </div>
+            )}
+            {scanDays.length > 0 && (
+                <details className="mt-3 group">
+                    <summary className="btn-secondary btn-sm min-h-[44px] cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                        <span aria-hidden="true" className="group-open:hidden">▸</span>
+                        <span aria-hidden="true" className="hidden group-open:inline">▾</span>
+                        날짜별 스캔 보기
+                    </summary>
+                    <table className="mt-2 w-full text-sm">
+                        <thead>
+                            <tr className="text-left text-xs text-surface-600 dark:text-surface-400">
+                                <th className="py-1.5 pr-3 font-medium">날짜</th>
+                                <th className="py-1.5 pr-3 font-medium text-right">스캔</th>
+                                <th className="py-1.5 font-medium text-right">스캔한 사람</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {[...scanDays].reverse().map((d) => (
+                                <tr key={d.date} className="border-t border-surface-100 dark:border-surface-700 text-surface-700 dark:text-surface-200">
+                                    <td className="py-1.5 pr-3">{d.date.slice(5).replace('-', '/')}</td>
+                                    <td className="py-1.5 pr-3 text-right">{fmt(d.scans)}건</td>
+                                    <td className="py-1.5 text-right">{fmt(d.users)}명</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </details>
             )}
         </section>
     );
@@ -161,11 +193,11 @@ function Growth({ s }: { s: DashboardStats }) {
     return (
         <section className="glass-card p-5">
             <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">최근 12개월 신규</h2>
-            <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">승인된 달 기준 신규 기관과 새로 가입한 사용자입니다.</p>
+            <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">승인된 달 기준 신규 기관과 새로 가입한 사용자입니다.</p>
             <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
-                        <tr className="text-left text-xs text-surface-500 dark:text-surface-400">
+                        <tr className="text-left text-xs text-surface-600 dark:text-surface-400">
                             <th className="py-1.5 pr-3 font-medium">월</th>
                             <th className="py-1.5 pr-3 font-medium">신규 기관</th>
                             <th className="py-1.5 pr-3 font-medium text-right">누적 기관</th>
@@ -207,14 +239,14 @@ function OrgTable({ rows }: { rows: DashboardOrgRow[] }) {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                     <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">기관별 현황</h2>
-                    <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
+                    <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                         이용 기관 {fmt(rows.length)}곳 중 {fmt(idle)}곳은 최근 30일 스캔이 없습니다.
                     </p>
                 </div>
                 <label className="text-sm text-surface-600 dark:text-surface-300 flex items-center gap-2">
                     정렬
                     <select
-                        className="input min-h-[40px] py-1.5 text-sm"
+                        className="input min-h-[44px] py-1.5 text-sm"
                         value={sortKey}
                         onChange={(e) => setSortKey(e.target.value as SortKey)}
                     >
@@ -226,12 +258,14 @@ function OrgTable({ rows }: { rows: DashboardOrgRow[] }) {
                 </label>
             </div>
             {rows.length === 0 ? (
-                <p className="mt-6 text-center text-sm text-surface-500 dark:text-surface-400">아직 이용 중인 기관이 없습니다.</p>
+                <p className="mt-6 text-center text-sm text-surface-600 dark:text-surface-400">아직 이용 중인 기관이 없습니다.</p>
             ) : (
-                <div className="mt-4 overflow-x-auto">
+                <>
+                <p className="mt-3 text-xs text-surface-600 dark:text-surface-400 md:hidden">표를 옆으로 밀면 나머지 칸이 보입니다.</p>
+                <div className="mt-2 md:mt-4 overflow-x-auto">
                     <table className="w-full text-sm min-w-[640px]">
                         <thead>
-                            <tr className="text-left text-xs text-surface-500 dark:text-surface-400">
+                            <tr className="text-left text-xs text-surface-600 dark:text-surface-400">
                                 <th className="py-2 pr-3 font-medium">기관</th>
                                 <th className="py-2 pr-3 font-medium text-right">사용자</th>
                                 <th className="py-2 pr-3 font-medium text-right">재물</th>
@@ -246,23 +280,24 @@ function OrgTable({ rows }: { rows: DashboardOrgRow[] }) {
                                 <tr key={r.id} className="border-t border-surface-100 dark:border-surface-700">
                                     <td className="py-2 pr-3">
                                         <p className="font-medium text-surface-800 dark:text-surface-100">{r.name}</p>
-                                        {r.approvedAt && <p className="text-xs text-surface-500 dark:text-surface-400">{formatDay(r.approvedAt)} 승인</p>}
+                                        {r.approvedAt && <p className="text-xs text-surface-600 dark:text-surface-400">{formatDay(r.approvedAt)} 승인</p>}
                                     </td>
                                     <td className="py-2 pr-3 text-right text-surface-700 dark:text-surface-200">{fmt(r.users)}</td>
                                     <td className="py-2 pr-3 text-right text-surface-700 dark:text-surface-200">{fmt(r.assets)}</td>
                                     <td className="py-2 pr-3 text-right text-surface-700 dark:text-surface-200">{fmt(r.spaces)}</td>
                                     <td className="py-2 pr-3 text-right text-surface-700 dark:text-surface-200">{r.openSurveys}/{r.closedSurveys}</td>
-                                    <td className={`py-2 pr-3 text-right font-medium ${r.scans30d === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-surface-800 dark:text-surface-100'}`}>
+                                    <td className={`py-2 pr-3 text-right font-medium ${r.scans30d === 0 ? 'text-amber-800 dark:text-amber-300' : 'text-surface-800 dark:text-surface-100'}`}>
                                         {fmt(r.scans30d)}
                                     </td>
                                     <td className="py-2 text-right text-surface-600 dark:text-surface-300 whitespace-nowrap">
-                                        {r.lastScanAt ? formatDay(r.lastScanAt) : <span className="text-surface-400 dark:text-surface-500">30일 넘음</span>}
+                                        {r.lastScanAt ? formatDay(r.lastScanAt) : <span className="text-surface-600 dark:text-surface-400">30일 넘음</span>}
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
+                </>
             )}
         </section>
     );
@@ -287,7 +322,7 @@ export default function ServiceDashboard() {
     };
 
     if (loading) {
-        return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
+        return <div className="flex items-center justify-center py-20" role="status" aria-label="운영 현황 불러오는 중"><div className="w-8 h-8 spinner" /></div>;
     }
 
     return (
@@ -295,13 +330,14 @@ export default function ServiceDashboard() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">운영 현황</h1>
-                    <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
+                    <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                         {stats?.lastUpdatedAt
                             ? <>{formatDateTime(stats.lastUpdatedAt)} 기준 · 매일 새벽 자동 집계</>
                             : '매일 새벽 자동으로 집계합니다.'}
                     </p>
                 </div>
                 <button
+                    type="button"
                     onClick={handleRefresh}
                     disabled={refreshing}
                     className="btn-secondary min-h-[48px] px-4 text-sm flex items-center gap-1.5 self-start sm:self-auto"
@@ -319,14 +355,14 @@ export default function ServiceDashboard() {
                     <p className="mt-1 text-sm text-red-700/90 dark:text-red-200/90">
                         네트워크 문제이거나 시스템 관리자 권한이 아직 반영되지 않았을 수 있습니다. 다시 시도하거나 새로고침해 주세요.
                     </p>
-                    <button onClick={() => void load()} className="btn-secondary mt-3 text-sm min-h-[48px] px-4">다시 시도</button>
+                    <button type="button" onClick={() => void load()} className="btn-secondary mt-3 text-sm min-h-[48px] px-4">다시 시도</button>
                 </div>
             )}
 
             {!loadError && !stats && (
                 <div className="glass-card p-8 text-center">
                     <p className="font-semibold text-surface-800 dark:text-surface-100">아직 집계된 통계가 없습니다</p>
-                    <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
+                    <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                         <strong>지금 갱신</strong>을 누르면 처음 집계합니다. 그 뒤로는 매일 새벽 자동으로 갱신됩니다.
                     </p>
                 </div>

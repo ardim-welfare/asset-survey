@@ -17,7 +17,7 @@ import type { Asset, HistoryEntry } from '../../types/asset';
 import type { Space } from '../../types/space';
 import type { AssetCheck } from '../../types/assetCheck';
 
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
 const won = (n: number | null | undefined) => (n == null ? '-' : `${n.toLocaleString('ko-KR')}원`);
 
 function when(ts: HistoryEntry['at']): string {
@@ -76,14 +76,17 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
     const [printing, setPrinting] = useState(false);
     const listPath = admin ? '/admin/assets' : '/employee/assets';
 
-    if (d.loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
+    if (d.loading) return <div className="flex justify-center py-20" role="status" aria-label="재물 정보를 불러오는 중"><div className="w-8 h-8 spinner" aria-hidden="true" /></div>;
     if (d.error || d.notFound || !d.asset) {
         return (
             <div className="max-w-lg mx-auto glass-card p-6 text-center">
-                <p className="text-surface-700 dark:text-surface-300 mb-4">
-                    {d.notFound ? '이 기관에 없는 재물입니다.' : '재물 정보를 불러오지 못했습니다.'}
+                {/* 무엇을 하면 되는지까지 적는다 — 글자만 있으면 다음 할 일을 몰랐다 */}
+                <p className="text-surface-700 dark:text-surface-300 mb-4 break-keep" role="alert">
+                    {d.notFound
+                        ? '이 기관에 없는 재물입니다. 지운 재물이거나 다른 기관의 라벨일 수 있어요. 재물 목록에서 찾아보세요.'
+                        : '재물 정보를 불러오지 못했습니다. 인터넷 연결을 확인하고 [다시 불러오기]를 눌러 주세요.'}
                 </p>
-                <div className="flex justify-center gap-2">
+                <div className="flex flex-wrap justify-center gap-2">
                     {!d.notFound && <button type="button" className="btn-secondary min-h-[48px] px-4" onClick={() => void d.reload()}>다시 불러오기</button>}
                     <Link to={listPath} className="btn-primary min-h-[48px] px-5">목록으로</Link>
                 </div>
@@ -108,7 +111,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
     return (
         <div className="max-w-2xl mx-auto animate-fade-in space-y-4">
             <div className="flex items-center justify-between gap-2">
-                <Link to={listPath} className="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 min-h-[44px]">
+                <Link to={listPath} className="inline-flex items-center gap-1 text-sm font-medium text-primary-700 dark:text-primary-300 min-h-[44px] pr-2">
                     <span aria-hidden="true">←</span> 재물 목록
                 </Link>
                 {admin && (
@@ -137,7 +140,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
                 <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
                     {rows.map(([label, value]) => (
                         <div key={label} className="contents">
-                            <dt className="text-surface-500 dark:text-surface-400">{label}</dt>
+                            <dt className="text-surface-600 dark:text-surface-400">{label}</dt>
                             <dd className="text-surface-900 dark:text-surface-100 break-words">{value ?? '-'}</dd>
                         </div>
                     ))}
@@ -177,7 +180,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
                 <section className="glass-card p-5" aria-labelledby="asset-history">
                     <h2 id="asset-history" className="font-semibold text-surface-900 dark:text-surface-100 mb-3">변경 이력</h2>
                     {d.history.length === 0 ? (
-                        <p className="text-sm text-surface-500 dark:text-surface-400">처음 가져온 뒤 바뀐 내용이 없습니다.</p>
+                        <p className="text-sm text-surface-600 dark:text-surface-400">처음 가져온 뒤 바뀐 내용이 없습니다.</p>
                     ) : (
                         <ol className="space-y-3">
                             {d.history.map((h) => (
@@ -185,7 +188,7 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
                                     <p className="text-surface-900 dark:text-surface-100 font-medium">
                                         {HISTORY_TYPE_LABEL[h.type]} <span className={`${sub} font-normal`}>{when(h.at)}</span>
                                     </p>
-                                    <ul className="mt-1 space-y-0.5 text-surface-700 dark:text-surface-300">
+                                    <ul className="mt-1 space-y-0.5 text-surface-700 dark:text-surface-300 break-words">
                                         {Object.entries(h.changes).map(([f, ch]) => (
                                             <li key={f}>
                                                 {COMPARE_FIELD_LABEL[f as CompareField] ?? (f === 'photo' ? '사진' : f)}: {showValue(f, ch.before, d.spaces)} → {showValue(f, ch.after, d.spaces)}

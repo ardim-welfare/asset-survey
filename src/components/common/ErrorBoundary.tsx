@@ -52,10 +52,11 @@ export default class ErrorBoundary extends Component<Props, State> {
                     <div className="text-center max-w-md">
                         <div className="text-6xl mb-4" aria-hidden="true">🎉</div>
                         <h2 className="text-xl font-bold text-gray-800 dark:text-surface-100 mb-2">새 버전이 나왔어요</h2>
-                        <p className="text-gray-500 dark:text-surface-400 mb-6 text-sm">더 나아진 재물조사로 바꿀게요. 아래 버튼을 누르면 바로 업데이트됩니다.</p>
+                        <p className="text-surface-600 dark:text-surface-400 mb-6 text-sm">더 나아진 재물조사로 바꿀게요. 아래 버튼을 누르면 바로 업데이트됩니다.</p>
                         <button
+                            type="button"
                             onClick={() => void updateAndReload()}
-                            className="px-6 py-2.5 bg-blue-600 dark:bg-blue-700 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors font-medium min-h-[48px]"
+                            className="btn-primary min-h-[48px] px-6"
                         >
                             지금 업데이트
                         </button>
@@ -65,21 +66,23 @@ export default class ErrorBoundary extends Component<Props, State> {
         }
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-surface-950 p-6">
+                <div role="alert" className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-surface-950 p-6">
                     <div className="text-center max-w-md">
-                        <div className="text-6xl mb-4">😥</div>
+                        <div className="text-6xl mb-4" aria-hidden="true">😥</div>
                         <h2 className="text-xl font-bold text-gray-800 dark:text-surface-100 mb-2">
                             문제가 발생했습니다
                         </h2>
-                        <p className="text-gray-500 dark:text-surface-400 mb-6 text-sm">
-                            일시적인 오류가 발생했습니다. 새로고침하면 해결될 수 있습니다.
+                        <p className="text-surface-600 dark:text-surface-400 mb-6 text-sm">
+                            {isOffline()
+                                ? '인터넷 연결이 끊겨 화면을 불러오지 못했습니다. 연결을 확인한 뒤 아래 버튼을 눌러 주세요.'
+                                : '일시적인 오류가 발생했습니다. 아래 버튼을 누르면 다시 불러옵니다. 계속되면 앱을 닫았다 다시 열어 주세요.'}
                         </p>
                         <button
+                            type="button"
                             onClick={this.handleReset}
-                            className="px-6 py-2.5 bg-blue-600 dark:bg-blue-700 text-white rounded-lg
-                                       hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors font-medium min-h-[48px]"
+                            className="btn-primary min-h-[48px] px-6"
                         >
-                            🔄 새로고침
+                            다시 불러오기
                         </button>
                     </div>
                 </div>

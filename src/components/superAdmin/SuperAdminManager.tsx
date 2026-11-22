@@ -16,20 +16,24 @@ export default function SuperAdminManager() {
     const { confirm } = useConfirm();
     const [admins, setAdmins] = useState<SuperAdmin[]>([]);
     const [loading, setLoading] = useState(true);
+    // 목록을 못 읽었을 때 "슈퍼관리자가 없습니다"로 오해하지 않게 따로 보여 준다
+    const [loadError, setLoadError] = useState(false);
     const [email, setEmail] = useState('');
     const [adding, setAdding] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             const list = await getSuperAdmins() as SuperAdmin[];
             setAdmins(list);
         } catch (e: unknown) {
-            showToast('목록을 불러오지 못했습니다: ' + (e as Error).message, 'error');
+            console.error('슈퍼관리자 목록 조회 실패:', e);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
-    }, [showToast]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -43,7 +47,7 @@ export default function SuperAdminManager() {
             setEmail('');
             await load();
         } catch (err: unknown) {
-            showToast((err as Error).message, 'error');
+            showToast((err as Error).message || '추가하지 못했습니다. 그 계정이 앱에 Google 로그인을 한 번 했는지 확인해 주세요.', 'error');
         } finally {
             setAdding(false);
         }
@@ -54,13 +58,18 @@ export default function SuperAdminManager() {
             showToast('본인은 제거할 수 없습니다.', 'error');
             return;
         }
-        if (!await confirm({ message: `${admin.name || admin.email} 을(를) 슈퍼관리자에서 제거하시겠습니까?`, confirmColor: 'danger' })) return;
+        if (!await confirm({
+            title: '슈퍼관리자 제거',
+            message: `${admin.name || admin.email} 을(를) 슈퍼관리자에서 제거하시겠습니까?\n\n제거하면 그 계정은 시스템 관리 화면에 들어올 수 없습니다.`,
+            confirmText: '제거',
+            confirmColor: 'danger',
+        })) return;
         try {
             await removeSuperAdmin(admin.id, admins.length);
             showToast('슈퍼관리자에서 제거했습니다.', 'success');
             await load();
         } catch (err: unknown) {
-            showToast((err as Error).message, 'error');
+            showToast((err as Error).message || '제거하지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
         }
     };
 
@@ -68,14 +77,14 @@ export default function SuperAdminManager() {
         <div className="animate-fade-in">
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">슈퍼관리자 관리</h1>
-                <p className="text-surface-500 dark:text-surface-400 text-sm mt-1">슈퍼관리자 계정을 추가하거나 제거합니다.</p>
+                <p className="text-surface-600 dark:text-surface-400 text-sm mt-1">슈퍼관리자(시스템 관리자) 계정을 추가하거나 제거합니다.</p>
             </div>
 
             {/* 추가 폼 */}
             <div className="glass-card p-5 mb-6">
                 <h2 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">새 슈퍼관리자 추가</h2>
-                <p className="text-xs text-surface-500 dark:text-surface-400 mb-3">
-                    ⚠️ 추가할 계정이 먼저 앱에 <strong>Google 로그인</strong>을 한 번 해야 합니다.
+                <p className="text-xs text-amber-800 dark:text-amber-300 mb-3">
+                    <span aria-hidden="true">⚠️ </span>추가할 계정이 먼저 앱에 <strong>Google 로그인</strong>을 한 번 해야 합니다.
                 </p>
                 <form onSubmit={handleAdd} className="flex gap-2">
                     <input
@@ -83,6 +92,7 @@ export default function SuperAdminManager() {
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                         placeholder="이메일 주소 입력"
+                        aria-label="추가할 슈퍼관리자 이메일"
                         className="flex-1 input text-sm min-h-[48px]"
                         disabled={adding}
                         required
@@ -100,33 +110,42 @@ export default function SuperAdminManager() {
             {/* 목록 */}
             <div className="glass-card divide-y divide-surface-100 dark:divide-surface-700">
                 <div className="px-4 py-3 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-surface-700 dark:text-surface-300">슈퍼관리자 목록</span>
-                    <span className="text-xs text-surface-500 dark:text-surface-400">{admins.length}명</span>
+                    <h2 className="text-sm font-semibold text-surface-700 dark:text-surface-300">슈퍼관리자 목록</h2>
+                    {!loadError && <span className="text-xs text-surface-600 dark:text-surface-400">{admins.length}명</span>}
                 </div>
 
                 {loading ? (
-                    <div className="p-8 text-center text-surface-500 dark:text-surface-400 text-sm">불러오는 중...</div>
+                    <div className="p-8 text-center text-surface-600 dark:text-surface-400 text-sm" role="status">불러오는 중...</div>
+                ) : loadError ? (
+                    <div className="p-6 text-center" role="alert">
+                        <p className="text-sm text-red-700 dark:text-red-300">목록을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.</p>
+                        <button type="button" onClick={() => void load()} className="btn-secondary btn-sm min-h-[44px] mt-3">
+                            다시 시도
+                        </button>
+                    </div>
                 ) : admins.length === 0 ? (
-                    <div className="p-8 text-center text-surface-500 dark:text-surface-400 text-sm">슈퍼관리자가 없습니다.</div>
+                    <div className="p-8 text-center text-surface-600 dark:text-surface-400 text-sm">슈퍼관리자가 없습니다.</div>
                 ) : (
                     admins.map(admin => (
                         <div key={admin.id} className="px-4 py-4 flex items-center gap-3">
-                            <div className="w-9 h-9 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center flex-shrink-0">
-                                <span className="text-amber-600 dark:text-amber-400 text-sm font-bold">⚡</span>
+                            <div className="w-9 h-9 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                <span className="text-amber-700 dark:text-amber-300 text-sm font-bold">⚡</span>
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">
+                                <p className="text-sm font-semibold text-surface-900 dark:text-surface-100 break-keep">
                                     {admin.name || '이름 없음'}
                                     {admin.id === user?.uid && (
-                                        <span className="ml-1.5 text-xs text-primary-500 dark:text-primary-400 font-normal">(나)</span>
+                                        <span className="ml-1.5 text-xs text-primary-700 dark:text-primary-300 font-normal">(나)</span>
                                     )}
                                 </p>
-                                <p className="text-xs text-surface-500 dark:text-surface-400 truncate">{admin.email}</p>
+                                <p className="text-xs text-surface-600 dark:text-surface-400 break-all">{admin.email}</p>
                             </div>
                             {admin.id !== user?.uid && (
                                 <button
+                                    type="button"
                                     onClick={() => handleRemove(admin)}
-                                    className="text-xs text-red-700 dark:text-red-300 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 min-h-[48px] rounded-lg transition-colors flex-shrink-0"
+                                    className="btn-secondary btn-sm min-h-[44px] text-red-700 dark:text-red-300 flex-shrink-0"
+                                    aria-label={`${admin.name || admin.email || '이 계정'} 슈퍼관리자에서 제거`}
                                 >
                                     제거
                                 </button>

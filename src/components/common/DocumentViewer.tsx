@@ -26,13 +26,21 @@ export default function DocumentViewer({ url, stopPropagation }: DocumentViewerP
         );
     }
 
+    // 눌러도 아무 일이 없던 버튼 대신, 누르면 새 창에서 원본 크기로 여는 링크로 둔다
     return (
-        <button type="button" onClick={handleClick} className="p-0 border-0 bg-transparent text-left mt-2 min-h-[48px] animate-slide-down rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
+        <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleClick}
+            className="inline-block mt-2 animate-slide-down rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
             <img
                 src={url}
-                alt="증빙서류"
-                className="max-w-md rounded-lg border border-surface-200 dark:border-surface-600 block"
+                alt="증빙서류 (누르면 새 창에서 크게 보기)"
+                className="max-w-full sm:max-w-md rounded-lg border border-surface-200 dark:border-surface-600 block"
             />
-        </button>
+            <span className="block mt-1 text-xs text-primary-700 dark:text-primary-300 underline underline-offset-2">새 창에서 크게 보기</span>
+        </a>
     );
 }

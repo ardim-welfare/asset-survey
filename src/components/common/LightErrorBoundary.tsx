@@ -37,7 +37,7 @@ export default class LightErrorBoundary extends Component<Props, State> {
         if (!this.state.hasError) return this.props.children;
 
         return (
-            <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50 dark:bg-surface-950">
+            <div role="alert" className="min-h-screen flex items-center justify-center p-6 bg-gray-50 dark:bg-surface-950">
                 <div className="text-center max-w-sm">
                     <p className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
                         화면을 불러오지 못했습니다

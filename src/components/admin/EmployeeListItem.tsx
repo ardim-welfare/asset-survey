@@ -97,6 +97,17 @@ export default function EmployeeListItem({
                             {member.email && <p className="text-sm text-surface-600 dark:text-surface-400 break-all">{member.email}</p>}
                         </div>
                     </div>
+                    {/* 상태 이름표만으로는 무엇을 기다리는지·무엇이 막혔는지 몰랐다 — 한 줄로 풀어 쓴다 */}
+                    {isPending && (
+                        <p className="text-xs text-amber-800 dark:text-amber-300 mt-2">
+                            아직 가입하지 않았어요. 이 이메일로 초대 링크를 열어 가입하면 직원으로 바뀝니다.
+                        </p>
+                    )}
+                    {isDisabled && (
+                        <p className="text-xs text-red-700 dark:text-red-300 mt-2">
+                            앱을 쓸 수 없게 막아 둔 직원입니다. 다시 활성화하면 이전처럼 쓸 수 있어요.
+                        </p>
+                    )}
 
                     {/* 2줄: 팀·역할 */}
                     {isActive && (

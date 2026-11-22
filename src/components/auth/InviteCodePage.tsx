@@ -96,7 +96,7 @@ export default function InviteCodePage() {
             if (message.includes('비활성화')) {
                 setError('비활성화된 계정입니다. 기관 관리자에게 문의해 주세요.');
             } else if (message.includes('유효하지 않은') || message.includes('초대 코드')) {
-                setError('유효하지 않은 초대 코드입니다.');
+                setError('맞지 않는 초대 코드입니다. 기관 관리자에게 받은 6자리 코드를 다시 확인해 주세요.');
             } else if (message.includes('이미 기관에')) {
                 setError('이미 기관에 소속되어 있습니다. 로그아웃 후 다시 로그인해 주세요.');
             } else if (message.includes('Google 계정')) {
@@ -106,7 +106,7 @@ export default function InviteCodePage() {
                 // 재시도를 반복해 uid 기준 rate limit(시간당 5회)에 스스로 갇힌다.
                 setError('약관 동의 정보를 확인할 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.');
             } else {
-                setError('오류가 발생했습니다. 다시 시도해주세요.');
+                setError('참여하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요. 계속되면 기관 관리자에게 문의해 주세요.');
             }
             console.debug('[InviteCode] 가입 실패:', message || err);
             return false;
@@ -126,7 +126,7 @@ export default function InviteCodePage() {
     }
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-surface-50 to-primary-50 px-4">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-surface-50 to-primary-50 dark:from-surface-950 dark:to-surface-900 px-4">
             <div className="w-full max-w-sm animate-scale-in">
                 <div className="text-center mb-8">
                     <div className="w-16 h-16 mx-auto mb-4 bg-primary-100 dark:bg-primary-900/40 rounded-2xl flex items-center justify-center">
@@ -137,7 +137,7 @@ export default function InviteCodePage() {
                     <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">
                         {showLinkCopy ? '기관 참여 확인' : '초대 코드 입력'}
                     </h1>
-                    <p className="text-sm text-surface-500 dark:text-surface-400">
+                    <p className="text-sm text-surface-600 dark:text-surface-400">
                         {showLinkCopy
                             ? '초대 코드를 불러왔어요. 약관에 동의하면 참여가 완료됩니다.'
                             : '기관에서 받은 6자리 코드를 입력하세요'}
@@ -146,22 +146,35 @@ export default function InviteCodePage() {
 
                 <div className="glass-card p-6">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-surface-100 dark:border-surface-700">
-                        <img
-                            src={user?.photoURL || ''}
-                            alt=""
-                            className="w-10 h-10 rounded-full bg-surface-200 dark:bg-surface-700"
-                        />
+                        {/* 프로필 사진이 없으면 빈 src로 깨진 그림이 보이던 것을 머리글자로 대신한다 */}
+                        {user?.photoURL ? (
+                            <img
+                                src={user.photoURL}
+                                alt=""
+                                className="w-10 h-10 rounded-full bg-surface-200 dark:bg-surface-700"
+                            />
+                        ) : (
+                            <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center" aria-hidden="true">
+                                <span className="text-sm font-bold text-primary-700 dark:text-primary-300">
+                                    {(user?.displayName || user?.email || '?').charAt(0).toUpperCase()}
+                                </span>
+                            </div>
+                        )}
                         <div>
                             <p className="text-sm font-medium text-surface-800 dark:text-surface-200">{user?.displayName}</p>
-                            <p className="text-xs text-surface-500 dark:text-surface-400">{user?.email}</p>
+                            <p className="text-xs text-surface-600 dark:text-surface-400">{user?.email}</p>
                         </div>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label className="label">초대 코드</label>
+                            <label htmlFor="invite-code" className="label">초대 코드</label>
                             <input
+                                id="invite-code"
                                 type="text"
+                                autoComplete="off"
+                                autoCapitalize="characters"
+                                spellCheck={false}
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.replace(/\s/g, '').toUpperCase().slice(0, 6))}
                                 className="input text-center text-2xl tracking-[0.5em] font-mono uppercase min-h-[48px]"
@@ -181,14 +194,14 @@ export default function InviteCodePage() {
                                 type="checkbox"
                                 checked={agreeTerms}
                                 onChange={(e) => setAgreeTerms(e.target.checked)}
-                                className="mt-0.5 w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 dark:text-primary-400 focus:ring-primary-500"
+                                className="mt-0.5 w-5 h-5 flex-shrink-0 accent-primary-600 rounded border-surface-300 dark:border-surface-600 focus:ring-primary-500"
                             />
                             <span className="text-sm text-surface-600 dark:text-surface-400 group-hover:text-surface-800 dark:group-hover:text-surface-200 transition-colors">
                                 <a
                                     href="/terms"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-primary-600 dark:text-primary-400 underline underline-offset-2 font-medium hover:text-primary-700 dark:hover:text-primary-300"
+                                    className="text-primary-700 dark:text-primary-300 underline underline-offset-2 font-medium hover:text-primary-800 dark:hover:text-primary-200"
                                 >
                                     이용약관
                                 </a>
@@ -201,7 +214,7 @@ export default function InviteCodePage() {
                           이 동의가 위탁 동의가 아니라는 점, (3) 동의 기록이 남는다는 점을 밝힌다.
                           (3)은 기관 신청 화면(OrgApplicationPage)과 대칭을 맞춘 것이다.
                         */}
-                        <div className="text-xs text-surface-500 dark:text-surface-400 leading-relaxed space-y-1.5">
+                        <div className="text-xs text-surface-600 dark:text-surface-400 leading-relaxed space-y-1.5">
                             <p>
                                 소속 기관이 개인정보처리자이며, 서비스 제공자는 기관의 위탁을 받아 개인정보를 처리하는
                                 수탁자입니다. 개인정보의 수집·이용에 관한 고지는 소속 기관이 담당합니다.
@@ -213,7 +226,16 @@ export default function InviteCodePage() {
                         </div>
 
                         {error && (
-                            <p className="text-sm text-red-700 dark:text-red-300 animate-slide-down">{error}</p>
+                            <p role="alert" className="text-sm text-red-700 dark:text-red-300 animate-slide-down">{error}</p>
+                        )}
+
+                        {/* 버튼이 왜 안 눌리는지 보이게 한다 */}
+                        {!loading && (code.length !== 6 || !agreeTerms) && (
+                            <p className="text-xs text-surface-600 dark:text-surface-400">
+                                {code.length !== 6
+                                    ? `초대 코드 6자리를 넣어 주세요 (지금 ${code.length}자리).`
+                                    : '이용약관에 동의하면 참여할 수 있어요.'}
+                            </p>
                         )}
 
                         <button
@@ -234,6 +256,7 @@ export default function InviteCodePage() {
                             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl p-4 mt-6 animate-fade-in text-center">
                                 <p className="text-sm text-amber-800 dark:text-amber-200 mb-3 font-medium">안전한 사용을 위해 로그인이 필요합니다.</p>
                                 <button
+                                    type="button"
                                     onClick={() => {
                                         if (code) localStorage.setItem('pendingInviteCode', code);
                                         logout().then(() => navigate('/login'));
@@ -246,14 +269,16 @@ export default function InviteCodePage() {
                         ) : (
                             <div className="mt-4 pt-4 border-t border-surface-100 dark:border-surface-700 space-y-3">
                                 <button
+                                    type="button"
                                     onClick={() => navigate('/apply')}
                                     className="btn-secondary w-full text-sm py-2.5 font-medium border-primary-200 text-primary-700 hover:bg-primary-50 dark:border-primary-800 dark:text-primary-300 dark:hover:bg-primary-900/30 min-h-[48px]"
                                 >
                                     초대 코드가 없나요? 새 기관 등록 신청하기
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={logout}
-                                    className="btn-ghost w-full text-sm text-surface-500 dark:text-surface-400 hover:text-red-500 dark:hover:text-red-400 min-h-[48px]"
+                                    className="btn-secondary w-full text-sm min-h-[48px]"
                                 >
                                     다른 계정으로 로그인
                                 </button>
