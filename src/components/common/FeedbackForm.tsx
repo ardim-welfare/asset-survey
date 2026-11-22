@@ -40,7 +40,8 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
             return await imageCompression(file, {
                 maxSizeMB: 1,
                 maxWidthOrHeight: 1200,
-                useWebWorker: true,
+                // blob: 워커는 보안 정책(CSP)에 막혀 콘솔 오류만 남긴다 — 화면에서 줄인다
+                useWebWorker: false,
                 fileType: 'image/jpeg'
             });
         } catch (e) {

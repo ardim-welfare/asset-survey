@@ -31,7 +31,8 @@ const EMPTY: AssetPhotoFields = { photoUrl: null, photoThumbUrl: null, photoPath
 /** 사진 줄이기 — 라이브러리는 이때만 불러온다(번들 분리). 현장 사진(scanPhotos)도 쓴다 */
 export async function shrinkPhoto(file: File, maxSide: number, maxSizeMB: number): Promise<File> {
     const { default: imageCompression } = await import('browser-image-compression');
-    return imageCompression(file, { maxWidthOrHeight: maxSide, maxSizeMB, useWebWorker: true, fileType: 'image/jpeg', initialQuality: 0.8 });
+    // 작업자(worker)는 쓰지 않는다 — blob: 워커가 보안 정책(CSP script-src)에 막힌다. 사진 한 장이라 화면에서 줄여도 충분하다
+    return imageCompression(file, { maxWidthOrHeight: maxSide, maxSizeMB, useWebWorker: false, fileType: 'image/jpeg', initialQuality: 0.8 });
 }
 
 /** 기관·재물 사진 폴더 */

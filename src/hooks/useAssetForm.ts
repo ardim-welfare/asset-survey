@@ -100,6 +100,9 @@ export default function useAssetForm(assetId: string | undefined) {
     const [codes, setCodes] = useState<string[]>([]);
     /** 부서 고르기 목록(2026-11-22) — 팀 이름 + 이미 재물에 쓰인 부서 이름, 가나다순 */
     const [departments, setDepartments] = useState<string[]>([]);
+    const [teamList, setTeamList] = useState<Array<{ id: string; name: string }>>([]);
+    /** 공간을 골라 자동으로 채운 부서 값 — 사람이 바꾸지 않았으면 공간을 바꿀 때 다시 채운다 */
+    const [autoDepartment, setAutoDepartment] = useState<string | null>(null);
     const [spaces, setSpaces] = useState<Space[]>([]);
     const [buildings, setBuildings] = useState<Building[]>([]);
     const [loading, setLoading] = useState(true);
@@ -127,6 +130,7 @@ export default function useAssetForm(assetId: string | undefined) {
                 ...all.map((a) => a.department?.trim() ?? '').filter(Boolean),
             ]);
             setDepartments([...names].sort((a, b) => a.localeCompare(b, 'ko')));
+            setTeamList(teams.map((t) => ({ id: t.id, name: t.name })));
             if (assetId) {
                 const found = await getAsset(assetId);
                 if (!found || found.organizationId !== orgId) { setLoadError(true); return; }
@@ -150,6 +154,21 @@ export default function useAssetForm(assetId: string | undefined) {
     }, []);
 
     const autoCode = useCallback(() => set('code', nextAssetCode(codes)), [codes, set]);
+
+    /**
+     * 공간 고르기(2026-11-22, 사용자 의견) — 공간에 담당 팀이 있으면 그 팀 이름으로 부서를 채운다.
+     * 부서를 사람이 직접 바꿨으면(자동 값과 다르면) 건드리지 않는다.
+     */
+    const chooseSpace = useCallback((spaceId: string) => {
+        const space = spaces.find((s) => s.id === spaceId);
+        const teamName = teamList.find((t) => t.id === (space?.teamIds ?? [])[0])?.name ?? null;
+        setValues((prev) => {
+            const untouched = prev.department === '' || prev.department === autoDepartment;
+            return { ...prev, spaceId, department: untouched && teamName ? teamName : prev.department };
+        });
+        setAutoDepartment(teamName);
+        setError('');
+    }, [spaces, teamList, autoDepartment]);
 
     /**
      * 저장 — 성공하면 재물 문서 ID. `keepGoing`이면(새로 등록 + '저장하고 하나 더') 입력을 비우되
@@ -195,7 +214,9 @@ export default function useAssetForm(assetId: string | undefined) {
     }, [orgId, saving, values, isNew, codes, asset, accounting, photo, showToast]);
 
     return {
-        isNew, values, set, autoCode, save, saving, error, photo, setPhoto, departments,
+        isNew, values, set, autoCode, chooseSpace, save, saving, error, photo, setPhoto, departments,
+        /** 지금 부서 값이 공간의 담당 팀에서 자동으로 채운 것인가 */
+        departmentFromSpace: autoDepartment !== null && values.department === autoDepartment,
         asset, spaces, buildings, loading, loadError, reload: load,
         /** 대장에서 온 재물 — 고쳐도 다음 가져오기 때 대장 값으로 바뀐다 */
         fromLedger: !!asset && !asset.manual,

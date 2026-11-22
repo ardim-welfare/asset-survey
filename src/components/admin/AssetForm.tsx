@@ -5,7 +5,7 @@
  * /admin/assets/:assetId/edit — 고치기(자산코드는 바꿀 수 없다 — 문서 ID·라벨과 묶여 있다)
  * 상태와 저장은 useAssetForm이 맡는다.
  */
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import useAssetForm, { ASSET_LIMITS, formatAmountInput, type AssetFormValues } from '../../hooks/useAssetForm';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
@@ -86,7 +86,7 @@ export default function AssetForm() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field id="asset-space" label="공간">
-                        <select id="asset-space" className="input w-full min-h-[48px]" value={v.spaceId} onChange={(e) => f.set('spaceId', e.target.value)}>
+                        <select id="asset-space" className="input w-full min-h-[48px]" value={v.spaceId} onChange={(e) => f.chooseSpace(e.target.value)}>
                             <option value="">공간 미지정</option>
                             {groups ? groups.filter((g) => g.count > 0).map((g) => (
                                 <optgroup key={g.buildingId ?? 'none'} label={g.label}>
@@ -113,15 +113,10 @@ export default function AssetForm() {
                     <Field id="asset-amount" label="자산금액(원)" hint="관리자만 봅니다.">
                         <input id="asset-amount" type="text" inputMode="numeric" className="input w-full min-h-[48px]" value={v.amount} placeholder="예: 250,000" onChange={(e) => f.set('amount', formatAmountInput(e.target.value))} />
                     </Field>
-                    <DepartmentField value={v.department} options={f.departments} onChange={(d) => f.set('department', d)} />
+                    <DepartmentField value={v.department} options={f.departments} onChange={(d) => f.set('department', d)} fromSpace={f.departmentFromSpace} />
                 </div>
                 {text('usage', '용도', '쓰는 곳·메모')}
-                {f.isNew && (
-                    <Field id="asset-photo" label="사진" hint="선택 — 등록할 때 함께 올립니다. 나중에 재물 화면에서 올리거나 바꿀 수도 있어요.">
-                        <input id="asset-photo" key={f.photo ? "picked" : "empty"} type="file" accept="image/*" className="block w-full text-sm min-h-[48px]"
-                            onChange={(e) => f.setPhoto(e.target.files?.[0] ?? null)} />
-                    </Field>
-                )}
+                {f.isNew && <PhotoPicker file={f.photo} onChange={f.setPhoto} />}
 
                 {f.error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{f.error}</p>}
 
@@ -158,11 +153,14 @@ const DIRECT = '__direct__';
  * 부서 고르기(2026-11-22) — 팀 이름과 이미 쓰인 부서 이름 중에서 고르고, 없으면 [직접 입력]으로 적는다.
  * 목록에 없는 값이 이미 들어 있으면(대장에서 가져온 값) 처음부터 직접 입력 칸으로 보인다.
  */
-function DepartmentField({ value, options, onChange }: { value: string; options: string[]; onChange: (v: string) => void }) {
+function DepartmentField({ value, options, onChange, fromSpace }: { value: string; options: string[]; onChange: (v: string) => void; fromSpace: boolean }) {
     const [direct, setDirect] = useState(() => value !== '' && !options.includes(value));
     const inList = options.includes(value);
+    const hint = fromSpace
+        ? '공간의 담당 팀으로 채웠어요. 다르면 바꾸세요.'
+        : options.length === 0 ? '공간에 담당 팀을 지정하면 공간을 고를 때 자동으로 채워져요.' : '선택 — 공간에 담당 팀이 있으면 자동으로 채워져요.';
     return (
-        <Field id="asset-department" label="부서" hint={options.length === 0 ? '직원 관리에서 팀을 만들면 여기서 고를 수 있어요.' : undefined}>
+        <Field id="asset-department" label="부서" hint={hint}>
             {!direct && options.length > 0 ? (
                 <select id="asset-department" className="input w-full min-h-[48px]" value={inList ? value : ''}
                     onChange={(e) => {
@@ -183,5 +181,44 @@ function DepartmentField({ value, options, onChange }: { value: string; options:
                 </div>
             )}
         </Field>
+    );
+}
+
+/**
+ * 사진 고르기(2026-11-22, 사용자 의견) — 기본 파일 칸은 글자처럼 보여 버튼으로 바꾸고, 고른 사진을 바로 보여 준다.
+ * 휴대폰에서는 '사진 찍기'와 '갤러리'를 함께 고를 수 있다.
+ */
+function PhotoPicker({ file, onChange }: { file: File | null; onChange: (f: File | null) => void }) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [preview, setPreview] = useState<string | null>(null);
+    useEffect(() => {
+        if (!file) { setPreview(null); return; }
+        const url = URL.createObjectURL(file);
+        setPreview(url);
+        return () => URL.revokeObjectURL(url);
+    }, [file]);
+    return (
+        <div>
+            <p className={labelCls}>사진 <span className="text-xs font-normal text-surface-500 dark:text-surface-400">(선택)</span></p>
+            <input ref={inputRef} type="file" accept="image/*" className="hidden" aria-label="재물 사진 고르기"
+                onChange={(e) => { onChange(e.target.files?.[0] ?? null); e.target.value = ''; }} />
+            {preview ? (
+                <div className="flex items-end gap-3">
+                    <img src={preview} alt="고른 사진 미리보기" className="w-32 h-32 object-cover rounded-xl border border-surface-200 dark:border-surface-700" />
+                    <div className="flex flex-col gap-2">
+                        <button type="button" className="btn-secondary min-h-[44px] px-4" onClick={() => inputRef.current?.click()}>다른 사진</button>
+                        <button type="button" className="btn-secondary min-h-[44px] px-4" onClick={() => onChange(null)}>빼기</button>
+                    </div>
+                </div>
+            ) : (
+                <button type="button" onClick={() => inputRef.current?.click()}
+                    className="w-full min-h-[96px] rounded-xl border-2 border-dashed border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-300 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-300 flex flex-col items-center justify-center gap-1">
+                    <span className="text-2xl" aria-hidden="true">📷</span>
+                    <span className="font-medium">사진 고르기</span>
+                    <span className="text-xs text-surface-500 dark:text-surface-400">휴대폰에서는 바로 찍을 수도 있어요</span>
+                </button>
+            )}
+            <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">등록할 때 함께 올립니다. 사람이 찍히지 않게 물건만 찍어 주세요.</p>
+        </div>
     );
 }

@@ -37,7 +37,8 @@ service firebase.storage {
     // 기관 해지 파기가 organizations/{기관}/ 아래를 통째로 지운다.
     match /organizations/{orgId}/assets/{assetId}/{fileName} {
       allow read: if isOrgMember(orgId) || isSuperAdmin();
-      allow create: if isOrgAdmin(orgId)
+      // 시스템 관리자도 올린다 — '관리자 화면 보기'로 기관 화면을 쓸 때(2026-11-22, 403으로 막혔던 것)
+      allow create: if (isOrgAdmin(orgId) || isSuperAdmin())
                     && assetId.matches(orgId + '__.+')
                     && request.resource.size < 2 * 1024 * 1024
                     && isAllowedImage();
@@ -49,7 +50,7 @@ service firebase.storage {
     // firestore.rules가 담당자·열린 회차·제출 전으로 막는다). 올린 사람을 메타데이터로 남겨 본인·관리자만 지운다.
     match /organizations/{orgId}/scans/{surveyId}/{fileName} {
       allow read: if isOrgMember(orgId) || isSuperAdmin();
-      allow create: if isOrgMember(orgId)
+      allow create: if (isOrgMember(orgId) || isSuperAdmin())
                     && request.resource.size < 2 * 1024 * 1024
                     && isAllowedImage()
                     && request.resource.metadata.uploadedBy == request.auth.uid;

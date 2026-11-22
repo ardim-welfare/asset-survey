@@ -172,6 +172,11 @@ describe('Storage Security Rules — 재물 사진', () => {
     await assertFails(uploadBytes(ref(as('admin_A', 'admin', 'org-A'), PATH), jpg, { contentType: 'text/html' }));
   });
 
+  it('시스템 관리자(관리자 화면 보기)도 올린다', async () => {
+    const sa = env.authenticatedContext('super_1', { role: 'superAdmin' }).storage();
+    await assertSucceeds(uploadBytes(ref(sa, PATH), jpg, { contentType: 'image/jpeg' }));
+  });
+
   it('너무 큰 파일(2MB 이상)은 막힌다', async () => {
     const big = new Uint8Array(2 * 1024 * 1024 + 1);
     await assertFails(uploadBytes(ref(as('admin_A', 'admin', 'org-A'), PATH), big, { contentType: 'image/jpeg' }));
