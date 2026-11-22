@@ -10,7 +10,7 @@ import useAssetList, { buildingFilter, floorFilter, checkedAtOf, DEFAULT_FILTERS
 import { toLocalDateStr } from '../../lib/dateUtils';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from '../common/AssetBadges';
-import { isUsefulLifeOver, todayText } from '../../lib/usefulLife';
+import { isUsefulLifeOver, todayText, usefulLifeEnd } from '../../lib/usefulLife';
 import LabelPrintDialog from './LabelPrintDialog';
 import type { Asset } from '../../types/asset';
 import type { Space } from '../../types/space';
@@ -110,6 +110,7 @@ export default function AssetList() {
                                             <th className="p-3 font-medium whitespace-nowrap">상태</th>
                                             <th className="p-3 font-medium whitespace-nowrap">라벨</th>
                                             <th className="p-3 font-medium whitespace-nowrap">마지막 확인</th>
+                                            <th className="p-3 font-medium whitespace-nowrap">내용연수 끝</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
@@ -134,6 +135,7 @@ export default function AssetList() {
                                                 <td className="p-3"><StatusBadge status={a.status} /></td>
                                                 <td className="p-3 whitespace-nowrap">{a.tagId ? <span className="text-surface-700 dark:text-surface-300">있음</span> : <span className={sub}>없음</span>}</td>
                                                 <td className="p-3 whitespace-nowrap">{checked(a) ?? <span className={sub}>없음</span>}</td>
+                                                <td className="p-3 whitespace-nowrap tabular-nums"><LifeEnd asset={a} today={today} /></td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -160,6 +162,7 @@ export default function AssetList() {
                                             <p className="text-sm text-surface-800 dark:text-surface-200 line-clamp-2 break-keep">{a.name ?? '-'}</p>
                                             <p className={sub}>
                                                 {where(a) ?? `미지정${a.locationRaw ? ` · ${a.locationRaw}` : ''}`} · 라벨 {a.tagId ? '있음' : '없음'} · 확인 {checked(a) ?? '없음'}
+                                                {lifeEndOf(a) && ` · 내용연수 ${lifeEndOf(a)}까지`}
                                             </p>
                                             </span>
                                             <span aria-hidden="true" className="text-surface-500 text-lg flex-shrink-0">›</span>
@@ -308,6 +311,18 @@ function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProp
             </div>
         </div>
     );
+}
+
+/** 내용연수가 끝나는 날(취득일자+내용연수) — 계산할 수 없으면 null (2026-11-22) */
+const lifeEndOf = (a: Asset): string | null => usefulLifeEnd(a.acquiredAt, a.usefulLife);
+
+/** 표의 '내용연수 끝' 칸 — 지났으면 노란 글자로 */
+function LifeEnd({ asset, today }: { asset: Asset; today: string }) {
+    const end = lifeEndOf(asset);
+    if (!end) return <span className={sub}>-</span>;
+    return isUsefulLifeOver(asset, today)
+        ? <span className="font-medium text-amber-800 dark:text-amber-300">{end}</span>
+        : <span className="text-surface-700 dark:text-surface-300">{end}</span>;
 }
 
 /** 목록용 작은 사진(2026-11-22) — 없으면 같은 크기의 빈 칸으로 줄을 맞춘다 */
