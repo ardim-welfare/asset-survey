@@ -83,16 +83,16 @@ export default function EmployeeHome() {
 
             {survey ? (
                 <section className="glass-card p-5" aria-labelledby="survey-heading">
-                    <p className="text-xs font-medium text-primary-600 dark:text-primary-400">진행 중인 재물조사</p>
+                    <p className="text-xs font-medium text-primary-700 dark:text-primary-300">진행 중인 재물조사</p>
                     <h2 id="survey-heading" className="font-semibold text-surface-900 dark:text-surface-100">{survey.name}</h2>
-                    <p className="text-sm text-surface-500 dark:text-surface-400">{survey.startDate} ~ {survey.endDate}</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 tabular-nums">{survey.startDate} ~ {survey.endDate}</p>
                     <Link to="/employee/scan" className="btn-primary w-full min-h-[52px] mt-4">📷 스캔하러 가기</Link>
                 </section>
             ) : (
                 <div className="glass-card p-6 text-center">
                     <div className="text-4xl mb-3" aria-hidden="true">📋</div>
                     <p className="text-surface-700 dark:text-surface-300 font-medium">진행 중인 재물조사가 없습니다</p>
-                    <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
                         재물 담당자가 조사를 시작하면 담당 공간의 조사 목록이 여기에 나옵니다.
                     </p>
                 </div>

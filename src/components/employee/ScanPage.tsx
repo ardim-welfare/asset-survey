@@ -17,7 +17,7 @@ import { useToast } from '../../hooks/useToast';
 import { useConfirm } from '../../hooks/useConfirm';
 import type { Scan, ScanCondition, ScanResult, SurveySubmission } from '../../types/survey';
 
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
 
 const RESULT_STYLE: Record<ScanResult | 'duplicate', string> = {
     ok: 'bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-200',
@@ -71,8 +71,9 @@ export default function ScanPage() {
                 <ul className="space-y-2">
                     {sc.mySpaces.map((s) => (
                         <li key={s.id}>
-                            <button type="button" className="glass-card w-full text-left p-4 min-h-[56px] font-medium text-surface-900 dark:text-surface-100" onClick={() => sc.setSpaceId(s.id)}>
-                                {s.name}
+                            <button type="button" className="glass-card w-full text-left p-4 min-h-[56px] font-medium text-surface-900 dark:text-surface-100 flex items-center gap-2 hover:ring-2 hover:ring-primary-200 dark:hover:ring-primary-800 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500" onClick={() => sc.setSpaceId(s.id)}>
+                                <span className="flex-1 break-keep">{s.name}</span>
+                                <span aria-hidden="true" className="text-surface-500 text-lg">›</span>
                             </button>
                         </li>
                     ))}
@@ -110,7 +111,7 @@ export default function ScanPage() {
                     </span>
                 </div>
                 <div className="mt-2 h-2 rounded-full bg-surface-100 dark:bg-surface-800 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={sc.target} aria-valuenow={sc.found} aria-label="확인한 비율">
-                    <div className="h-full bg-primary-500" style={{ width: `${pct}%` }} />
+                    <div className="h-full bg-primary-600 dark:bg-primary-400" style={{ width: `${pct}%` }} />
                 </div>
             </section>
 
@@ -136,8 +137,8 @@ export default function ScanPage() {
                     {cameraOn ? (
                         <>
                             <QrCamera onScan={(t) => sc.handle(t, 'qr')} onStateChange={setCamState} />
-                            {camState === 'denied' && <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">카메라 사용이 막혀 있습니다. 브라우저 설정에서 카메라를 허용하거나 '코드 직접 입력'을 쓰세요.</p>}
-                            {camState === 'unsupported' && <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">이 브라우저에서는 카메라를 쓸 수 없습니다. '코드 직접 입력'을 쓰세요.</p>}
+                            {camState === 'denied' && <p className="mt-2 text-sm text-red-700 dark:text-red-300" role="alert">카메라 사용이 막혀 있습니다. 브라우저 설정에서 카메라를 허용하거나 '코드 직접 입력'을 쓰세요.</p>}
+                            {camState === 'unsupported' && <p className="mt-2 text-sm text-red-700 dark:text-red-300" role="alert">이 브라우저에서는 카메라를 쓸 수 없습니다. '코드 직접 입력'을 쓰세요.</p>}
                             <button type="button" className="btn-secondary w-full min-h-[44px] mt-2" onClick={() => setCameraOn(false)}>카메라 끄기</button>
                         </>
                     ) : (
@@ -158,7 +159,7 @@ export default function ScanPage() {
             {sc.last && !sc.locked && <ResultCard last={sc.last} spaceName={sc.spaceName} scan={sc.last.kind === 'saved' ? sc.scanMap.get(sc.last.draft.scanId) : undefined}
                 onCondition={sc.setCondition} onUndo={sc.undo} />}
 
-            <div className="flex gap-2 pt-2" role="tablist" aria-label="목록">
+            <div className="flex gap-2 pt-2" role="group" aria-label="목록 고르기">
                 <TabButton active={tab === 'remaining'} onClick={() => setTab('remaining')}>남은 재물 {sc.remaining.length}</TabButton>
                 <TabButton active={tab === 'done'} onClick={() => setTab('done')}>여기서 찍은 기록 {sc.here.length}</TabButton>
             </div>
@@ -176,7 +177,7 @@ export default function ScanPage() {
                     </ul>
                 )
             ) : sc.here.length === 0 ? (
-                <p className="glass-card p-4 text-sm text-center text-surface-500 dark:text-surface-400">아직 이 공간에서 찍은 것이 없습니다.</p>
+                <p className="glass-card p-4 text-sm text-center text-surface-600 dark:text-surface-400">아직 이 공간에서 찍은 것이 없습니다.</p>
             ) : (
                 <ul className="glass-card divide-y divide-surface-100 dark:divide-surface-700">
                     {sc.here.map((s) => (
@@ -254,7 +255,7 @@ function SubmissionPanel({ submission, pending, remaining, submitting, onSubmit 
             <p className="text-sm text-surface-700 dark:text-surface-300 mb-2">
                 이 공간을 다 찍었으면 제출하세요.{remaining > 0 && <> 남은 재물 <strong>{remaining}건</strong>은 '미발견'으로 보고됩니다.</>}
             </p>
-            <button type="button" className="btn-secondary w-full min-h-[48px]" onClick={onSubmit} disabled={submitting}>
+            <button type="button" className={`${remaining === 0 || submission?.state === 'rejected' ? 'btn-primary' : 'btn-secondary'} w-full min-h-[48px]`} onClick={onSubmit} disabled={submitting}>
                 {submitting ? '제출하는 중…' : submission?.state === 'rejected' ? '다시 제출' : '이 공간 조사 제출'}
             </button>
         </section>
@@ -286,7 +287,7 @@ function Notice({ icon, title, text, retry = false }: { icon: string; title: str
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
-        <button type="button" role="tab" aria-selected={active} onClick={onClick}
+        <button type="button" aria-pressed={active} onClick={onClick}
             className={`flex-1 min-h-[44px] rounded-xl text-sm font-medium ${active
                 ? 'bg-surface-800 text-white dark:bg-surface-200 dark:text-surface-900'
                 : 'bg-white text-surface-700 border border-surface-300 dark:bg-surface-800 dark:text-surface-200 dark:border-surface-600'}`}>
@@ -394,7 +395,7 @@ function ScanPhoto({ scan }: { scan: Scan }) {
             await uploadScanPhoto(scan, file);
             showToast('현장 사진을 붙였습니다.', 'success');
         } catch {
-            showToast('사진을 올리지 못했습니다. 다시 시도해 주세요.', 'error');
+            showToast('사진을 올리지 못했습니다. 인터넷 연결을 확인하고 다시 찍어 주세요.', 'error');
         } finally {
             setBusy(false);
         }
@@ -404,7 +405,7 @@ function ScanPhoto({ scan }: { scan: Scan }) {
         const ok = await confirm({ title: '현장 사진을 지울까요?', message: '스캔 기록은 그대로 남습니다.', confirmText: '사진 지우기', confirmColor: 'danger' });
         if (!ok) return;
         setBusy(true);
-        try { await removeScanPhoto(scan); } catch { showToast('사진을 지우지 못했습니다.', 'error'); } finally { setBusy(false); }
+        try { await removeScanPhoto(scan); } catch { showToast('사진을 지우지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error'); } finally { setBusy(false); }
     };
 
     return (

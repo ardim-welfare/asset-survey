@@ -13,7 +13,7 @@ import { StatusBadge, MissingBadge } from '../common/AssetBadges';
 import type { Asset } from '../../types/asset';
 import type { Space } from '../../types/space';
 
-const sub = 'text-xs text-surface-500 dark:text-surface-400';
+const sub = 'text-xs text-surface-600 dark:text-surface-400';
 
 export default function MyAssets() {
     const { user, userData } = useAuth();
@@ -95,25 +95,28 @@ export default function MyAssets() {
                         <input type="search" className="input min-h-[48px]" placeholder="자산코드·품명으로 찾기" value={search} onChange={(e) => setSearch(e.target.value)} />
                     </label>
                     <label className="flex items-center gap-2 min-h-[44px] text-sm text-surface-700 dark:text-surface-300">
-                        <input type="checkbox" className="w-4 h-4" checked={withInactive} onChange={(e) => setWithInactive(e.target.checked)} />
+                        <input type="checkbox" className="w-5 h-5 accent-primary-600" checked={withInactive} onChange={(e) => setWithInactive(e.target.checked)} />
                         불용·폐기도 보기
                     </label>
 
                     <p className={sub} aria-live="polite">{shown.length.toLocaleString('ko-KR')}건</p>
                     {shown.length === 0 ? (
-                        <div className="glass-card p-6 text-center text-sm text-surface-500 dark:text-surface-400">해당하는 재물이 없습니다.</div>
+                        <div className="glass-card p-6 text-center text-sm text-surface-600 dark:text-surface-400">해당하는 재물이 없습니다.</div>
                     ) : (
                         <ul className="space-y-2">
                             {shown.map((a) => (
                                 <li key={a.id}>
-                                    <Link to={`/employee/assets/${encodeURIComponent(a.id)}`} className="glass-card p-3 block">
+                                    <Link to={`/employee/assets/${encodeURIComponent(a.id)}`} className="glass-card p-3 flex items-center gap-2 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500">
+                                        <span className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="font-mono text-sm font-semibold text-surface-900 dark:text-surface-100">{a.code}</span>
                                             {a.status !== 'active' && <StatusBadge status={a.status} />}
                                             {a.missingFromSource && <MissingBadge />}
                                         </div>
-                                        <p className="text-sm text-surface-800 dark:text-surface-200 truncate">{a.name ?? '-'}</p>
+                                        <p className="text-sm text-surface-800 dark:text-surface-200 line-clamp-2 break-keep">{a.name ?? '-'}</p>
                                         {current === 'all' && <p className={sub}>{spaces.find((s) => s.id === a.spaceId)?.name ?? ''}</p>}
+                                        </span>
+                                        <span aria-hidden="true" className="text-surface-500 text-lg flex-shrink-0">›</span>
                                     </Link>
                                 </li>
                             ))}
