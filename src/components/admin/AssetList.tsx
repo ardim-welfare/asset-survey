@@ -230,7 +230,7 @@ function SpaceOptions({ spaces, buildings }: { spaces: Space[]; buildings: Build
 
 /** 기본값과 다른 거르기 조건 수(검색 제외) — 접힌 [거르기] 버튼에 보인다 */
 function activeFilterCount(f: AssetFilters): number {
-    return (['space', 'status', 'label', 'checked', 'onlyMissing'] as const).filter((k) => f[k] !== DEFAULT_FILTERS[k]).length;
+    return (['space', 'status', 'label', 'checked', 'onlyMissing', 'onlyLifeOver'] as const).filter((k) => (f[k] ?? false) !== (DEFAULT_FILTERS[k] ?? false)).length;
 }
 
 function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProps) {
@@ -297,6 +297,11 @@ function Filters({ filters, setFilter, spaces, buildings, onReset }: FiltersProp
                     <label className="flex items-center gap-2 min-h-[44px] text-sm text-surface-700 dark:text-surface-300">
                         <input type="checkbox" className="w-5 h-5 accent-primary-600" checked={filters.onlyMissing} onChange={(e) => setFilter('onlyMissing', e.target.checked)} />
                         대장에 없음만
+                    </label>
+                    {/* 내용연수(내구연한)가 지난 것만 — 바꿀 때가 된 재물을 모아 본다(2026-11-22) */}
+                    <label className="flex items-center gap-2 min-h-[44px] text-sm text-surface-700 dark:text-surface-300">
+                        <input type="checkbox" className="w-5 h-5 accent-primary-600" checked={!!filters.onlyLifeOver} onChange={(e) => setFilter('onlyLifeOver', e.target.checked)} />
+                        내용연수 지난 것만
                     </label>
                     <button type="button" className="btn-secondary btn-sm min-h-[44px]" onClick={onReset} disabled={!changed}>조건 초기화</button>
                 </div>

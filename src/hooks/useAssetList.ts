@@ -8,6 +8,7 @@
  * 마지막 확인(상시 확인 기록, 같은 날)으로도 거른다 — "6개월 넘게 못 본 재물"을 찾아 점검한다.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isUsefulLifeOver, todayText } from '../lib/usefulLife';
 import { useAuth } from './useAuth';
 import { getAssets, getSpaces, getBuildings, getAssetChecks } from '../lib/firestore';
 import { toDateOrNull } from '../lib/dateUtils';
@@ -70,11 +71,13 @@ export interface AssetFilters {
     space: SpaceFilter;
     status: StatusFilter;
     onlyMissing: boolean;
+    /** 내용연수(내구연한)가 지난 것만 (2026-11-22) */
+    onlyLifeOver?: boolean;
     label: LabelFilter;
     checked: CheckedFilter;
 }
 
-export const DEFAULT_FILTERS: AssetFilters = { search: '', space: 'all', status: 'active', onlyMissing: false, label: 'all', checked: 'all' };
+export const DEFAULT_FILTERS: AssetFilters = { search: '', space: 'all', status: 'active', onlyMissing: false, onlyLifeOver: false, label: 'all', checked: 'all' };
 
 const collator = new Intl.Collator('ko', { numeric: true });
 
@@ -86,11 +89,13 @@ export function filterAssets(
     list: Asset[], f: AssetFilters, places?: SpacePlaceIndex, checks?: Map<string, AssetCheck>, now = new Date(),
 ): Asset[] {
     const q = f.search.replace(/\s+/g, '').toLowerCase();
+    const today = todayText(now);
     return list.filter((a) => {
         if (!matchesChecked(checkedAtOf(checks, a.id), f.checked ?? 'all', now)) return false;
         if (f.status !== 'all' && a.status !== f.status) return false;
         if (!matchesSpace(a, f.space, places)) return false;
         if (f.onlyMissing && !a.missingFromSource) return false;
+        if (f.onlyLifeOver && !isUsefulLifeOver(a, today)) return false;
         if (f.label === 'untagged' && a.tagId) return false;
         if (f.label === 'tagged' && !a.tagId) return false;
         if (q) {

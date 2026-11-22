@@ -73,6 +73,20 @@ describe('sortAssets·filterAssets', () => {
         expect(pick('never')).toEqual(['d']);
     });
 
+    it('내용연수 지난 것만 — 취득일자·내용연수가 다 있고 끝나는 날이 지난 것 (2026-11-22)', () => {
+        const all = [
+            asset('a', { acquiredAt: '2020-01-01', usefulLife: 5 }), // 2025-01-01 끝 → 지남
+            asset('b', { acquiredAt: '2024-01-01', usefulLife: 5 }), // 2029년까지
+            asset('c', { acquiredAt: '2010-01-01' }),                // 내용연수 없음
+            asset('d', { usefulLife: 1 }),                            // 취득일자 없음
+        ];
+        const now = new Date(2026, 10, 22);
+        const pick = (onlyLifeOver: boolean) =>
+            filterAssets(all, { ...DEFAULT_FILTERS, onlyLifeOver }, undefined, undefined, now).map((x) => x.code);
+        expect(pick(false)).toEqual(['a', 'b', 'c', 'd']);
+        expect(pick(true)).toEqual(['a']);
+    });
+
     it('대장에 없음만·라벨 발급 여부', () => {
         expect(codes({ onlyMissing: true })).toEqual(['4']);
         expect(codes({ label: 'untagged' })).toEqual(['1', '3']);
