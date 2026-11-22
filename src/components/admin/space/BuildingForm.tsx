@@ -60,7 +60,7 @@ export default function BuildingForm({ idPrefix, initial, submitLabel, busy, onS
             </div>
             <div>
                 <label htmlFor={`${idPrefix}-address`} className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-                    주소 <span className="text-xs font-normal text-surface-500 dark:text-surface-400">(선택)</span>
+                    주소 <span className="text-xs font-normal text-surface-600 dark:text-surface-400">(선택)</span>
                 </label>
                 <input
                     id={`${idPrefix}-address`}
@@ -74,7 +74,7 @@ export default function BuildingForm({ idPrefix, initial, submitLabel, busy, onS
             </div>
             <div>
                 <label htmlFor={`${idPrefix}-floors`} className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-                    층 <span className="text-xs font-normal text-surface-500 dark:text-surface-400">(낮은 층부터 쉼표로)</span>
+                    층 <span className="text-xs font-normal text-surface-600 dark:text-surface-400">(낮은 층부터 쉼표로)</span>
                 </label>
                 <input
                     id={`${idPrefix}-floors`}

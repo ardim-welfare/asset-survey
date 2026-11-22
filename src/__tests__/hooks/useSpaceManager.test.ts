@@ -191,6 +191,24 @@ describe('useSpaceManager', () => {
         expect(firestore.reorderSpaces).not.toHaveBeenCalled(); // 2층에는 b 하나뿐
     });
 
+    it('고치기 창 저장은 이름과 위치를 한 번에 저장하고, 바뀐 게 없으면 저장하지 않는다', async () => {
+        vi.mocked(firestore.getBuildings).mockResolvedValue([building({})]);
+        const { result } = await setup();
+        const a = result.current.activeSpaces[0];
+
+        let ok = false;
+        await act(async () => { ok = await result.current.saveSpaceDetails(a, a.name, { buildingId: a.buildingId ?? null, floor: a.floor ?? null }); });
+        expect(ok).toBe(true);
+        expect(firestore.updateSpace).not.toHaveBeenCalled();
+
+        await act(async () => { ok = await result.current.saveSpaceDetails(a, ' 큰 상담실 ', { buildingId: 'b1', floor: '2' }); });
+        expect(ok).toBe(true);
+        // 두 번 나눠 쓰면 두 번째 저장이 옛 목록으로 이름을 되돌린다 — 한 번에 쓴다
+        expect(firestore.updateSpace).toHaveBeenCalledTimes(1);
+        expect(firestore.updateSpace).toHaveBeenCalledWith('a', { name: '큰 상담실', buildingId: 'b1', floor: '2', order: 2 });
+        expect(result.current.activeSpaces.find((s) => s.id === 'a')).toMatchObject({ name: '큰 상담실', buildingId: 'b1', floor: '2' });
+    });
+
     it('건물·층: 위치 바꾸기는 건물·층과 맨 뒤 순서를 저장하고, 건물을 비우면 층도 비운다', async () => {
         vi.mocked(firestore.getBuildings).mockResolvedValue([building({})]);
         const { result } = await setup();

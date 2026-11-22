@@ -39,7 +39,7 @@ export function validateSpaceName(name: string, existing: Space[], selfId?: stri
     if (!normalized) return '공간 이름을 입력해주세요.';
     if (normalized.length > SPACE_NAME_MAX) return `공간 이름은 ${SPACE_NAME_MAX}자까지 쓸 수 있습니다.`;
     const dup = existing.find((s) => s.id !== selfId && normalizeSpaceName(s.name) === normalized);
-    if (dup) return dup.archived ? `숨긴 공간에 같은 이름(${normalized})이 있습니다. 숨김을 풀어 다시 쓰세요.` : `같은 이름의 공간(${normalized})이 이미 있습니다.`;
+    if (dup) return dup.archived ? `삭제한 공간에 같은 이름(${normalized})이 있습니다. 목록 아래 '삭제한 공간'에서 되살려 쓰세요.` : `같은 이름의 공간(${normalized})이 이미 있습니다.`;
     return null;
 }
 

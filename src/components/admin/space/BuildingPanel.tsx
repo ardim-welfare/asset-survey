@@ -18,7 +18,7 @@ interface Props {
     addBuilding: (input: BuildingInput) => Promise<boolean>;
     editBuilding: (building: Building, input: BuildingInput) => Promise<boolean>;
     moveBuilding: (building: Building, direction: -1 | 1) => void;
-    archiveBuilding: (building: Building) => void;
+    archiveBuilding: (building: Building) => Promise<boolean>;
     restoreBuilding: (building: Building) => void;
 }
 
@@ -53,17 +53,17 @@ export default function BuildingPanel({
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <h3 className="font-semibold text-surface-900 dark:text-surface-100 break-keep">{b.name}</h3>
-                                        <p className="text-xs text-surface-500 dark:text-surface-400">
+                                        <p className="text-xs text-surface-600 dark:text-surface-400">
                                             공간 {count}개{b.address ? ` · ${b.address}` : ''}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                         <button type="button" onClick={() => moveBuilding(b, -1)} disabled={busy || i === 0}
-                                            className="btn-icon min-h-[48px] min-w-[48px]" aria-label={`${b.name} 위로`}>
+                                            className="btn-icon min-h-[44px] min-w-[44px]" aria-label={`${b.name} 위로`} title="위로">
                                             <span aria-hidden="true">▲</span>
                                         </button>
                                         <button type="button" onClick={() => moveBuilding(b, 1)} disabled={busy || i === activeBuildings.length - 1}
-                                            className="btn-icon min-h-[48px] min-w-[48px]" aria-label={`${b.name} 아래로`}>
+                                            className="btn-icon min-h-[44px] min-w-[44px]" aria-label={`${b.name} 아래로`} title="아래로">
                                             <span aria-hidden="true">▼</span>
                                         </button>
                                     </div>
@@ -74,21 +74,18 @@ export default function BuildingPanel({
                                             const n = spacesIn(b.id, f).length;
                                             return (
                                                 <li key={f} className="px-2.5 py-1 rounded-full bg-surface-100 dark:bg-surface-800 text-xs text-surface-700 dark:text-surface-300">
-                                                    {floorLabel(f)}{n > 0 && <span className="text-surface-500 dark:text-surface-400"> · {n}</span>}
+                                                    {floorLabel(f)}{n > 0 && <span className="text-surface-600 dark:text-surface-400"> · 공간 {n}</span>}
                                                 </li>
                                             );
                                         })}
                                     </ul>
                                 ) : (
-                                    <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">등록된 층이 없습니다</p>
+                                    <p className="mt-2 text-xs text-surface-600 dark:text-surface-400">등록된 층이 없습니다 — [고치기]에서 층을 넣으세요</p>
                                 )}
-                                <div className="mt-3 flex gap-2">
-                                    <button type="button" onClick={() => setEditing(b)} disabled={busy} className="btn-secondary min-h-[48px] px-3 flex-1 sm:flex-none">
+                                <div className="mt-3">
+                                    <button type="button" onClick={() => setEditing(b)} disabled={busy} className="btn-secondary min-h-[48px] px-4"
+                                        aria-label={`${b.name} 고치기`}>
                                         고치기
-                                    </button>
-                                    <button type="button" onClick={() => archiveBuilding(b)} disabled={busy}
-                                        className="btn-secondary min-h-[48px] px-3 flex-1 sm:flex-none text-amber-700 dark:text-amber-400">
-                                        숨기기
                                     </button>
                                 </div>
                             </li>
@@ -101,16 +98,16 @@ export default function BuildingPanel({
                 <div className="mt-8">
                     <button type="button" onClick={() => setShowArchived((v) => !v)} aria-expanded={showArchived}
                         className="btn-secondary btn-sm min-h-[44px]">
-                        <span aria-hidden="true">{showArchived ? '▾' : '▸'}</span> 숨긴 건물 {archivedBuildings.length}개
+                        <span aria-hidden="true">{showArchived ? '▾' : '▸'}</span> 삭제한 건물 {archivedBuildings.length}개
                     </button>
                     {showArchived && (
-                        <ul className="space-y-2 mt-2" aria-label="숨긴 건물 목록">
+                        <ul className="space-y-2 mt-2" aria-label="삭제한 건물 목록">
                             {archivedBuildings.map((b) => (
                                 <li key={b.id} className="glass-card p-4 flex items-center justify-between gap-3">
-                                    <span className="text-sm text-surface-500 dark:text-surface-400 truncate">{b.name}</span>
+                                    <span className="text-sm text-surface-700 dark:text-surface-300 break-keep min-w-0">{b.name}</span>
                                     <button type="button" onClick={() => restoreBuilding(b)} disabled={busy}
-                                        className="btn-secondary btn-sm min-h-[48px] px-3 flex-shrink-0">
-                                        다시 꺼내기
+                                        className="btn-secondary btn-sm min-h-[44px] px-3 flex-shrink-0" aria-label={`${b.name} 되살리기`}>
+                                        되살리기
                                     </button>
                                 </li>
                             ))}
@@ -134,6 +131,17 @@ export default function BuildingPanel({
                         }}
                         onCancel={() => setEditing(null)}
                     />
+                )}
+                {editing && (
+                    <div className="border-t border-surface-200 dark:border-surface-700 mt-4 pt-4 flex flex-wrap items-center gap-3">
+                        <p className="flex-1 min-w-[12rem] text-xs text-surface-600 dark:text-surface-400">
+                            공간이 하나도 없는 건물만 삭제할 수 있습니다. 나중에 되살릴 수 있습니다.
+                        </p>
+                        <button type="button" disabled={busy} className="btn-secondary btn-sm min-h-[44px] text-red-700 dark:text-red-300"
+                            onClick={async () => { if (await archiveBuilding(editing)) setEditing(null); }}>
+                            건물 삭제
+                        </button>
+                    </div>
                 )}
             </PanelModal>
         </div>

@@ -27,9 +27,8 @@ const baseHook = () => ({
     activeSpaces: [] as Space[], archivedSpaces: [] as Space[],
     members: [{ uid: 'u1', name: '김직원', role: 'employee' }, { uid: 'u2', name: '이관리', role: 'admin' }],
     nameOf: (uid: string) => (uid === 'u1' ? '김직원' : uid),
-    addSpace: vi.fn().mockResolvedValue(true), renameSpace: vi.fn(), moveSpace: vi.fn(),
-    addManager: vi.fn(), removeManager: vi.fn(), archiveSpace: vi.fn(), restoreSpace: vi.fn(),
-    setSpaceLocation: vi.fn(),
+    addSpace: vi.fn().mockResolvedValue(true), saveSpaceDetails: vi.fn().mockResolvedValue(true), moveSpace: vi.fn(),
+    addManager: vi.fn(), removeManager: vi.fn(), archiveSpace: vi.fn().mockResolvedValue(true), restoreSpace: vi.fn(),
     buildings: [] as Building[], activeBuildings: [] as Building[], archivedBuildings: [] as Building[],
     spacesIn: () => [],
     addBuilding: vi.fn().mockResolvedValue(true), editBuilding: vi.fn(), moveBuilding: vi.fn(),
@@ -56,13 +55,13 @@ describe('SpaceManager', () => {
         render(<MemoryRouter><SpaceManager /></MemoryRouter>);
 
         expect(screen.getByRole('heading', { name: '1층 상담실' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '김직원 담당자에서 빼기' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '김직원 담당에서 빼기' })).toBeInTheDocument();
 
-        const select = screen.getByLabelText('1층 상담실 담당자 지정');
+        const select = screen.getByLabelText('1층 상담실 담당 지정');
         const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
-        expect(options).toEqual(['+ 담당자 지정', '이관리 (관리자)']);
+        expect(options).toEqual(['+ 담당 지정 (팀·직원)', '이관리 (관리자)']);
 
-        fireEvent.change(select, { target: { value: 'u2' } });
+        fireEvent.change(select, { target: { value: 'u:u2' } });
         expect(hookState.value.addManager).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), 'u2');
     });
 
@@ -74,13 +73,31 @@ describe('SpaceManager', () => {
         expect(screen.getByRole('button', { name: '가 아래로' })).toBeEnabled();
     });
 
-    it('숨긴 공간은 펼쳐야 보이고 다시 꺼낼 수 있다', () => {
+    it('담당이 없으면 알리고, [고치기] 창에서 이름을 저장하거나 공간을 삭제한다', async () => {
+        hookState.value = { ...baseHook(), activeSpaces: [space({ id: 'a', name: '상담실' })] };
+        render(<MemoryRouter><SpaceManager /></MemoryRouter>);
+        expect(screen.getByText(/담당이 없습니다/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: '상담실 고치기' }));
+        const name = screen.getByLabelText('공간 이름');
+        fireEvent.change(name, { target: { value: '큰 상담실' } });
+        fireEvent.click(screen.getByRole('button', { name: '저장' }));
+        // 건물이 없으면 위치는 넘기지 않는다
+        await waitFor(() => expect(hookState.value.saveSpaceDetails).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), '큰 상담실', undefined));
+        await waitFor(() => expect(screen.queryByLabelText('공간 이름')).not.toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: '상담실 고치기' }));
+        fireEvent.click(screen.getByRole('button', { name: '공간 삭제' }));
+        await waitFor(() => expect(hookState.value.archiveSpace).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' })));
+    });
+
+    it('삭제한 공간은 펼쳐야 보이고 되살릴 수 있다', () => {
         hookState.value = { ...baseHook(), archivedSpaces: [space({ id: 'z', name: '옛 창고', archived: true })] };
         render(<MemoryRouter><SpaceManager /></MemoryRouter>);
         expect(screen.queryByText('옛 창고')).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: /숨긴 공간 1개/ }));
-        fireEvent.click(screen.getByRole('button', { name: '다시 꺼내기' }));
+        fireEvent.click(screen.getByRole('button', { name: /삭제한 공간 1개/ }));
+        fireEvent.click(screen.getByRole('button', { name: '옛 창고 되살리기' }));
         expect(hookState.value.restoreSpace).toHaveBeenCalledWith(expect.objectContaining({ id: 'z' }));
     });
 });
@@ -140,14 +157,18 @@ describe('SpaceManager — 건물·층으로 묶어 보기 (2026-11-22)', () => 
         expect(screen.getByRole('button', { name: '상담실 아래로' })).toBeDisabled();
         // 공간 추가 칸에 건물·층 고르기가 붙는다
         expect(screen.getByLabelText('건물')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '상담실 위치 바꾸기' })).toBeInTheDocument();
+        // [고치기] 창에서 건물·층도 함께 고친다
+        fireEvent.click(screen.getByRole('button', { name: '상담실 고치기' }));
+        expect(screen.getByRole('dialog', { name: '공간 고치기' })).toBeInTheDocument();
+        expect(screen.getAllByLabelText('건물')).toHaveLength(2);
     });
 
-    it('건물이 없으면 예전처럼 한 줄 목록이고 위치 버튼도 없다', () => {
+    it('건물이 없으면 예전처럼 한 줄 목록이고 고치기 창에도 건물 칸이 없다', () => {
         hookState.value = { ...baseHook(), activeSpaces: [space({ id: 'a', name: '상담실' })] };
         render(<MemoryRouter><SpaceManager /></MemoryRouter>);
         expect(screen.queryByLabelText('건물')).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: '상담실 위치 바꾸기' })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '상담실 고치기' }));
+        expect(screen.queryByLabelText('건물')).not.toBeInTheDocument();
     });
 
     it('[건물·층] 탭에서 지하·지상 층수로 층을 채워 건물을 추가한다', async () => {

@@ -214,7 +214,7 @@ function SpaceOptions({ spaces, buildings }: { spaces: Space[]; buildings: Build
                     ])}
                 </optgroup>
             ))}
-            {archived.length > 0 && <optgroup label="숨긴 공간">{archivedOptions}</optgroup>}
+            {archived.length > 0 && <optgroup label="삭제한 공간">{archivedOptions}</optgroup>}
         </>
     );
 }

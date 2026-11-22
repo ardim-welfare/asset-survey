@@ -134,6 +134,36 @@ export default function useSpaceManager() {
         }
     }, [orgId, spaces, nextSpaceOrder, showToast]);
 
+    /**
+     * [공간 고치기] 창의 저장 — 이름과 위치(건물·층)를 한 번에 저장한다.
+     * 따로 두 번 저장하면 두 번째 저장이 첫 번째 결과를 모르는 옛 목록으로 화면을 되돌린다.
+     * 바뀐 것이 없으면 true, 이름이 막히면 안내 후 false. 위치를 옮기면 옮긴 곳의 맨 아래에 붙인다.
+     */
+    const saveSpaceDetails = useCallback(async (space: Space, input: string, location?: SpaceLocation): Promise<boolean> => {
+        const patch: Parameters<typeof updateSpace>[1] = {};
+        if (normalizeSpaceName(input) !== space.name) {
+            const problem = validateSpaceName(input, spaces, space.id);
+            if (problem) {
+                showToast(problem, 'warning');
+                return false;
+            }
+            patch.name = normalizeSpaceName(input);
+        }
+        if (location) {
+            const buildingId = location.buildingId;
+            const floor = buildingId ? location.floor : null;
+            if ((space.buildingId ?? null) !== buildingId || (space.floor ?? null) !== floor) {
+                Object.assign(patch, { buildingId, floor, order: nextSpaceOrder });
+            }
+        }
+        if (Object.keys(patch).length === 0) return true;
+        return withRollback(
+            sortSpaces(spaces.map((s) => (s.id === space.id ? { ...s, ...patch } : s))),
+            () => updateSpace(space.id, patch),
+            patch.name ? '공간 이름을 바꾸지 못했습니다.' : '공간 위치를 바꾸지 못했습니다.',
+        );
+    }, [spaces, nextSpaceOrder, showToast, withRollback]);
+
     const renameSpace = useCallback(async (space: Space) => {
         const input = await confirm({
             type: 'input',
@@ -144,19 +174,8 @@ export default function useSpaceManager() {
             confirmText: '바꾸기',
         });
         if (typeof input !== 'string') return;
-        if (normalizeSpaceName(input) === space.name) return;
-        const problem = validateSpaceName(input, spaces, space.id);
-        if (problem) {
-            showToast(problem, 'warning');
-            return;
-        }
-        const name = normalizeSpaceName(input);
-        await withRollback(
-            spaces.map((s) => (s.id === space.id ? { ...s, name } : s)),
-            () => updateSpace(space.id, { name }),
-            '공간 이름을 바꾸지 못했습니다.',
-        );
-    }, [confirm, spaces, showToast, withRollback]);
+        await saveSpaceDetails(space, input);
+    }, [confirm, saveSpaceDetails]);
 
     /**
      * 한 칸 위(-1)·아래(+1)로 옮긴다. 숨기지 않은 공간끼리, **같은 건물·층 안에서만** 순서를 바꾼다
@@ -240,17 +259,18 @@ export default function useSpaceManager() {
     }, [spaces, withRollback]);
 
     const archiveSpace = useCallback(async (space: Space) => {
+        // '삭제'라고 부르지만 문서는 지우지 않는다 — 재물·지난 조사 기록이 이 공간을 가리킨다
         const ok = await confirm({
-            title: '공간 숨기기',
-            message: `'${space.name}' 공간을 숨길까요?\n숨긴 공간은 목록과 조사 대상에서 빠지지만 지워지지 않습니다. 언제든 다시 꺼낼 수 있습니다.`,
-            confirmText: '숨기기',
-            confirmColor: 'warning',
+            title: `'${space.name}' 공간을 삭제할까요?`,
+            message: '공간 목록과 조사 대상에서 빠집니다. 이 공간의 재물은 지워지지 않습니다.\n잘못 지웠으면 아래 \'삭제한 공간\'에서 되살릴 수 있습니다.',
+            confirmText: '삭제',
+            confirmColor: 'danger',
         });
-        if (!ok) return;
-        await withRollback(
+        if (!ok) return false;
+        return withRollback(
             spaces.map((s) => (s.id === space.id ? { ...s, archived: true } : s)),
             () => updateSpace(space.id, { archived: true }),
-            '공간을 숨기지 못했습니다.',
+            '공간을 삭제하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',
         );
     }, [confirm, spaces, withRollback]);
 
@@ -260,7 +280,7 @@ export default function useSpaceManager() {
         await withRollback(
             sortSpaces(spaces.map((s) => (s.id === space.id ? { ...s, archived: false, order } : s))),
             () => updateSpace(space.id, { archived: false, order }),
-            '공간을 다시 꺼내지 못했습니다.',
+            '공간을 되살리지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',
         );
     }, [nextSpaceOrder, spaces, withRollback]);
 
@@ -354,24 +374,24 @@ export default function useSpaceManager() {
         );
     }, [activeBuildings, archivedBuildings, withBuildingRollback]);
 
-    /** 건물 숨기기 — 공간이 남아 있으면 막는다(숨긴 건물의 공간은 '건물 미지정'으로 흩어져 헷갈린다) */
+    /** 건물 삭제(실제로는 숨김) — 공간이 남아 있으면 막는다(숨긴 건물의 공간은 '건물 미지정'으로 흩어져 헷갈린다) */
     const archiveBuilding = useCallback(async (building: Building) => {
         const count = spacesIn(building.id).length;
         if (count > 0) {
-            showToast(`'${building.name}'에 공간 ${count}개가 있습니다. 먼저 공간을 다른 건물로 옮기거나 숨기세요.`, 'warning');
-            return;
+            showToast(`'${building.name}'에 공간 ${count}개가 있습니다. 먼저 [공간] 탭에서 그 공간들을 다른 건물로 옮기거나 삭제하세요.`, 'warning');
+            return false;
         }
         const ok = await confirm({
-            title: '건물 숨기기',
-            message: `'${building.name}' 건물을 숨길까요?\n숨긴 건물은 목록에서 빠지지만 지워지지 않습니다. 언제든 다시 꺼낼 수 있습니다.`,
-            confirmText: '숨기기',
-            confirmColor: 'warning',
+            title: `'${building.name}' 건물을 삭제할까요?`,
+            message: '건물 목록과 공간의 건물 고르기에서 빠집니다.\n잘못 지웠으면 아래 \'삭제한 건물\'에서 되살릴 수 있습니다.',
+            confirmText: '삭제',
+            confirmColor: 'danger',
         });
-        if (!ok) return;
-        await withBuildingRollback(
+        if (!ok) return false;
+        return withBuildingRollback(
             buildings.map((b) => (b.id === building.id ? { ...b, archived: true } : b)),
             () => updateBuilding(building.id, { archived: true }),
-            '건물을 숨기지 못했습니다.',
+            '건물을 삭제하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',
         );
     }, [spacesIn, showToast, confirm, buildings, withBuildingRollback]);
 
@@ -381,14 +401,14 @@ export default function useSpaceManager() {
         await withBuildingRollback(
             sortBuildings(buildings.map((b) => (b.id === building.id ? { ...b, archived: false, order } : b))),
             () => updateBuilding(building.id, { archived: false, order }),
-            '건물을 다시 꺼내지 못했습니다.',
+            '건물을 되살리지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',
         );
     }, [activeBuildings, buildings, withBuildingRollback]);
 
     return {
         loading, loadError, busy, reload: load,
         activeSpaces, archivedSpaces, members, nameOf,
-        addSpace, renameSpace, moveSpace, setSpaceLocation, addManager, removeManager, addTeam, removeTeam, archiveSpace, restoreSpace,
+        addSpace, renameSpace, saveSpaceDetails, moveSpace, setSpaceLocation, addManager, removeManager, addTeam, removeTeam, archiveSpace, restoreSpace,
         buildings, activeBuildings, archivedBuildings, spacesIn,
         addBuilding, editBuilding, moveBuilding, archiveBuilding, restoreBuilding,
     };

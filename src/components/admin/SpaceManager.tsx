@@ -34,7 +34,7 @@ export default function SpaceManager() {
     const {
         loading, loadError, busy, reload,
         activeSpaces, archivedSpaces, members, nameOf,
-        addSpace, renameSpace, moveSpace, setSpaceLocation, addManager, removeManager, addTeam, removeTeam, archiveSpace, restoreSpace,
+        addSpace, saveSpaceDetails, moveSpace, addManager, removeManager, addTeam, removeTeam, archiveSpace, restoreSpace,
         activeBuildings, archivedBuildings, spacesIn,
         addBuilding, editBuilding, moveBuilding, archiveBuilding, restoreBuilding,
     } = useSpaceManager();
@@ -44,7 +44,7 @@ export default function SpaceManager() {
     const [newName, setNewName] = useState('');
     const [newLocation, setNewLocation] = useState<SpaceLocation>(NO_LOCATION);
     const [showArchived, setShowArchived] = useState(false);
-    const [locating, setLocating] = useState<Space | null>(null);
+    const [editingSpace, setEditingSpace] = useState<Space | null>(null);
 
     const hasBuildings = activeBuildings.length > 0;
     const groups = useMemo(() => groupSpacesByLocation(activeSpaces, activeBuildings), [activeSpaces, activeBuildings]);
@@ -58,31 +58,29 @@ export default function SpaceManager() {
         <SpaceCard
             key={space.id}
             space={space}
+            nested={hasBuildings}
             isFirst={isFirst}
             isLast={isLast}
             busy={busy}
             members={members}
             nameOf={nameOf}
-            showLocation={hasBuildings}
-            onRename={() => renameSpace(space)}
+            onEdit={() => setEditingSpace(space)}
             onMove={(dir) => moveSpace(space, dir)}
-            onLocate={() => setLocating(space)}
             onAddManager={(uid) => addManager(space, uid)}
             onRemoveManager={(uid) => removeManager(space, uid)}
             teams={teamsState.activeTeams}
             teamName={teamsState.teamName}
             onAddTeam={(teamId) => addTeam(space, teamId)}
             onRemoveTeam={(teamId) => removeTeam(space, teamId)}
-            onArchive={() => archiveSpace(space)}
         />
     );
 
     return (
         <div className="max-w-3xl mx-auto animate-fade-in">
             <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-2">공간 관리</h1>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mb-4">
-                재물이 놓인 곳(사무실·시설)을 등록하고 담당 직원을 정합니다. 건물이 여러 곳이면 [건물·층]에서 건물과 층을 먼저 등록하세요.
-                &lsquo;나눠서 조사&rsquo; 방식에서는 공간 담당자가 자기 공간을 조사합니다. 조사 방식은{' '}
+            <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
+                재물이 놓인 곳(사무실·시설)을 등록하고 담당 직원이나 팀을 정합니다. 건물이 여러 곳이면 [건물·층]에서 먼저 등록하세요.
+                &lsquo;나눠서 조사&rsquo; 방식에서는 담당이 자기 공간을 조사합니다. 조사 방식은{' '}
                 <Link to="/admin/settings" className="underline underline-offset-2 text-primary-700 dark:text-primary-300 font-medium">
                     설정
                 </Link>
@@ -152,14 +150,14 @@ export default function SpaceManager() {
                         <SkeletonList count={3} />
                     ) : loadError ? (
                         <div className="glass-card p-6 text-center">
-                            <p className="text-sm text-red-600 dark:text-red-400 mb-3">{loadError}</p>
+                            <p className="text-sm text-red-700 dark:text-red-300 mb-3" role="alert">{loadError}</p>
                             <button type="button" onClick={reload} className="btn-secondary min-h-[48px] px-4">다시 불러오기</button>
                         </div>
                     ) : activeSpaces.length === 0 ? (
                         <div className="glass-card p-8 text-center">
                             <div className="text-4xl mb-3" aria-hidden="true">🏢</div>
                             <p className="text-surface-700 dark:text-surface-300 font-medium">아직 등록한 공간이 없습니다</p>
-                            <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+                            <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
                                 위 칸에 공간 이름을 적어 추가하세요. 희망이음 대장의 위치 이름과 같게 쓰면 엑셀 가져오기 때 자동으로 맞춰집니다.
                             </p>
                         </div>
@@ -174,10 +172,10 @@ export default function SpaceManager() {
                                     <h2 id={`bld-${g.buildingId ?? 'none'}`} className="flex items-baseline gap-2 text-lg font-bold text-surface-900 dark:text-surface-100 mb-3">
                                         <span aria-hidden="true">{g.buildingId ? '🏫' : '📦'}</span>
                                         {g.label}
-                                        <span className="text-sm font-normal text-surface-500 dark:text-surface-400">공간 {g.count}개</span>
+                                        <span className="text-sm font-normal text-surface-600 dark:text-surface-400">공간 {g.count}개</span>
                                     </h2>
                                     {g.count === 0 ? (
-                                        <p className="text-sm text-surface-500 dark:text-surface-400 px-1">이 건물에 등록한 공간이 없습니다. 위 칸에서 건물을 골라 추가하세요.</p>
+                                        <p className="text-sm text-surface-600 dark:text-surface-400 px-1">이 건물에 등록한 공간이 없습니다. 위 칸에서 건물을 골라 추가하세요.</p>
                                     ) : (
                                         <div className="space-y-4">
                                             {g.floors.map((f) => (
@@ -206,20 +204,21 @@ export default function SpaceManager() {
                                 aria-expanded={showArchived}
                                 className="btn-secondary btn-sm min-h-[44px]"
                             >
-                                <span aria-hidden="true">{showArchived ? '▾' : '▸'}</span> 숨긴 공간 {archivedSpaces.length}개
+                                <span aria-hidden="true">{showArchived ? '▾' : '▸'}</span> 삭제한 공간 {archivedSpaces.length}개
                             </button>
                             {showArchived && (
-                                <ul className="space-y-2 mt-2" aria-label="숨긴 공간 목록">
+                                <ul className="space-y-2 mt-2" aria-label="삭제한 공간 목록">
                                     {archivedSpaces.map((space) => (
                                         <li key={space.id} className="glass-card p-4 flex items-center justify-between gap-3">
-                                            <span className="text-sm text-surface-500 dark:text-surface-400 truncate">{space.name}</span>
+                                            <span className="text-sm text-surface-700 dark:text-surface-300 break-keep min-w-0">{space.name}</span>
                                             <button
                                                 type="button"
                                                 onClick={() => restoreSpace(space)}
                                                 disabled={busy}
-                                                className="btn-secondary btn-sm min-h-[48px] px-3 flex-shrink-0"
+                                                className="btn-secondary btn-sm min-h-[44px] px-3 flex-shrink-0"
+                                                aria-label={`${space.name} 되살리기`}
                                             >
-                                                다시 꺼내기
+                                                되살리기
                                             </button>
                                         </li>
                                     ))}
@@ -230,125 +229,171 @@ export default function SpaceManager() {
                 </div>
             )}
 
-            <SpaceLocationModal
-                space={locating}
+            <SpaceEditModal
+                space={editingSpace}
                 buildings={activeBuildings}
                 busy={busy}
-                onClose={() => setLocating(null)}
-                onSave={async (loc) => {
-                    if (locating) await setSpaceLocation(locating, loc);
-                    setLocating(null);
-                }}
+                onClose={() => setEditingSpace(null)}
+                onSave={(name, loc) => (editingSpace ? saveSpaceDetails(editingSpace, name, loc) : Promise.resolve(false))}
+                onDelete={async () => (editingSpace ? archiveSpace(editingSpace) : false)}
             />
         </div>
     );
 }
 
-/** 공간 위치(건물·층) 바꾸기 창 */
-function SpaceLocationModal({ space, buildings, busy, onClose, onSave }: {
+/**
+ * [공간 고치기] 창 — 이름·위치(건물·층)·삭제를 한곳에 모았다(2026-11-22).
+ * 예전엔 카드마다 [이름 바꾸기][위치][숨기기] 버튼이 늘어서 화면이 복잡했다.
+ */
+function SpaceEditModal({ space, buildings, busy, onClose, onSave, onDelete }: {
     space: Space | null;
     buildings: Building[];
     busy: boolean;
     onClose: () => void;
-    onSave: (loc: SpaceLocation) => void;
+    onSave: (name: string, loc: SpaceLocation | undefined) => Promise<boolean>;
+    onDelete: () => Promise<boolean>;
 }) {
     return (
-        <PanelModal open={space !== null} title={space ? `'${space.name}' 위치 바꾸기` : ''} titleId="space-location-title" onClose={onClose}>
+        <PanelModal open={space !== null} title="공간 고치기" titleId="space-edit-title" onClose={onClose}>
             {space && (
-                <LocationForm
-                    key={space.id}
-                    initial={{ buildingId: space.buildingId ?? null, floor: space.floor ?? null }}
-                    buildings={buildings}
-                    busy={busy}
-                    onCancel={onClose}
-                    onSave={onSave}
-                />
+                <SpaceEditForm key={space.id} space={space} buildings={buildings} busy={busy} onCancel={onClose} onSave={onSave} onDelete={onDelete} />
             )}
         </PanelModal>
     );
 }
 
-function LocationForm({ initial, buildings, busy, onCancel, onSave }: {
-    initial: SpaceLocation;
+function SpaceEditForm({ space, buildings, busy, onCancel, onSave, onDelete }: {
+    space: Space;
     buildings: Building[];
     busy: boolean;
     onCancel: () => void;
-    onSave: (loc: SpaceLocation) => void;
+    onSave: (name: string, loc: SpaceLocation | undefined) => Promise<boolean>;
+    onDelete: () => Promise<boolean>;
 }) {
-    const [loc, setLoc] = useState<SpaceLocation>(initial);
+    const [name, setName] = useState(space.name);
+    const [loc, setLoc] = useState<SpaceLocation>({ buildingId: space.buildingId ?? null, floor: space.floor ?? null });
+    const hasBuildings = buildings.length > 0;
+
+    const handleSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        if (await onSave(name, hasBuildings ? loc : undefined)) onCancel();
+    };
+
     return (
-        <div className="space-y-4">
-            <LocationSelects idPrefix="locate-space" buildings={buildings} value={loc} onChange={setLoc} disabled={busy} />
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+                <label htmlFor="edit-space-name" className="label">공간 이름</label>
+                <input id="edit-space-name" type="text" className="input w-full min-h-[48px]" value={name} maxLength={SPACE_NAME_MAX}
+                    onChange={(e) => setName(e.target.value)} aria-describedby="edit-space-name-hint" required />
+                <p id="edit-space-name-hint" className="text-xs text-surface-600 dark:text-surface-400 mt-1">
+                    엑셀 대장의 위치 이름과 같게 쓰면 가져오기 때 자동으로 맞춰집니다.
+                </p>
+            </div>
+            {hasBuildings && (
+                <div>
+                    <p className="label">건물·층</p>
+                    <LocationSelects idPrefix="edit-space" buildings={buildings} value={loc} onChange={setLoc} disabled={busy} />
+                </div>
+            )}
             <div className="flex justify-end gap-2">
                 <button type="button" onClick={onCancel} className="btn-secondary min-h-[48px] px-4">취소</button>
-                <button type="button" onClick={() => onSave(loc)} disabled={busy} className="btn-primary min-h-[48px] px-5">저장</button>
+                <button type="submit" disabled={busy || !name.trim()} className="btn-primary min-h-[48px] px-5">저장</button>
             </div>
-        </div>
+            <div className="border-t border-surface-200 dark:border-surface-700 pt-4 flex flex-wrap items-center gap-3">
+                <p className="flex-1 min-w-[12rem] text-xs text-surface-600 dark:text-surface-400">
+                    더 쓰지 않는 공간은 삭제하세요. 이 공간의 재물은 지워지지 않고, 나중에 되살릴 수 있습니다.
+                </p>
+                <button type="button" disabled={busy} className="btn-secondary btn-sm min-h-[44px] text-red-700 dark:text-red-300"
+                    onClick={async () => { if (await onDelete()) onCancel(); }}>
+                    공간 삭제
+                </button>
+            </div>
+        </form>
     );
 }
 
 interface SpaceCardProps {
     space: Space;
+    /** 건물·층으로 묶여 보일 때는 h4(건물 h2 → 층 h3 아래) */
+    nested: boolean;
     isFirst: boolean;
     isLast: boolean;
     busy: boolean;
     members: { uid: string; name: string; role: string }[];
     nameOf: (uid: string) => string;
-    showLocation: boolean;
-    onRename: () => void;
+    onEdit: () => void;
     onMove: (direction: -1 | 1) => void;
-    onLocate: () => void;
     onAddManager: (uid: string) => void;
     onRemoveManager: (uid: string) => void;
     teams: Team[];
     teamName: (id: string) => string | null;
     onAddTeam: (teamId: string) => void;
     onRemoveTeam: (teamId: string) => void;
-    onArchive: () => void;
 }
 
+/**
+ * 공간 카드 — 이름, 담당(직원·팀) 칩, [+ 담당 지정] 하나, [고치기] 하나.
+ * 담당 지정은 팀·직원을 한 고르기 칸에 묶었다(예전엔 칸 두 개 + 버튼 세 개가 카드마다 있었다).
+ */
 function SpaceCard({
-    space, isFirst, isLast, busy, members, nameOf, showLocation,
-    onRename, onMove, onLocate, onAddManager, onRemoveManager, teams, teamName, onAddTeam, onRemoveTeam, onArchive,
+    space, nested, isFirst, isLast, busy, members, nameOf,
+    onEdit, onMove, onAddManager, onRemoveManager, teams, teamName, onAddTeam, onRemoveTeam,
 }: SpaceCardProps) {
     const candidates = members.filter((m) => !space.managerUids.includes(m.uid));
-    const selectId = `space-manager-${space.id}`;
+    const selectId = `space-assign-${space.id}`;
     const spaceTeams = space.teamIds ?? [];
     const teamCandidates = teams.filter((t) => !spaceTeams.includes(t.id));
+    const noAssignee = space.managerUids.length === 0 && spaceTeams.length === 0;
+    const nothingToAdd = candidates.length === 0 && teamCandidates.length === 0;
+    const Heading = nested ? 'h4' : 'h2';
+
+    const handleAssign = (value: string) => {
+        if (value.startsWith('t:')) onAddTeam(value.slice(2));
+        else if (value.startsWith('u:')) onAddManager(value.slice(2));
+    };
 
     return (
         <li className="glass-card p-4">
-            <div className="flex items-start justify-between gap-2 mb-3">
+            <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="min-w-0">
-                    <h2 className="font-semibold text-surface-900 dark:text-surface-100 break-keep">{space.name}</h2>
-                    <p className="text-xs text-surface-500 dark:text-surface-400">
-                        {space.managerUids.length === 0 && spaceTeams.length === 0
-                            ? '담당자 없음'
-                            : [space.managerUids.length > 0 ? `담당자 ${space.managerUids.length}명` : '', spaceTeams.length > 0 ? `담당 팀 ${spaceTeams.length}` : '']
-                                .filter(Boolean).join(' · ')}
-                    </p>
+                    <Heading className="font-semibold text-surface-900 dark:text-surface-100 break-keep">{space.name}</Heading>
+                    {noAssignee && (
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mt-0.5">
+                            <span aria-hidden="true">⚠️ </span>담당이 없습니다 — 아래에서 직원이나 팀을 정하세요
+                        </p>
+                    )}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                     <button type="button" onClick={() => onMove(-1)} disabled={busy || isFirst}
-                        className="btn-icon min-h-[48px] min-w-[48px]" aria-label={`${space.name} 위로`}>
+                        className="btn-icon min-h-[44px] min-w-[44px]" aria-label={`${space.name} 위로`} title="위로">
                         <span aria-hidden="true">▲</span>
                     </button>
                     <button type="button" onClick={() => onMove(1)} disabled={busy || isLast}
-                        className="btn-icon min-h-[48px] min-w-[48px]" aria-label={`${space.name} 아래로`}>
+                        className="btn-icon min-h-[44px] min-w-[44px]" aria-label={`${space.name} 아래로`} title="아래로">
                         <span aria-hidden="true">▼</span>
                     </button>
                 </div>
             </div>
 
-            {/* 담당자 */}
-            {space.managerUids.length > 0 && (
-                <ul className="flex flex-wrap gap-2 mb-3" aria-label={`${space.name} 담당자`}>
+            {/* 담당 — 팀 칩과 직원 칩을 한 줄에 */}
+            {!noAssignee && (
+                <ul className="flex flex-wrap gap-2 mb-3" aria-label={`${space.name} 담당`}>
+                    {spaceTeams.map((id) => (
+                        <li key={`t-${id}`} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-accent-50 dark:bg-accent-900/30 text-accent-800 dark:text-accent-300 text-sm">
+                            <span aria-hidden="true">👥</span> {teamName(id) ?? '(삭제한 팀)'}
+                            <button type="button" onClick={() => onRemoveTeam(id)} disabled={busy}
+                                className="w-11 h-11 -my-1 flex items-center justify-center rounded-full hover:bg-accent-100 dark:hover:bg-accent-800/50"
+                                aria-label={`${teamName(id) ?? '팀'} 담당에서 빼기`}>
+                                <span aria-hidden="true">✕</span>
+                            </button>
+                        </li>
+                    ))}
                     {space.managerUids.map((uid) => (
-                        <li key={uid} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm">
+                        <li key={`u-${uid}`} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm">
                             {nameOf(uid)}
                             <button type="button" onClick={() => onRemoveManager(uid)} disabled={busy}
                                 className="w-11 h-11 -my-1 flex items-center justify-center rounded-full hover:bg-primary-100 dark:hover:bg-primary-800/50"
-                                aria-label={`${nameOf(uid)} 담당자에서 빼기`}>
+                                aria-label={`${nameOf(uid)} 담당에서 빼기`}>
                                 <span aria-hidden="true">✕</span>
                             </button>
                         </li>
@@ -356,61 +401,33 @@ function SpaceCard({
                 </ul>
             )}
 
-            {/* 담당 팀 (2026-11-22) */}
-            {spaceTeams.length > 0 && (
-                <ul className="flex flex-wrap gap-2 mb-3" aria-label={`${space.name} 담당 팀`}>
-                    {spaceTeams.map((id) => (
-                        <li key={id} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 text-sm">
-                            <span aria-hidden="true">👥</span> {teamName(id) ?? '(숨긴 팀)'}
-                            <button type="button" onClick={() => onRemoveTeam(id)} disabled={busy}
-                                className="w-11 h-11 -my-1 flex items-center justify-center rounded-full hover:bg-accent-100 dark:hover:bg-accent-800/50"
-                                aria-label={`${teamName(id) ?? '팀'} 담당 팀에서 빼기`}>
-                                <span aria-hidden="true">✕</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
-            {teams.length > 0 && (
-                <div className="mb-2">
-                    <label htmlFor={`space-team-${space.id}`} className="sr-only">{space.name} 담당 팀 지정</label>
-                    <select id={`space-team-${space.id}`} value="" onChange={(e) => onAddTeam(e.target.value)}
-                        disabled={busy || teamCandidates.length === 0} className="input w-full min-h-[48px]">
-                        <option value="">{teamCandidates.length === 0 ? '지정할 팀이 없습니다' : '+ 담당 팀 지정'}</option>
-                        {teamCandidates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-2">
-                <label htmlFor={selectId} className="sr-only">{space.name} 담당자 지정</label>
+            <div className="flex gap-2">
+                <label htmlFor={selectId} className="sr-only">{space.name} 담당 지정</label>
                 <select
                     id={selectId}
                     value=""
-                    onChange={(e) => onAddManager(e.target.value)}
-                    disabled={busy || candidates.length === 0}
-                    className="input flex-1 min-h-[48px]"
+                    onChange={(e) => handleAssign(e.target.value)}
+                    disabled={busy || nothingToAdd}
+                    className="input flex-1 min-w-0 min-h-[48px]"
                 >
-                    <option value="">{candidates.length === 0 ? '지정할 직원이 없습니다' : '+ 담당자 지정'}</option>
-                    {candidates.map((m) => (
-                        <option key={m.uid} value={m.uid}>{m.name} ({ROLE_LABEL[m.role] ?? m.role})</option>
-                    ))}
-                </select>
-                <div className="flex gap-2">
-                    <button type="button" onClick={onRename} disabled={busy} className="btn-secondary min-h-[48px] px-3 flex-1 sm:flex-none">
-                        이름 바꾸기
-                    </button>
-                    {showLocation && (
-                        <button type="button" onClick={onLocate} disabled={busy} className="btn-secondary min-h-[48px] px-3 flex-1 sm:flex-none"
-                            aria-label={`${space.name} 위치 바꾸기`}>
-                            위치
-                        </button>
+                    <option value="">{nothingToAdd ? '더 정할 직원·팀이 없습니다' : '+ 담당 지정 (팀·직원)'}</option>
+                    {teamCandidates.length > 0 && (
+                        <optgroup label="팀 — 팀 직원 모두가 조사">
+                            {teamCandidates.map((t) => <option key={t.id} value={`t:${t.id}`}>👥 {t.name}</option>)}
+                        </optgroup>
                     )}
-                    <button type="button" onClick={onArchive} disabled={busy}
-                        className="btn-secondary min-h-[48px] px-3 flex-1 sm:flex-none text-amber-700 dark:text-amber-400">
-                        숨기기
-                    </button>
-                </div>
+                    {candidates.length > 0 && (
+                        <optgroup label="직원">
+                            {candidates.map((m) => (
+                                <option key={m.uid} value={`u:${m.uid}`}>{m.name} ({ROLE_LABEL[m.role] ?? m.role})</option>
+                            ))}
+                        </optgroup>
+                    )}
+                </select>
+                <button type="button" onClick={onEdit} disabled={busy} className="btn-secondary min-h-[48px] px-4 flex-shrink-0"
+                    aria-label={`${space.name} 고치기`}>
+                    고치기
+                </button>
             </div>
         </li>
     );

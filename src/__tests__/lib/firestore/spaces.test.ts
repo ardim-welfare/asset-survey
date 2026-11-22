@@ -156,9 +156,9 @@ describe('spaces — 이름 검사', () => {
         expect(validateSpaceName('가'.repeat(50), existing)).toBeNull();
     });
 
-    it('같은 이름은 막고, 숨긴 공간과 겹치면 숨김을 풀라고 안내한다', () => {
+    it('같은 이름은 막고, 삭제한(숨긴) 공간과 겹치면 되살리라고 안내한다', () => {
         expect(validateSpaceName('2층  사무실', existing)).toMatch(/이미 있습니다/);
-        expect(validateSpaceName('옛 창고', existing)).toMatch(/숨긴 공간/);
+        expect(validateSpaceName('옛 창고', existing)).toMatch(/삭제한 공간/);
     });
 
     it('자기 자신과는 겹친다고 보지 않는다 (이름 바꾸기)', () => {
