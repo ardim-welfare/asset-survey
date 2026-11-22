@@ -9,7 +9,10 @@ on:
 jobs:
   preview:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    # 러너 전환 — deploy.yml과 같은 DEPLOY_RUNNER(운영 서비스 계정 키를 다루는 잡끼리 한 스위치).
+    # Dependabot PR은 항상 호스티드: 외부 패키지 새 버전의 install 스크립트가 상주 러너에 닿지 않게(ci.yml 상단).
+    # ⚠️ 삼항의 참 쪽에 falsy 값을 두지 말 것.
+    runs-on: ${{ ((github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest') || vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
 
     steps:
@@ -19,7 +22,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ runner.environment != 'self-hosted' && 'npm' || '' }}
 
       - name: Install dependencies
         run: npm ci
@@ -41,6 +44,8 @@ jobs:
         if: github.actor != 'dependabot[bot]'
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
+          # 스텝이 어떻게 끝나든 키 파일을 지운다 — 셀프호스티드 러너는 /tmp가 다음 잡까지 남는다
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
           npx firebase-tools hosting:channel:deploy "pr-${{ github.event.number }}" --expires 3d --project "${{ vars.FIREBASE_PROJECT_ID }}"
           rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
@@ -53,7 +58,8 @@ jobs:
   # 채널이었다 — 즉 닫히는 시점에 지웠으면 애초에 쌓이지 않았다.
   cleanup:
     if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    # 러너 전환 — 위 preview 잡과 같다
+    runs-on: ${{ ((github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest') || vars.DEPLOY_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       contents: read
@@ -70,6 +76,8 @@ jobs:
       - name: Delete preview channel
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
+          # 스텝이 어떻게 끝나든 키 파일을 지운다 — 셀프호스티드 러너는 /tmp가 다음 잡까지 남는다
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
           CHANNEL="pr-${{ github.event.number }}"
           # 채널이 없는 것은 정상 경로다(dependabot PR은 배포 스텝을 건너뛰고, 3일 넘게 열려
@@ -95,6 +103,8 @@ jobs:
       - name: Verify deletion
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
+          # 스텝이 어떻게 끝나든 키 파일을 지운다 — 셀프호스티드 러너는 /tmp가 다음 잡까지 남는다
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
           CHANNEL="pr-${{ github.event.number }}"
           # 채널 name은 "projects/…/sites/…/channels/pr-N" 한 문자열이다. 뒤따옴표까지 붙여야
