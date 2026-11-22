@@ -106,6 +106,9 @@ export { getTeams, createTeam, updateTeam, sortTeams, validateTeamName, normaliz
 export { uploadAssetPhoto, removeAssetPhoto, PHOTO_SOURCE_MAX_BYTES } from './assetPhotos';
 export type { AssetPhotoFields } from './assetPhotos';
 
+// 조사 현장 사진 (2026-11-22)
+export { uploadScanPhoto, removeScanPhoto } from './scanPhotos';
+
 // 재물 직접 등록·수정 (2026-11-22)
 export {
     createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, MANUAL_EDIT_FIELDS,

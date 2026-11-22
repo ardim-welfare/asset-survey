@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import useSurveyReport from '../../hooks/useSurveyReport';
-import { buildReportTables, reportHeader } from '../../lib/survey/reportTables';
+import { buildReportTables, reportHeader, reportPhotos, PHOTO_TABLE_TITLE } from '../../lib/survey/reportTables';
 import { SYNC_KIND_LABEL } from '../../lib/survey/report';
 import { toDateOrNull } from '../../lib/dateUtils';
 import type { SyncTask, SyncTaskKind, SurveyEvent } from '../../types/survey';
@@ -50,7 +50,9 @@ export default function SurveyReport() {
     }
 
     const ctx = r.ctx;
-    const tables = buildReportTables(ctx);
+    // 현장 사진은 주소 표 대신 사진으로 보여 준다(2026-11-22)
+    const tables = buildReportTables(ctx).filter((t) => t.title !== PHOTO_TABLE_TITLE);
+    const photos = reportPhotos(ctx);
     const closed = r.survey.status === 'closed';
     const doneCount = r.tasks.filter((t) => t.done).length;
 
@@ -120,6 +122,25 @@ export default function SurveyReport() {
                     )}
                 </section>
             ))}
+
+            {photos.length > 0 && (
+                <section className={card} aria-labelledby="photo-title">
+                    <h2 id="photo-title" className="font-semibold text-surface-900 dark:text-surface-100 mb-2">
+                        {PHOTO_TABLE_TITLE} <span className={`${sub} font-normal`}>{photos.length}건</span>
+                    </h2>
+                    <ul className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {photos.map((p) => (
+                            <li key={p.url}>
+                                <a href={p.url} target="_blank" rel="noopener noreferrer" className="block">
+                                    <img src={p.thumbUrl} alt={`${p.code} 현장 사진`} loading="lazy" className="w-full aspect-square object-cover rounded-lg bg-surface-100 dark:bg-surface-800" />
+                                </a>
+                                <p className="text-xs text-surface-700 dark:text-surface-300 mt-1"><b className="font-mono">{p.code}</b> {p.name}</p>
+                                <p className={sub}>{p.where} · {p.condition}{p.memo ? ` · ${p.memo}` : ''}</p>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
 
             <section className={card}>
                 <button type="button" className="font-semibold text-surface-900 dark:text-surface-100 min-h-[44px]" aria-expanded={showLog} onClick={() => setShowLog((v) => !v)}>

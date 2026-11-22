@@ -44,6 +44,8 @@ export interface SurveyReport {
     outOfScope: Scan[];
     /** 직접 입력으로 확인 — 재확인 대상 */
     manual: Scan[];
+    /** 현장 사진이 붙은 스캔(2026-11-22) */
+    photos: Scan[];
 }
 
 const byCode = <T extends { code: string }>(a: T, b: T) => a.code.localeCompare(b.code, 'ko', { numeric: true });
@@ -95,6 +97,7 @@ export function buildReport(targets: SurveyTarget[], scans: Scan[], submissions:
         unregistered: sorted.filter((s) => s.result === 'unregistered'),
         outOfScope: sorted.filter((s) => s.result === 'outOfScope'),
         manual: sorted.filter((s) => s.method === 'manual'),
+        photos: sorted.filter((s) => !!s.photoUrl),
         summary: { target: 0, found: 0, missing: 0, otherSpace: 0, unregistered: 0, outOfScope: 0, damaged: 0, labelDamaged: 0, manual: 0 },
     };
     report.summary = {

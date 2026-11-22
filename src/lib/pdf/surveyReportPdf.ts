@@ -7,7 +7,7 @@
  */
 import { buildApprovalHtml, escapeHtml, type ApprovalEntry } from './pdfEngine';
 import { recordExport } from '../audit/recordExport';
-import { buildReportTables, reportHeader, type ReportContext } from '../survey/reportTables';
+import { buildReportTables, reportHeader, reportPhotos, PHOTO_TABLE_TITLE, type ReportContext } from '../survey/reportTables';
 
 const styles = `
     @page { size: A4 portrait; margin: 14mm 12mm; }
@@ -23,6 +23,9 @@ const styles = `
     table.t thead { display: table-header-group; }
     table.t thead th { background: #e8e8e8; font-weight: 700; text-align: center; white-space: nowrap; }
     table.t tr { break-inside: avoid; page-break-inside: avoid; }
+    .photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .photos figure { margin: 0; break-inside: avoid; page-break-inside: avoid; font-size: 9px; }
+    .photos img { width: 100%; aspect-ratio: 1; object-fit: cover; border: 1px solid #999; }
     td.num { text-align: right; white-space: nowrap; }
     .empty { color: #555; padding: 2px 0 4px; }
     .foot { margin-top: 16px; font-size: 9px; color: #555; }
@@ -42,7 +45,14 @@ export function buildSurveyReportHtml(ctx: ReportContext, orgName: string, appro
     const cell = (v: string | number) => (typeof v === 'number'
         ? `<td class="num">${v.toLocaleString('ko-KR')}</td>`
         : `<td>${escapeHtml(v)}</td>`);
-    const body = tables.map((t) => `
+    // 현장 사진은 주소 표 대신 사진으로 그린다(2026-11-22)
+    const photos = reportPhotos(ctx);
+    const photoHtml = photos.length === 0 ? '' : `
+        <h2>${escapeHtml(PHOTO_TABLE_TITLE)} (${photos.length}건)</h2>
+        <div class="photos">${photos.map((p) => `
+            <figure><img src="${escapeHtml(p.thumbUrl)}" alt="" /><figcaption><b>${escapeHtml(p.code)}</b> ${escapeHtml(p.name)}<br/>${escapeHtml(p.where)} · ${escapeHtml(p.condition)}${p.memo ? ` · ${escapeHtml(p.memo)}` : ''}</figcaption></figure>`).join('')}
+        </div>`;
+    const body = tables.filter((t) => t.title !== PHOTO_TABLE_TITLE).map((t) => `
         <h2>${escapeHtml(t.title)}${t.rows.length > 0 && t.title !== '종합' ? ` (${t.rows.length}건)` : ''}</h2>
         ${t.rows.length === 0 ? `<p class="empty">${escapeHtml(t.empty)}</p>` : `
         <table class="t">
@@ -56,6 +66,7 @@ export function buildSurveyReportHtml(ctx: ReportContext, orgName: string, appro
     <div class="header-area"><h1 class="title">재물조사 결과 보고서</h1>${buildApprovalHtml(approvalLine)}</div>
     <dl class="info">${info.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
     ${body}
+    ${photoHtml}
     <p class="foot">금액은 담지 않습니다. 희망이음 반영은 앱의 '희망이음 반영 목록'에서 처리 여부를 확인하세요.</p>
 </div></body>
 </html>`;

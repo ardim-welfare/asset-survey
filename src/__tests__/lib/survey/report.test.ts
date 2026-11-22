@@ -117,6 +117,21 @@ describe('보고서 표·PDF', () => {
         expect(tables[1].columns[0]).toBe('공간');
     });
 
+    it('현장 사진(2026-11-22) — 사진이 있으면 엑셀용 주소 표를 끝에 더하고, PDF는 사진으로 그린다', () => {
+        const withPhoto = buildReport(TARGETS, [...SCANS.map((x, i) => (i === 0 ? { ...x, photoUrl: 'https://p/1.jpg', photoThumbUrl: 'https://p/1-t.jpg' } : x))],
+            [], ['sp-2', 'sp-1']);
+        expect(withPhoto.photos).toHaveLength(1);
+        const c = { ...ctx, report: withPhoto };
+        const tables = buildReportTables(c);
+        expect(tables[tables.length - 1].title).toBe('현장 사진');
+        expect(tables[tables.length - 1].rows[0][5]).toBe('https://p/1.jpg');
+        const html = buildSurveyReportHtml(c, '기관', []);
+        expect(html).toContain('<img src="https://p/1-t.jpg"');
+        expect(html).not.toContain('사진 주소');
+        // 사진이 없으면 표도 없다
+        expect(buildReportTables(ctx).map((t) => t.title)).not.toContain('현장 사진');
+    });
+
     it('PDF HTML — 기관명·결재란·표를 담고 값은 이스케이프한다', () => {
         const html = buildSurveyReportHtml({ ...ctx, survey: { ...ctx.survey, name: '<b>조사</b>' } }, '행복복지관', [{ title: '담당' }, { title: '관장' }], new Date(2026, 11, 6));
         expect(html).toContain('재물조사 결과 보고서');

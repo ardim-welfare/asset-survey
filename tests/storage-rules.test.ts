@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
-import { ref, uploadBytes, getBytes } from 'firebase/storage';
+import { ref, uploadBytes, getBytes, deleteObject } from 'firebase/storage';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -175,5 +175,38 @@ describe('Storage Security Rules — 재물 사진', () => {
   it('너무 큰 파일(2MB 이상)은 막힌다', async () => {
     const big = new Uint8Array(2 * 1024 * 1024 + 1);
     await assertFails(uploadBytes(ref(as('admin_A', 'admin', 'org-A'), PATH), big, { contentType: 'image/jpeg' }));
+  });
+});
+
+// 조사 현장 사진 (2026-11-22) — 같은 기관 구성원이 올리고(올린 사람 표시 필수), 본인·관리자만 지운다
+describe('Storage Security Rules — 조사 현장 사진', () => {
+  let env: RulesTestEnvironment;
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+  const PATH = 'organizations/org-A/scans/sv1/sv1__org-A__1-1.jpg';
+  const meta = (uid: string) => ({ contentType: 'image/jpeg', customMetadata: { uploadedBy: uid } });
+
+  beforeAll(async () => {
+    env = await initializeTestEnvironment({
+      projectId: PROJECT_ID,
+      storage: { rules: readFileSync(resolve(process.cwd(), 'storage.rules'), 'utf8'), host: '127.0.0.1', port: 9199 },
+    });
+  });
+  beforeEach(async () => { await env.clearStorage(); });
+  afterAll(async () => { await env.cleanup(); });
+
+  const as = (uid: string, role: string, orgId: string) => env.authenticatedContext(uid, { role, orgId }).storage();
+
+  it('같은 기관 직원은 자기 이름을 남겨 올리고, 다른 기관은 못 올리거나 못 본다', async () => {
+    await assertSucceeds(uploadBytes(ref(as('emp_A1', 'employee', 'org-A'), PATH), jpg, meta('emp_A1')));
+    await assertSucceeds(getBytes(ref(as('emp_A2', 'employee', 'org-A'), PATH)));
+    await assertFails(getBytes(ref(as('emp_B1', 'employee', 'org-B'), PATH)));
+    await assertFails(uploadBytes(ref(as('emp_B1', 'employee', 'org-B'), 'organizations/org-A/scans/sv1/x.jpg'), jpg, meta('emp_B1')));
+    await assertFails(uploadBytes(ref(as('emp_A1', 'employee', 'org-A'), 'organizations/org-A/scans/sv1/y.jpg'), jpg, meta('emp_A2')));
+  });
+
+  it('지우기는 올린 본인과 관리자만', async () => {
+    await assertSucceeds(uploadBytes(ref(as('emp_A1', 'employee', 'org-A'), PATH), jpg, meta('emp_A1')));
+    await assertFails(deleteObject(ref(as('emp_A2', 'employee', 'org-A'), PATH)));
+    await assertSucceeds(deleteObject(ref(as('emp_A1', 'employee', 'org-A'), PATH)));
   });
 });

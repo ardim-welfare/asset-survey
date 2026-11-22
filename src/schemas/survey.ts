@@ -113,6 +113,11 @@ export const scanSchema = z.object({
     method: scanMethodSchema.catch('qr'),
     condition: scanConditionSchema.catch('normal'),
     memo: z.string().catch(''),
+    /** 현장 사진(2026-11-22) — 내려받기 주소·Storage 경로. 없으면 null. 올리기는 lib/firestore/scanPhotos.ts */
+    photoUrl: z.string().nullable().optional().catch(null),
+    photoThumbUrl: z.string().nullable().optional().catch(null),
+    photoPath: z.string().nullable().optional().catch(null),
+    photoThumbPath: z.string().nullable().optional().catch(null),
     scannedByUid: z.string().catch(''),
     scannedAt: timestampSchema.optional().catch(undefined),
     lastEditedByUid: z.string().catch(''),

@@ -477,6 +477,7 @@ service cloud.firestore {
       function scanValid(d) {
         return d.keys().hasOnly(['organizationId', 'surveyId', 'assetId', 'code', 'name', 'spaceId', 'expectedSpaceId',
                                  'result', 'method', 'condition', 'memo', 'scannedByUid', 'scannedAt',
+                                 'photoUrl', 'photoThumbUrl', 'photoPath', 'photoThumbPath',
                                  'lastEditedByUid', 'updatedAt'])
                && nullableString(d.assetId, 300) && d.code is string && d.code.size() > 0 && d.code.size() <= 300
                && nullableString(d.name, 200)
@@ -485,6 +486,11 @@ service cloud.firestore {
                && d.method in ['qr', 'manual']
                && d.condition in ['normal', 'damaged', 'labelDamaged']
                && d.memo is string && d.memo.size() <= 200
+               // 현장 사진(2026-11-22) — 주소·경로 글자, 예전 문서에는 없다
+               && (!('photoUrl' in d) || nullableString(d.photoUrl, 2000))
+               && (!('photoThumbUrl' in d) || nullableString(d.photoThumbUrl, 2000))
+               && (!('photoPath' in d) || nullableString(d.photoPath, 500))
+               && (!('photoThumbPath' in d) || nullableString(d.photoThumbPath, 500))
                && d.updatedAt == request.time
                && d.lastEditedByUid == request.auth.uid;
       }
@@ -507,11 +513,12 @@ service cloud.firestore {
                     && scanValid(request.resource.data)
                     && request.resource.data.scannedByUid == request.auth.uid
                     && request.resource.data.scannedAt == request.time;
-      // 나중에 고칠 수 있는 것은 물건 상태·메모뿐 (기획서 F12)
+      // 나중에 고칠 수 있는 것은 물건 상태·메모와 현장 사진뿐 (기획서 F12, 사진 2026-11-22)
       allow update: if isOrgMember(resource.data.organizationId)
                     && canScanIn(surveyOf(resource.data.surveyId), resource.data.organizationId, resource.data.spaceId)
                     && !spaceLocked(resource.data.surveyId, resource.data.spaceId)
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['condition', 'memo', 'updatedAt', 'lastEditedByUid'])
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['condition', 'memo',
+                         'photoUrl', 'photoThumbUrl', 'photoPath', 'photoThumbPath', 'updatedAt', 'lastEditedByUid'])
                     && scanValid(request.resource.data);
       // 잘못 찍은 것 지우기 — 열린 회차에서 관리자 또는 찍은 사람 본인
       allow delete: if isOrgMember(resource.data.organizationId)

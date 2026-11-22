@@ -12,6 +12,8 @@ import { hasDurableLocalCache } from '../../lib/firebase';
 import QrCamera, { type CameraState } from './QrCamera';
 import { SCAN_RESULT_LABEL, CONDITION_LABEL } from '../../lib/survey/judge';
 import { SCAN_MEMO_MAX } from '../../schemas';
+import { uploadScanPhoto, removeScanPhoto, PHOTO_SOURCE_MAX_BYTES } from '../../lib/firestore';
+import { useToast } from '../../hooks/useToast';
 import type { Scan, ScanCondition, ScanResult, SurveySubmission } from '../../types/survey';
 
 const sub = 'text-xs text-surface-500 dark:text-surface-400';
@@ -184,6 +186,7 @@ export default function ScanPage() {
                                 <span className="block mt-0.5">
                                     <ResultChip result={s.result} />{s.method === 'manual' && <span className={`${sub} ml-1`}>직접 입력</span>}
                                     {s.condition !== 'normal' && <span className="ml-1 text-xs text-red-700 dark:text-red-300">{CONDITION_LABEL[s.condition]}</span>}
+                                    {s.photoUrl && <span className="ml-1 text-xs" aria-label="사진 있음">📷</span>}
                                 </span>
                             </button>
                             {editing === s.id && !sc.locked && <ConditionEditor scan={s} onSave={sc.setCondition} onUndo={sc.undo} />}
@@ -346,10 +349,63 @@ function ConditionEditor({ scan, onSave, onUndo, compact = false }: {
                     <input className="input min-h-[44px] mt-1" maxLength={SCAN_MEMO_MAX} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 다리 한쪽 부러짐" />
                 </label>
             )}
+            <ScanPhoto scan={scan} />
             <div className="flex gap-2 mt-2">
                 <button type="button" className="btn-primary min-h-[44px] px-4 text-sm" disabled={!dirty} onClick={() => onSave(scan.id, condition, memo)}>상태 저장</button>
                 <button type="button" className="btn-secondary min-h-[44px] px-3 text-sm" onClick={() => onUndo(scan.id)}>잘못 찍음 · 지우기</button>
             </div>
+        </div>
+    );
+}
+
+/**
+ * 현장 사진(2026-11-22) — 파손·라벨 훼손 등을 보여 줄 사진 한 장. 휴대폰에서는 바로 카메라가 열린다.
+ * 사진은 인터넷이 필요하다(스캔은 끊긴 곳에서도 되지만 사진은 연결됐을 때 올린다).
+ * 올린 뒤에는 실시간 구독이 스캔 문서를 다시 받아 작은 사진이 보인다.
+ */
+function ScanPhoto({ scan }: { scan: Scan }) {
+    const { showToast } = useToast();
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [busy, setBusy] = useState(false);
+
+    const pick = async (file: File | undefined) => {
+        if (!file) return;
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            showToast('사진은 인터넷이 연결됐을 때 올릴 수 있어요. 스캔 기록은 그대로 남아 있습니다.', 'warning');
+            return;
+        }
+        if (!file.type.startsWith('image/') || file.size > PHOTO_SOURCE_MAX_BYTES) { showToast('사진 파일을 골라 주세요.', 'warning'); return; }
+        setBusy(true);
+        try {
+            await uploadScanPhoto(scan, file);
+            showToast('현장 사진을 붙였습니다.', 'success');
+        } catch {
+            showToast('사진을 올리지 못했습니다. 다시 시도해 주세요.', 'error');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const remove = async () => {
+        setBusy(true);
+        try { await removeScanPhoto(scan); } catch { showToast('사진을 지우지 못했습니다.', 'error'); } finally { setBusy(false); }
+    };
+
+    return (
+        <div className="mt-2 flex items-center gap-2">
+            {scan.photoThumbUrl && (
+                <a href={scan.photoUrl ?? scan.photoThumbUrl} target="_blank" rel="noopener noreferrer" aria-label="현장 사진 크게 보기">
+                    <img src={scan.photoThumbUrl} alt="현장 사진" className="w-14 h-14 rounded-lg object-cover" />
+                </a>
+            )}
+            <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden"
+                aria-label="현장 사진 찍기" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void pick(f); }} />
+            <button type="button" className="btn-secondary min-h-[44px] px-3 text-sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+                {busy ? '올리는 중…' : scan.photoUrl ? '📷 사진 바꾸기' : '📷 사진 찍기'}
+            </button>
+            {scan.photoUrl && (
+                <button type="button" className="btn-secondary min-h-[44px] px-3 text-sm" disabled={busy} onClick={() => void remove()}>사진 지우기</button>
+            )}
         </div>
     );
 }

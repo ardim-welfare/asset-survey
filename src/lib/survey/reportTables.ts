@@ -70,6 +70,33 @@ export function locationSummaryRows(ctx: ReportContext): Array<Array<string | nu
     });
 }
 
+/** 현장 사진 표 제목 — PDF·화면은 이 표를 주소 대신 사진으로 그린다 */
+export const PHOTO_TABLE_TITLE = '현장 사진';
+
+/** 현장 사진 한 장(PDF·화면용) */
+export interface ReportPhoto {
+    code: string;
+    name: string;
+    where: string;
+    condition: string;
+    memo: string;
+    url: string;
+    thumbUrl: string;
+}
+
+/** 현장 사진 목록(2026-11-22) — 자산코드 순 */
+export function reportPhotos(ctx: ReportContext): ReportPhoto[] {
+    const loc = ctx.spaceLocation ?? (() => '');
+    return (ctx.report.photos ?? []).map((x) => {
+        const l = loc(x.spaceId);
+        return {
+            code: x.code, name: x.name ?? '', where: l ? `${l} ${ctx.spaceName(x.spaceId)}` : ctx.spaceName(x.spaceId),
+            condition: CONDITION_LABEL[x.condition], memo: x.memo,
+            url: x.photoUrl ?? '', thumbUrl: x.photoThumbUrl ?? x.photoUrl ?? '',
+        };
+    });
+}
+
 export function buildReportTables(ctx: ReportContext): ReportTable[] {
     const { report, spaceName } = ctx;
     const s = report.summary;
@@ -147,5 +174,11 @@ export function buildReportTables(ctx: ReportContext): ReportTable[] {
             rows: report.manual.map((x) => scanRow(x, [where(x.spaceId), SCAN_RESULT_LABEL[x.result]])),
             empty: '없음',
         },
+        ...(ctx.report.photos?.length ? [{
+            title: PHOTO_TABLE_TITLE,
+            columns: ['자산코드', '품명', '찍은 공간', '물건 상태', '메모', '사진 주소'],
+            rows: reportPhotos(ctx).map((p) => [p.code, p.name, p.where, p.condition, p.memo, p.url]),
+            empty: '',
+        }] : []),
     ];
 }

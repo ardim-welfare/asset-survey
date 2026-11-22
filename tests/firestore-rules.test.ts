@@ -1110,6 +1110,17 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(org.update({ labelShowManagers: 'yes' }));
     });
 
+    it('#V3b 현장 사진(2026-11-22) — 담당자는 스캔에 사진 값을 붙이고 지울 수 있다, 다른 값과 함께 바꾸면 막힌다', async () => {
+      await seedSurvey();
+      const db = emp('A', 1);
+      await assertSucceeds(db.collection('scans').doc('sv1__org-A__1').set(scanDoc('emp_A1')));
+      const photo = { photoUrl: 'https://p/1.jpg', photoThumbUrl: 'https://p/1-t.jpg', photoPath: 'organizations/org-A/scans/sv1/a.jpg', photoThumbPath: 'organizations/org-A/scans/sv1/a-t.jpg' };
+      await assertSucceeds(db.collection('scans').doc('sv1__org-A__1').update({ ...photo, updatedAt: serverTs(), lastEditedByUid: 'emp_A1' }));
+      await assertFails(db.collection('scans').doc('sv1__org-A__1').update({ photoUrl: 123, updatedAt: serverTs(), lastEditedByUid: 'emp_A1' }));
+      await assertFails(db.collection('scans').doc('sv1__org-A__1').update({ ...photo, result: 'otherSpace', updatedAt: serverTs(), lastEditedByUid: 'emp_A1' }));
+      await assertSucceeds(db.collection('scans').doc('sv1__org-A__1').update({ photoUrl: null, photoThumbUrl: null, photoPath: null, photoThumbPath: null, updatedAt: serverTs(), lastEditedByUid: 'emp_A1' }));
+    });
+
     it('#V3 같은 물건을 다시 찍어도 기록이 바뀌지 않는다 — 물건 상태·메모만 고친다', async () => {
       await seedSurvey();
       const ref = (db: ReturnType<typeof admin>) => db.collection('scans').doc('sv1__org-A__1');

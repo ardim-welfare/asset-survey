@@ -28,8 +28,8 @@ export interface AssetPhotoFields {
 
 const EMPTY: AssetPhotoFields = { photoUrl: null, photoThumbUrl: null, photoPath: null, photoThumbPath: null };
 
-/** 사진 줄이기 — 라이브러리는 이때만 불러온다(번들 분리) */
-async function shrink(file: File, maxSide: number, maxSizeMB: number): Promise<File> {
+/** 사진 줄이기 — 라이브러리는 이때만 불러온다(번들 분리). 현장 사진(scanPhotos)도 쓴다 */
+export async function shrinkPhoto(file: File, maxSide: number, maxSizeMB: number): Promise<File> {
     const { default: imageCompression } = await import('browser-image-compression');
     return imageCompression(file, { maxWidthOrHeight: maxSide, maxSizeMB, useWebWorker: true, fileType: 'image/jpeg', initialQuality: 0.8 });
 }
@@ -70,7 +70,7 @@ export async function uploadAssetPhoto(
     if (!file.type.startsWith('image/')) throw new Error('사진 파일이 아닙니다.');
     if (file.size > PHOTO_SOURCE_MAX_BYTES) throw new Error('파일이 너무 큽니다.');
     try {
-        const [main, thumb] = await Promise.all([shrink(file, 1280, 0.6), shrink(file, 320, 0.05)]);
+        const [main, thumb] = await Promise.all([shrinkPhoto(file, 1280, 0.6), shrinkPhoto(file, 320, 0.05)]);
         const stampName = Date.now();
         const dir = assetPhotoDir(asset);
         const photoPath = `${dir}/photo-${stampName}.jpg`;

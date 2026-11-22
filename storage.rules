@@ -45,6 +45,19 @@ service firebase.storage {
       allow update: if false;
     }
 
+    // 조사 현장 사진(2026-11-22) — 같은 기관이 보고, 같은 기관 구성원이 올린다(스캔 문서에 붙이는 것은
+    // firestore.rules가 담당자·열린 회차·제출 전으로 막는다). 올린 사람을 메타데이터로 남겨 본인·관리자만 지운다.
+    match /organizations/{orgId}/scans/{surveyId}/{fileName} {
+      allow read: if isOrgMember(orgId) || isSuperAdmin();
+      allow create: if isOrgMember(orgId)
+                    && request.resource.size < 2 * 1024 * 1024
+                    && isAllowedImage()
+                    && request.resource.metadata.uploadedBy == request.auth.uid;
+      allow delete: if isOrgAdmin(orgId) || isSuperAdmin()
+                    || (isOrgMember(orgId) && resource.metadata.uploadedBy == request.auth.uid);
+      allow update: if false;
+    }
+
     // 일반 피드백 이미지 업로드 (본인 폴더만)
     match /feedbacks/{userId}/{fileName} {
       allow read: if (request.auth != null && request.auth.uid == userId) || isSuperAdmin();
