@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import useAssetImport from '../../hooks/useAssetImport';
 import { IMPORT_FIELDS, type ImportField } from '../../lib/import/columns';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
+import { downloadImportTemplate } from '../../lib/import/template';
+import { useToast } from '../../hooks/useToast';
 import { COMPARE_FIELD_LABEL as COMPARE_LABEL, type CompareField, type ChangedAsset } from '../../lib/import/diff';
 import type { Space } from '../../types/space';
 
@@ -32,6 +34,15 @@ const sub = 'text-xs text-surface-500 dark:text-surface-400';
 export default function AssetImport() {
     const navigate = useNavigate();
     const im = useAssetImport();
+    const { showToast } = useToast();
+
+    const handleTemplate = async () => {
+        try {
+            await downloadImportTemplate();
+        } catch {
+            showToast('양식 파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+        }
+    };
 
     const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -64,6 +75,15 @@ export default function AssetImport() {
                         <li>열 이름이 달라도 이름으로 맞추고, 못 알아본 열은 다음 화면에서 직접 고릅니다.</li>
                         <li>사람 이름이 든 열(현 사용자 등)은 가져오지 않습니다.</li>
                     </ul>
+                    {/* 대장 엑셀이 없는 기관용 — 채워서 그대로 올리면 열이 저절로 맞는다 (2026-11-22) */}
+                    <div className="mt-4 pt-4 border-t border-surface-100 dark:border-surface-700 flex flex-col sm:flex-row sm:items-center gap-3">
+                        <p className="text-sm text-surface-700 dark:text-surface-300 flex-1">
+                            희망이음이나 기관 대장 엑셀이 없나요? 빈 양식을 내려받아 채워서 올리세요.
+                        </p>
+                        <button type="button" onClick={() => void handleTemplate()} className="btn-secondary min-h-[48px] px-4 flex-shrink-0">
+                            양식 내려받기
+                        </button>
+                    </div>
                 </div>
             )}
 
