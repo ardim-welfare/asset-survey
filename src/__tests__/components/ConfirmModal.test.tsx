@@ -96,8 +96,8 @@ describe('ConfirmModal Component', () => {
     // 달리 공용 클래스를 쓰지 않아 focus:ring이 빠져 있었고, 앱의 다른 버튼과 다르게
     // 브라우저 기본 아웃라인이 떴다. 파괴적 확인(현재 24곳)에서 가장 눈에 띄는 자리라 고정한다.
     it.each([
-        ['danger', 'focus:ring-red-400'],
-        ['warning', 'focus:ring-amber-400'],
+        ['danger', 'focus-visible:ring-red-500'],
+        ['warning', 'focus-visible:ring-amber-500'],
         ['primary', 'btn-primary'],
     ])('confirmColor=%s 확인 버튼에 포커스 표시가 있다', (color, expectedClass) => {
         useConfirmStore.setState(state => ({

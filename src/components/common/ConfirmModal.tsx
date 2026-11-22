@@ -104,11 +104,12 @@ export default function ConfirmModal({
     // **포커스 링을 직접 얹는다.** primary(btn-primary)에는 focus:ring이 들어 있는데
     // 이 둘에는 없어서, 이 모달만 브라우저 기본 아웃라인이 떴다. 특히 이 모달은 열릴 때
     // 확인 버튼을 자동 포커스하므로(위 useEffect) 포커스 표시가 가장 잘 보이는 자리다.
-    const focusRing = 'focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-surface-900';
+    // 흰 글자 대비 4.5:1 이상(red-600·amber-700, 2026-11-22 — amber-500은 2.15:1이었다)
+    const focusRing = 'focus:outline-hidden focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-900';
     const btnColors = {
         primary: 'btn-primary',
-        danger: `bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700 ${focusRing} focus:ring-red-400`,
-        warning: `bg-amber-500 hover:bg-amber-600 text-white dark:bg-amber-600 dark:hover:bg-amber-700 ${focusRing} focus:ring-amber-400`,
+        danger: `bg-red-600 hover:bg-red-700 text-white font-semibold ${focusRing} focus-visible:ring-red-500`,
+        warning: `bg-amber-700 hover:bg-amber-800 text-white font-semibold ${focusRing} focus-visible:ring-amber-500`,
     };
 
     return (
