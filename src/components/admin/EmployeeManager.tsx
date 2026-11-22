@@ -5,6 +5,7 @@
  */
 import useEmployeeManager from '../../hooks/useEmployeeManager';
 import { useAuth } from '../../hooks/useAuth';
+import { APP_URL } from '../../lib/constants';
 import { SkeletonList, SkeletonBox } from '../common/Skeleton';
 import EmployeeListItem from './EmployeeListItem';
 
@@ -85,7 +86,7 @@ export default function EmployeeManager() {
                                 </button>
                             </div>
                             <div className="font-mono text-sm text-surface-700 dark:text-surface-300 break-all select-all pr-2">
-                                https://drivelog.socialprism.co.kr?code={organization?.inviteCode || '------'}
+                                {APP_URL}?code={organization?.inviteCode || '------'}
                             </div>
                         </div>
 
