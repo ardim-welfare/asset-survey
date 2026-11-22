@@ -87,7 +87,7 @@ export default memo(function OrgCardHeader({ org, memberCount, isExpanded, editi
             {/* 삭제 버튼 */}
             <button
                 onClick={(e) => { e.stopPropagation(); onDelete(org); }}
-                className="btn-ghost btn-sm text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0 ml-2"
+                className="btn-ghost btn-sm text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0 ml-2"
                 aria-label="기관 삭제"
             >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

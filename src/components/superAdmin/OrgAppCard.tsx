@@ -179,7 +179,7 @@ export default memo(function OrgAppCard({
                                     type="button"
                                     onClick={() => onAiReanalyze(app)}
                                     disabled={!!actionLoading[app.id]}
-                                    className="text-xs text-primary-500 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
+                                    className="text-xs text-primary-700 dark:text-primary-300 hover:text-primary-800 dark:hover:text-primary-300 font-medium"
                                 >
                                     {actionLoading[app.id] === 'ai' ? '분석 중...' : '재분석'}
                                 </button>

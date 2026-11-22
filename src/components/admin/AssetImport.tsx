@@ -68,7 +68,7 @@ export default function AssetImport() {
                 <div className={card}>
                     <label htmlFor="import-file" className="block font-semibold text-surface-900 dark:text-surface-100 mb-2">엑셀 파일 고르기</label>
                     <input id="import-file" type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} disabled={im.working}
-                        className="block w-full text-sm min-h-[48px]" />
+                        className="block w-full text-sm text-surface-700 dark:text-surface-300 min-h-[48px] file:mr-3 file:min-h-[48px] file:px-4 file:rounded-xl file:border-0 file:bg-primary-600 file:text-white file:font-semibold file:cursor-pointer hover:file:bg-primary-700 disabled:opacity-50" />
                     {im.working && <p className={`${sub} mt-2`}>파일을 읽는 중입니다…</p>}
                     <ul className={`${sub} mt-4 space-y-1 list-disc pl-5`}>
                         <li>머리글(자산코드·품명 등) 줄은 자동으로 찾습니다. 제목 줄·합계 줄이 있어도 됩니다.</li>
@@ -187,8 +187,8 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                     </div>
                 )}
                 {!locked && (
-                    <details className="mt-3">
-                        <summary className={`${sub} cursor-pointer min-h-[48px] flex items-center`}>머리글 줄이 틀렸나요?</summary>
+                    <details className="mt-3 group">
+                        <summary className="btn-secondary btn-sm min-h-[44px] list-none [&::-webkit-details-marker]:hidden inline-flex cursor-pointer"><span aria-hidden="true" className="group-open:rotate-90 transition-transform">▸</span> 머리글 줄이 틀렸나요?</summary>
                         <HeaderRowPicker im={im} />
                     </details>
                 )}
@@ -204,7 +204,7 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                         return (
                             <li key={def.field} className="py-2 grid grid-cols-1 sm:grid-cols-[9rem_1fr_9rem] gap-1 sm:gap-3 sm:items-center">
                                 <label htmlFor={id} className="text-sm font-medium text-surface-800 dark:text-surface-200">
-                                    {def.label}{def.required && <span className="text-red-500"> *</span>}
+                                    {def.label}{def.required && <span className="text-red-700 dark:text-red-300"> *</span>}
                                     {def.accounting && <span className={`${sub} ml-1`}>(관리자만)</span>}
                                 </label>
                                 <select id={id} value={header ?? ''} disabled={locked}
@@ -260,9 +260,9 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                         </div>
                     )}
                     {parsed.problems.length > 0 && (
-                        <details className="mt-3">
-                            <summary className="text-sm text-amber-700 dark:text-amber-400 cursor-pointer min-h-[48px] flex items-center">
-                                확인할 것 {parsed.problems.length}건 (저장은 됩니다)
+                        <details className="mt-3 group">
+                            <summary className="btn-secondary btn-sm min-h-[44px] list-none [&::-webkit-details-marker]:hidden inline-flex cursor-pointer text-amber-800 dark:text-amber-300">
+                                <span aria-hidden="true" className="group-open:rotate-90 transition-transform">▸</span> 확인할 것 {parsed.problems.length}건 (저장은 됩니다)
                             </summary>
                             <ul className={`${sub} space-y-1 mt-1`}>
                                 {parsed.problems.slice(0, 50).map((p, i) => (
@@ -345,8 +345,8 @@ function CompareSection({ im }: { im: Im }) {
                 {diff.changed.length > 0 && (
                     <div className="mb-2">
                         <button type="button" onClick={() => setShowChanged((v) => !v)} aria-expanded={showChanged}
-                            className="text-sm font-medium text-primary-600 dark:text-primary-400 min-h-[48px]">
-                            {showChanged ? '▾' : '▸'} 바뀌는 재물 보기
+                            className="btn-secondary btn-sm min-h-[44px]">
+                            <span aria-hidden="true">{showChanged ? '▾' : '▸'}</span> 바뀌는 재물 보기
                         </button>
                         {showChanged && <ChangedList items={diff.changed} spaces={im.spaces} />}
                     </div>
@@ -357,8 +357,8 @@ function CompareSection({ im }: { im: Im }) {
                             이번 파일에 없는 재물 {diff.missing.length}건은 지우지 않고 &lsquo;대장에 없음&rsquo;으로 표시합니다.
                         </p>
                         <button type="button" onClick={() => setShowMissing((v) => !v)} aria-expanded={showMissing}
-                            className="text-sm font-medium text-primary-600 dark:text-primary-400 min-h-[48px]">
-                            {showMissing ? '▾' : '▸'} 대장에 없는 재물 보기
+                            className="btn-secondary btn-sm min-h-[44px] mt-2">
+                            <span aria-hidden="true">{showMissing ? '▾' : '▸'}</span> 대장에 없는 재물 보기
                         </button>
                         {showMissing && (
                             <ul className={`${sub} space-y-1`}>

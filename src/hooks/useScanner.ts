@@ -169,15 +169,23 @@ export default function useScanner(initialSpaceId: string | null) {
         updateScanCondition(scanId, condition, memo, () => showToast('물건 상태를 저장하지 못했습니다.', 'error'));
     }, [showToast]);
 
+    /** 잘못 찍은 스캔 지우기 — 상태·메모·사진도 함께 사라지므로 묻는다(2026-11-22 점검: 확인 없이 지워졌다) */
     const undo = useCallback(async (scanId: string) => {
+        const code = scanMap.get(scanId)?.code ?? '';
+        const ok = await confirm({
+            title: code ? `'${code}' 스캔을 지울까요?` : '이 스캔을 지울까요?',
+            message: '물건 상태·메모·현장 사진도 함께 지워집니다. 다시 찍으면 새로 남습니다.',
+            confirmText: '스캔 지우기', confirmColor: 'danger',
+        });
+        if (!ok) return;
         try {
             await deleteScan(scanId);
             setLast((prev) => (prev?.kind === 'saved' && prev.draft.scanId === scanId ? null : prev));
             showToast('스캔을 지웠습니다.', 'success');
         } catch {
-            showToast('지우지 못했습니다. 인터넷 연결을 확인해 주세요.', 'error');
+            showToast('지우지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
         }
-    }, [showToast]);
+    }, [showToast, confirm, scanMap]);
 
     /** 이 공간의 진행 — 대상 중 찾은 것(어디서 찍혔든), 남은 것, 이 공간에서 찍은 최근 순 */
     const view = useMemo(() => {

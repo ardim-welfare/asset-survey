@@ -43,7 +43,7 @@ export default function ConsentGate() {
                     <p className="text-xs text-surface-500 dark:text-surface-400 mb-3 leading-relaxed">
                         개인정보의 수집·이용 안내는 소속 기관에서 받으실 수 있습니다.
                     </p>
-                    {error && <p className="text-xs text-red-500 dark:text-red-400 mb-2">{error}</p>}
+                    {error && <p className="text-xs text-red-700 dark:text-red-300 mb-2">{error}</p>}
                     <button
                         type="button"
                         onClick={accept}
@@ -89,7 +89,7 @@ export default function ConsentGate() {
                         동의하시면 기관의 위탁 동의와 관리자 본인의 약관 동의가 함께 기록됩니다.
                     </p>
                 </div>
-                {error && <p className="text-sm text-red-500 dark:text-red-400 mb-3">{error}</p>}
+                {error && <p className="text-sm text-red-700 dark:text-red-300 mb-3">{error}</p>}
                 <button
                     type="button"
                     onClick={accept}

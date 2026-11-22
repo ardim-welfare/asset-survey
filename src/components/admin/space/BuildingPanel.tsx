@@ -100,8 +100,8 @@ export default function BuildingPanel({
             {archivedBuildings.length > 0 && (
                 <div className="mt-8">
                     <button type="button" onClick={() => setShowArchived((v) => !v)} aria-expanded={showArchived}
-                        className="text-sm font-medium text-surface-600 dark:text-surface-300 min-h-[48px] px-1">
-                        {showArchived ? '▾' : '▸'} 숨긴 건물 {archivedBuildings.length}개
+                        className="btn-secondary btn-sm min-h-[44px]">
+                        <span aria-hidden="true">{showArchived ? '▾' : '▸'}</span> 숨긴 건물 {archivedBuildings.length}개
                     </button>
                     {showArchived && (
                         <ul className="space-y-2 mt-2" aria-label="숨긴 건물 목록">

@@ -113,10 +113,18 @@ function SubmissionBadge({ sub: x, names }: { sub: SurveySubmission | null; name
     if (!x) return <span className="text-xs text-surface-500 dark:text-surface-400">조사 중</span>;
     const who = (uid: string | null) => (uid ? names.get(uid) ?? '알 수 없음' : '');
     if (x.state === 'submitted') return <span className="text-xs font-medium text-sky-700 dark:text-sky-300">제출됨 · {who(x.submittedByUid)}</span>;
-    if (x.state === 'rejected') return <span className="text-xs font-medium text-red-700 dark:text-red-300" title={x.reason}>반려 · 다시 제출 기다림</span>;
+    // 사유는 마우스 말풍선(title)이 아니라 글자로 — 휴대폰·키보드로는 볼 수 없었다(2026-11-22 점검)
+    if (x.state === 'rejected') {
+        return (
+            <span className="text-xs font-medium text-red-700 dark:text-red-300">
+                반려 · 다시 제출 기다림{x.reason && <span className="block font-normal">사유: {x.reason}</span>}
+            </span>
+        );
+    }
     return (
-        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300" title={x.reason || undefined}>
+        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
             승인{x.proxyApproved ? '(대신)' : x.selfApproved ? '(본인)' : ''} · {who(x.reviewedByUid)}
+            {x.reason && <span className="block font-normal text-surface-600 dark:text-surface-400">사유: {x.reason}</span>}
         </span>
     );
 }
@@ -167,7 +175,41 @@ function Dashboard({ s, onReview, onClose }: {
                     <div className="h-full bg-primary-500" style={{ width: `${pct}%` }} />
                 </div>
 
-                <div className="overflow-x-auto mt-4">
+                {/* 휴대폰: 공간마다 카드 — 7열 표가 넘쳐 승인·반려 버튼이 화면 밖에 있었다(2026-11-22 점검) */}
+                <ul className="sm:hidden mt-4 space-y-2" aria-label="공간별 진행">
+                    {rows.map((r) => {
+                        const p = s.progress.get(r.key);
+                        const x = s.submissionOf.get(r.key) ?? null;
+                        const isNone = r.key === NO_SPACE_KEY;
+                        return (
+                            <li key={r.key} className="rounded-xl border border-surface-200 dark:border-surface-700 p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <p className="font-medium text-surface-900 dark:text-surface-100 break-keep">{r.name}</p>
+                                        {r.location && <p className={sub}>{r.location}</p>}
+                                    </div>
+                                    <p className="text-sm font-semibold tabular-nums text-surface-900 dark:text-surface-100 whitespace-nowrap">{p?.found ?? 0} / {p?.target ?? 0}</p>
+                                </div>
+                                <p className={`${sub} mt-1`}>다른 곳 {p?.elsewhere ?? 0} · 예외 {p?.foreign ?? 0} · 상태 이상 {p?.issues ?? 0}</p>
+                                {delegated && (
+                                    <div className="mt-2">
+                                        {isNone ? <span className={sub}>관리자 확인</span> : <SubmissionBadge sub={x} names={s.names} />}
+                                        {!isNone && x?.state === 'submitted' && (
+                                            <div className="flex gap-2 mt-2">
+                                                <button type="button" className="btn-primary min-h-[44px] px-4 flex-1" onClick={() => void onReview(r.key, r.name, 'approved', x)}>승인</button>
+                                                <button type="button" className="btn-secondary min-h-[44px] px-4 flex-1" onClick={() => void onReview(r.key, r.name, 'rejected', x)}>반려</button>
+                                            </div>
+                                        )}
+                                        {!isNone && !x && (
+                                            <button type="button" className="btn-secondary min-h-[44px] px-4 mt-2 w-full" onClick={() => void onReview(r.key, r.name, 'approved', null)}>대신 승인</button>
+                                        )}
+                                    </div>
+                                )}
+                            </li>
+                        );
+                    })}
+                </ul>
+                <div className="hidden sm:block overflow-x-auto mt-4">
                     <table className="w-full text-sm">
                         <thead className="text-left text-surface-500 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
                             <tr>
@@ -200,12 +242,12 @@ function Dashboard({ s, onReview, onClose }: {
                                             <td className="py-2 whitespace-nowrap">
                                                 {!isNone && x?.state === 'submitted' && (
                                                     <span className="flex gap-1">
-                                                        <button type="button" className="btn-primary btn-sm min-h-[40px] px-3" onClick={() => void onReview(r.key, r.name, 'approved', x)}>승인</button>
-                                                        <button type="button" className="btn-secondary btn-sm min-h-[40px] px-3" onClick={() => void onReview(r.key, r.name, 'rejected', x)}>반려</button>
+                                                        <button type="button" className="btn-primary btn-sm min-h-[44px] px-3" onClick={() => void onReview(r.key, r.name, 'approved', x)}>승인</button>
+                                                        <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3" onClick={() => void onReview(r.key, r.name, 'rejected', x)}>반려</button>
                                                     </span>
                                                 )}
                                                 {!isNone && !x && (
-                                                    <button type="button" className="btn-secondary btn-sm min-h-[40px] px-3" onClick={() => void onReview(r.key, r.name, 'approved', null)}>대신 승인</button>
+                                                    <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3" onClick={() => void onReview(r.key, r.name, 'approved', null)}>대신 승인</button>
                                                 )}
                                             </td>
                                         )}

@@ -107,18 +107,22 @@ export default function SurveyReport() {
                         {t.title}{t.title !== '종합' && t.rows.length > 0 && <span className={`${sub} font-normal`}> {t.rows.length}건</span>}
                     </h2>
                     {t.rows.length === 0 ? <p className="text-sm text-surface-600 dark:text-surface-300">{t.empty}</p> : (
+                        <>
+                        {/* 휴대폰에서 칸이 많은 표는 옆으로 민다 — 첫 칸은 붙잡아 두고, 밀 수 있다고 알린다(2026-11-22 점검) */}
+                        {t.columns.length > 4 && <p className={`${sub} sm:hidden mb-1`}>← 표를 옆으로 밀어 보세요</p>}
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
-                                <thead className="text-left text-surface-500 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
-                                    <tr>{t.columns.map((c) => <th key={c} className="py-2 pr-3 font-medium whitespace-nowrap">{c}</th>)}</tr>
+                                <thead className="text-left text-surface-600 dark:text-surface-400 border-b border-surface-100 dark:border-surface-700">
+                                    <tr>{t.columns.map((c, j) => <th key={c} className={`py-2 pr-3 font-medium whitespace-nowrap ${j === 0 ? 'sticky left-0 bg-white dark:bg-surface-800' : ''}`}>{c}</th>)}</tr>
                                 </thead>
                                 <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
                                     {t.rows.map((row, i) => (
-                                        <tr key={i}>{row.map((v, j) => <td key={j} className={`py-2 pr-3 text-surface-800 dark:text-surface-200 ${typeof v === 'number' ? 'text-right' : ''}`}>{typeof v === 'number' ? v.toLocaleString('ko-KR') : v}</td>)}</tr>
+                                        <tr key={i}>{row.map((v, j) => <td key={j} className={`py-2 pr-3 text-surface-800 dark:text-surface-200 ${typeof v === 'number' ? 'text-right tabular-nums' : ''} ${j === 0 ? 'sticky left-0 bg-white dark:bg-surface-800' : ''}`}>{typeof v === 'number' ? v.toLocaleString('ko-KR') : v}</td>)}</tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
+                        </>
                     )}
                 </section>
             ))}
@@ -143,8 +147,8 @@ export default function SurveyReport() {
             )}
 
             <section className={card}>
-                <button type="button" className="font-semibold text-surface-900 dark:text-surface-100 min-h-[44px]" aria-expanded={showLog} onClick={() => setShowLog((v) => !v)}>
-                    조사 이력 {r.events.length}건 {showLog ? '▲' : '▼'}
+                <button type="button" className="btn-secondary btn-sm min-h-[44px] font-semibold" aria-expanded={showLog} onClick={() => setShowLog((v) => !v)}>
+                    <span aria-hidden="true">{showLog ? '▾' : '▸'}</span> 조사 이력 {r.events.length}건
                 </button>
                 {showLog && (
                     <ol className="mt-2 space-y-1 text-sm">
@@ -170,7 +174,7 @@ function TaskRow({ task, spaceName, onToggle }: { task: SyncTask; spaceName: (ke
         <li>
             <label className="flex items-start gap-3 py-2 min-h-[44px] text-sm cursor-pointer">
                 <input type="checkbox" className="w-5 h-5 mt-0.5 flex-shrink-0" checked={task.done} onChange={onToggle} />
-                <span className={task.done ? 'line-through text-surface-400 dark:text-surface-500' : 'text-surface-800 dark:text-surface-200'}>
+                <span className={task.done ? 'line-through text-surface-500 dark:text-surface-400' : 'text-surface-800 dark:text-surface-200'}>
                     <span className="font-mono">{task.code}</span> {task.name ?? ''}
                     <span className="block text-xs text-surface-500 dark:text-surface-400">{where}{task.memo ? ` · ${task.memo}` : ''}</span>
                 </span>

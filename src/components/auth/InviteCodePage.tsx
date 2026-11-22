@@ -192,7 +192,7 @@ export default function InviteCodePage() {
                                 >
                                     이용약관
                                 </a>
-                                에 동의합니다. <span className="text-red-500 dark:text-red-400">*</span>
+                                에 동의합니다. <span className="text-red-700 dark:text-red-300">*</span>
                             </span>
                         </label>
                         {/*
@@ -213,7 +213,7 @@ export default function InviteCodePage() {
                         </div>
 
                         {error && (
-                            <p className="text-sm text-red-500 dark:text-red-400 animate-slide-down">{error}</p>
+                            <p className="text-sm text-red-700 dark:text-red-300 animate-slide-down">{error}</p>
                         )}
 
                         <button

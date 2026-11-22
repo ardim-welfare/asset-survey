@@ -216,7 +216,7 @@ export default function FeedbackItem({
 
                                 {/* 에러 메시지 */}
                                 {replyError && sendingReply === fb.id && (
-                                    <p className="text-xs text-red-500 dark:text-red-400 mt-1">{replyError}</p>
+                                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">{replyError}</p>
                                 )}
 
                                 {/* 발송 버튼 */}

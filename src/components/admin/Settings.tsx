@@ -162,14 +162,14 @@ export default function Settings() {
 
             {/* 서비스 해지 (Danger Zone) */}
             <div className="glass-card p-6 mb-6 border border-red-200 dark:border-red-900/50">
-                <h2 className="text-lg font-semibold text-red-600 dark:text-red-400 mb-1">서비스 해지</h2>
+                <h2 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-1">서비스 해지</h2>
                 <p className="text-xs text-surface-500 dark:text-surface-400 mb-4">
                     기관의 서비스 이용을 종료합니다. 모든 직원의 접근이 차단되며, 30일간 보관 후 데이터가 영구 삭제됩니다.
                 </p>
                 <button
                     type="button"
                     onClick={() => setShowWithdraw(true)}
-                    className="min-h-[48px] px-4 py-2 rounded-xl font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                    className="min-h-[48px] px-4 py-2 rounded-xl font-medium text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                 >
                     서비스 해지하기
                 </button>

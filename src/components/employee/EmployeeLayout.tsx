@@ -119,6 +119,7 @@ export default function EmployeeLayout() {
                             }}
                             className="btn-icon text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center justify-center"
                             title="관리자 화면으로 전환"
+                            aria-label="관리자 화면으로 전환"
                         >
                             <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
@@ -206,10 +207,13 @@ export default function EmployeeLayout() {
                                         <div className={`relative ${isActive ? 'scale-110 transition-transform' : 'transition-transform'}`}>
                                             {item.icon}
                                             {item.to === '/employee/more' && hasNewReleaseNotes && (
-                                                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-surface-900" />
+                                                <>
+                                                    <span aria-hidden="true" className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white dark:ring-surface-900" />
+                                                    <span className="sr-only">새 소식 있음</span>
+                                                </>
                                             )}
                                         </div>
-                                        <span className={`text-[10px] ${isActive ? 'tracking-tight' : ''}`}>{item.label}</span>
+                                        <span className={`text-xs ${isActive ? 'tracking-tight' : ''}`}>{item.label}</span>
                                     </>
                                 )}
                             </NavLink>

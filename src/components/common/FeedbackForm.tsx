@@ -202,7 +202,7 @@ export default function FeedbackForm({ onClose }: FeedbackFormProps) {
                 {/* 폼 */}
                 <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     <div>
-                        <label className="label">건의 내용 <span className="text-red-500 dark:text-red-400">*</span></label>
+                        <label className="label">건의 내용 <span className="text-red-700 dark:text-red-300">*</span></label>
                         <textarea
                             ref={textareaRef}
                             value={message}

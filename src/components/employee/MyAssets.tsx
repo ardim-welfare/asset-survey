@@ -27,6 +27,7 @@ export default function MyAssets() {
     const [error, setError] = useState(false);
     const [search, setSearch] = useState('');
     const [withInactive, setWithInactive] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         if (!orgId || !uid) return;
@@ -43,7 +44,7 @@ export default function MyAssets() {
             .catch(() => { if (!cancelled) setError(true); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [orgId, uid, teamId]);
+    }, [orgId, uid, teamId, reloadKey]);
 
     const spaceParam = params.get('space');
     const current = spaces.some((s) => s.id === spaceParam) ? spaceParam : 'all';
@@ -55,8 +56,9 @@ export default function MyAssets() {
     if (loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
     if (error) {
         return (
-            <div className="max-w-lg mx-auto glass-card p-6 text-center text-sm text-red-600 dark:text-red-400">
-                재물 목록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.
+            <div role="alert" className="max-w-lg mx-auto glass-card p-6 text-center">
+                <p className="text-sm text-red-700 dark:text-red-300">재물 목록을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 불러오세요.</p>
+                <button type="button" className="btn-secondary min-h-[48px] px-5 mt-4" onClick={() => setReloadKey((k) => k + 1)}>다시 불러오기</button>
             </div>
         );
     }
@@ -66,7 +68,7 @@ export default function MyAssets() {
             <h1 className="text-xl font-bold text-surface-900 dark:text-surface-100">내 공간 재물</h1>
 
             {spaces.length === 0 ? (
-                <div className="glass-card p-6 text-center text-sm text-surface-500 dark:text-surface-400">
+                <div className="glass-card p-6 text-center text-sm text-surface-600 dark:text-surface-400">
                     아직 담당 공간이 없습니다. 재물 담당자가 공간을 지정하면 그 공간의 재물이 여기에 나옵니다.
                 </div>
             ) : (
@@ -82,7 +84,7 @@ export default function MyAssets() {
                                         ? 'bg-primary-600 text-white dark:bg-primary-500'
                                         : 'bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 border border-surface-200 dark:border-surface-700'}`}
                                 >
-                                    {s.name}{s.id !== 'all' && <span className="opacity-75"> {countIn(s.id)}</span>}
+                                    {s.name}{s.id !== 'all' && <span className="tabular-nums"> {countIn(s.id)}</span>}
                                 </button>
                             );
                         })}

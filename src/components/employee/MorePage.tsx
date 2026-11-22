@@ -41,7 +41,7 @@ export default function MorePage() {
                     <p className="text-sm font-semibold text-surface-800 dark:text-surface-200 truncate">{userData?.name || user?.displayName || '사용자'}</p>
                     <p className="text-xs text-surface-500 dark:text-surface-400 truncate">{user?.email || ''}</p>
                 </div>
-                <button onClick={logout} className="flex-shrink-0 flex items-center justify-center gap-1.5 text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                <button onClick={logout} className="flex-shrink-0 flex items-center justify-center gap-1.5 text-xs text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-300 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
                     <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
                     로그아웃
                 </button>
@@ -89,7 +89,7 @@ export default function MorePage() {
                         </div>
                         {permission === 'default' ? (<span className="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 rounded-full">활성화</span>)
                             : permission === 'granted' ? (<span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full">켜짐</span>)
-                                : (<span className="text-xs font-medium text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-full">꺼짐</span>)}
+                                : (<span className="text-xs font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-full">꺼짐</span>)}
                     </div>
                 )}
                 {/* 다크 모드 토글 */}
@@ -136,7 +136,7 @@ export default function MorePage() {
             <div className="mt-6 flex items-center justify-center gap-2 text-xs text-surface-500 dark:text-surface-400">
                 <svg aria-hidden="true" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" /></svg>
                 <span>제작자: 소셜프리즘</span><span>·</span>
-                <a href="mailto:ehsheh@gmail.com" className="text-primary-500 dark:text-primary-400 hover:text-primary-700 transition-colors">ehsheh@gmail.com</a>
+                <a href="mailto:ehsheh@gmail.com" className="text-primary-700 dark:text-primary-300 hover:text-primary-800 transition-colors">ehsheh@gmail.com</a>
             </div>
 
             {showReleaseNotes && <ReleaseNotesModal onClose={() => setShowReleaseNotes(false)} />}

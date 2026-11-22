@@ -16,7 +16,7 @@ function renderMessageWithLinks(text: string) {
                     href={part}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary-500 hover:text-primary-600 dark:text-primary-400 dark:hover:text-primary-300 underline break-all"
+                    className="text-primary-700 hover:text-primary-800 dark:text-primary-300 dark:hover:text-primary-300 underline break-all"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {part}

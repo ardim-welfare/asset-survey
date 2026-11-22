@@ -31,9 +31,9 @@ export default function AccountSection() {
 
     return (
         <div className="glass-card p-6 mb-6">
-            <div className="flex items-center gap-3 p-3">
+            <div className="flex flex-wrap items-center gap-3 p-3">
                 <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-primary-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <svg aria-hidden="true" className="w-5 h-5 text-primary-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                     </svg>
                 </div>
@@ -43,7 +43,7 @@ export default function AccountSection() {
                 </div>
                 <button
                     onClick={logout}
-                    className="flex-shrink-0 flex items-center gap-1.5 text-sm font-medium text-red-500 dark:text-red-400 px-4 py-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors min-h-[48px]"
+                    className="flex-shrink-0 flex items-center gap-1.5 text-sm font-medium text-red-700 dark:text-red-300 px-4 py-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors min-h-[48px]"
                 >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
@@ -75,15 +75,15 @@ export default function AccountSection() {
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-surface-900 dark:text-surface-100">푸시 알림</p>
-                                <p className="text-xs text-surface-500 dark:text-surface-400">공지 및 기관 관련 알림</p>
+                                <p className="text-xs text-surface-600 dark:text-surface-400">공지 및 기관 관련 알림</p>
                             </div>
                         </div>
                         {permission === 'default' ? (
-                            <span className="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 rounded-full">활성화</span>
+                            <span className="text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 rounded-full">활성화</span>
                         ) : permission === 'granted' ? (
-                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full">켜짐</span>
+                            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full">켜짐</span>
                         ) : (
-                            <span className="text-xs font-medium text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-full">꺼짐</span>
+                            <span className="text-xs font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 px-2.5 py-1 rounded-full">꺼짐</span>
                         )}
                     </div>
                 </>

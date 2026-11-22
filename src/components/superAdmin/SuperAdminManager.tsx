@@ -126,7 +126,7 @@ export default function SuperAdminManager() {
                             {admin.id !== user?.uid && (
                                 <button
                                     onClick={() => handleRemove(admin)}
-                                    className="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 min-h-[48px] rounded-lg transition-colors flex-shrink-0"
+                                    className="text-xs text-red-700 dark:text-red-300 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 min-h-[48px] rounded-lg transition-colors flex-shrink-0"
                                 >
                                     제거
                                 </button>

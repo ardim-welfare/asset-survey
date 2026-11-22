@@ -73,7 +73,7 @@ export default function PublicFeedbackModal({ isOpen, onClose }: PublicFeedbackM
                     
                     <div className="space-y-1">
                         <label className="block text-sm font-medium text-surface-700 dark:text-surface-300">
-                            이름 (또는 기관명) <span className="text-red-500 dark:text-red-400">*</span>
+                            이름 (또는 기관명) <span className="text-red-700 dark:text-red-300">*</span>
                         </label>
                         <input
                             type="text"
@@ -88,7 +88,7 @@ export default function PublicFeedbackModal({ isOpen, onClose }: PublicFeedbackM
                     
                     <div className="space-y-1">
                         <label className="block text-sm font-medium text-surface-700 dark:text-surface-300">
-                            답변 받을 이메일 주소 <span className="text-red-500 dark:text-red-400">*</span>
+                            답변 받을 이메일 주소 <span className="text-red-700 dark:text-red-300">*</span>
                         </label>
                         <input
                             type="email"
@@ -103,7 +103,7 @@ export default function PublicFeedbackModal({ isOpen, onClose }: PublicFeedbackM
 
                     <div className="space-y-1">
                         <label className="block text-sm font-medium text-surface-700 dark:text-surface-300">
-                            문의 내용 <span className="text-red-500 dark:text-red-400">*</span>
+                            문의 내용 <span className="text-red-700 dark:text-red-300">*</span>
                         </label>
                         <textarea
                             className="w-full px-4 py-2 border border-surface-300 dark:border-surface-600 rounded-xl bg-white dark:bg-surface-700/50 text-surface-900 dark:text-white focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all resize-none min-h-[120px]"

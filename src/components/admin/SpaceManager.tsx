@@ -10,7 +10,7 @@
  * (건물이 한 곳뿐인 작은 기관이 할 일을 늘리지 않으려고).
  */
 import { useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import useSpaceManager from '../../hooks/useSpaceManager';
 import useTeams from '../../hooks/useTeams';
 import { useAuth } from '../../hooks/useAuth';
@@ -31,7 +31,6 @@ const NO_LOCATION: SpaceLocation = { buildingId: null, floor: null };
 type Tab = 'spaces' | 'buildings';
 
 export default function SpaceManager() {
-    const navigate = useNavigate();
     const {
         loading, loadError, busy, reload,
         activeSpaces, archivedSpaces, members, nameOf,
@@ -84,9 +83,9 @@ export default function SpaceManager() {
             <p className="text-sm text-surface-500 dark:text-surface-400 mb-4">
                 재물이 놓인 곳(사무실·시설)을 등록하고 담당 직원을 정합니다. 건물이 여러 곳이면 [건물·층]에서 건물과 층을 먼저 등록하세요.
                 &lsquo;나눠서 조사&rsquo; 방식에서는 공간 담당자가 자기 공간을 조사합니다. 조사 방식은{' '}
-                <button type="button" onClick={() => navigate('/admin/settings')} className="underline underline-offset-2 text-primary-600 dark:text-primary-400">
+                <Link to="/admin/settings" className="underline underline-offset-2 text-primary-700 dark:text-primary-300 font-medium">
                     설정
-                </button>
+                </Link>
                 에서 바꿉니다.
             </p>
 
@@ -205,9 +204,9 @@ export default function SpaceManager() {
                                 type="button"
                                 onClick={() => setShowArchived((v) => !v)}
                                 aria-expanded={showArchived}
-                                className="text-sm font-medium text-surface-600 dark:text-surface-300 min-h-[48px] px-1"
+                                className="btn-secondary btn-sm min-h-[44px]"
                             >
-                                {showArchived ? '▾' : '▸'} 숨긴 공간 {archivedSpaces.length}개
+                                <span aria-hidden="true">{showArchived ? '▾' : '▸'}</span> 숨긴 공간 {archivedSpaces.length}개
                             </button>
                             {showArchived && (
                                 <ul className="space-y-2 mt-2" aria-label="숨긴 공간 목록">
@@ -348,7 +347,7 @@ function SpaceCard({
                         <li key={uid} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm">
                             {nameOf(uid)}
                             <button type="button" onClick={() => onRemoveManager(uid)} disabled={busy}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary-100 dark:hover:bg-primary-800/50"
+                                className="w-11 h-11 -my-1 flex items-center justify-center rounded-full hover:bg-primary-100 dark:hover:bg-primary-800/50"
                                 aria-label={`${nameOf(uid)} 담당자에서 빼기`}>
                                 <span aria-hidden="true">✕</span>
                             </button>
@@ -364,7 +363,7 @@ function SpaceCard({
                         <li key={id} className="inline-flex items-center gap-1 pl-3 pr-1 rounded-full bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 text-sm">
                             <span aria-hidden="true">👥</span> {teamName(id) ?? '(숨긴 팀)'}
                             <button type="button" onClick={() => onRemoveTeam(id)} disabled={busy}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent-100 dark:hover:bg-accent-800/50"
+                                className="w-11 h-11 -my-1 flex items-center justify-center rounded-full hover:bg-accent-100 dark:hover:bg-accent-800/50"
                                 aria-label={`${teamName(id) ?? '팀'} 담당 팀에서 빼기`}>
                                 <span aria-hidden="true">✕</span>
                             </button>

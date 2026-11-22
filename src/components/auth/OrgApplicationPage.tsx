@@ -83,7 +83,7 @@ export default function OrgApplicationPage() {
                     <div className="space-y-4">
                         <h3 className="text-sm font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">신청자 정보</h3>
                         <div>
-                            <label className="label">이름 <span className="text-red-500 dark:text-red-400">*</span></label>
+                            <label className="label">이름 <span className="text-red-700 dark:text-red-300">*</span></label>
                             <input
                                 type="text" name="applicantName" value={form.applicantName}
                                 onChange={handleChange}
@@ -93,7 +93,7 @@ export default function OrgApplicationPage() {
                             />
                         </div>
                         <div>
-                            <label className="label">이메일 <span className="text-red-500 dark:text-red-400">*</span></label>
+                            <label className="label">이메일 <span className="text-red-700 dark:text-red-300">*</span></label>
                             <input
                                 type="email" name="applicantEmail" value={form.applicantEmail}
                                 onChange={handleChange} className={`input ${currentUser?.email ? 'bg-surface-50 dark:bg-surface-800' : ''} min-h-[48px]`} readOnly={!!currentUser?.email}
@@ -101,7 +101,7 @@ export default function OrgApplicationPage() {
                             />
                         </div>
                         <div>
-                            <label className="label">전화번호 <span className="text-red-500 dark:text-red-400">*</span></label>
+                            <label className="label">전화번호 <span className="text-red-700 dark:text-red-300">*</span></label>
                             <input
                                 type="tel" name="applicantPhone" value={form.applicantPhone}
                                 onChange={handlePhoneChange} className="input min-h-[48px]" placeholder="010-0000-0000" required
@@ -115,7 +115,7 @@ export default function OrgApplicationPage() {
                     <div className="space-y-4">
                         <h3 className="text-sm font-semibold text-surface-600 dark:text-surface-400 uppercase tracking-wider">기관 정보</h3>
                         <div>
-                            <label className="label">기관명 <span className="text-red-500 dark:text-red-400">*</span></label>
+                            <label className="label">기관명 <span className="text-red-700 dark:text-red-300">*</span></label>
                             <input
                                 type="text" name="orgName" value={form.orgName}
                                 onChange={handleChange} className="input min-h-[48px]" placeholder="○○복지관" required
@@ -123,7 +123,7 @@ export default function OrgApplicationPage() {
                         </div>
 
                         <div>
-                            <label className="label">비영리 증빙서류 (고유번호증 또는 사업자등록증) <span className="text-red-500 dark:text-red-400">*</span></label>
+                            <label className="label">비영리 증빙서류 (고유번호증 또는 사업자등록증) <span className="text-red-700 dark:text-red-300">*</span></label>
                             <div
                                 onClick={() => fileInputRef.current?.click()}
                                 role="button"
@@ -143,7 +143,7 @@ export default function OrgApplicationPage() {
                                     <div className="space-y-2">
                                         {imageFile?.type === 'application/pdf' ? (
                                             <div className="py-4">
-                                                <svg aria-hidden="true" className="w-16 h-16 mx-auto text-red-500 dark:text-red-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
+                                                <svg aria-hidden="true" className="w-16 h-16 mx-auto text-red-700 dark:text-red-300 mb-2" fill="currentColor" viewBox="0 0 24 24">
                                                     <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-2.5 5.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5.67-1.5 1.5-1.5 1.5.67 1.5 1.5zm5 1.5c-.55 0-1.04-.22-1.4-.57l-.1.07c0 .55-.45 1-1 1H12v-4h1c.55 0 1 .45 1 1l.1.07c.36-.35.85-.57 1.4-.57.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z" />
                                                 </svg>
                                                 <p className="text-sm font-medium text-surface-700 dark:text-surface-200">{imageFile.name}</p>
@@ -213,7 +213,7 @@ export default function OrgApplicationPage() {
                                 className="mt-0.5 w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 dark:text-primary-400 focus:ring-primary-500"
                             />
                             <span className="text-sm text-surface-600 dark:text-surface-400 group-hover:text-surface-800 dark:group-hover:text-surface-200 dark:text-surface-200 transition-colors">
-                                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 underline underline-offset-2 font-medium hover:text-primary-700 dark:hover:text-primary-300">이용약관</a>에 동의합니다. <span className="text-red-500 dark:text-red-400">*</span>
+                                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 underline underline-offset-2 font-medium hover:text-primary-700 dark:hover:text-primary-300">이용약관</a>에 동의합니다. <span className="text-red-700 dark:text-red-300">*</span>
                             </span>
                         </label>
                         <label className="flex items-start gap-3 cursor-pointer group min-h-[48px] py-2">
@@ -225,7 +225,7 @@ export default function OrgApplicationPage() {
                                 className="mt-0.5 w-4 h-4 rounded border-surface-300 dark:border-surface-600 text-primary-600 dark:text-primary-400 focus:ring-primary-500"
                             />
                             <span className="text-sm text-surface-600 dark:text-surface-400 group-hover:text-surface-800 dark:group-hover:text-surface-200 dark:text-surface-200 transition-colors">
-                                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 underline underline-offset-2 font-medium hover:text-primary-700 dark:hover:text-primary-300">개인정보 처리방침</a>에 동의합니다. <span className="text-red-500 dark:text-red-400">*</span>
+                                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 underline underline-offset-2 font-medium hover:text-primary-700 dark:hover:text-primary-300">개인정보 처리방침</a>에 동의합니다. <span className="text-red-700 dark:text-red-300">*</span>
                             </span>
                         </label>
                         {/*

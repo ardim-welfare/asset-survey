@@ -21,6 +21,7 @@ export default function EmployeeHome() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
     const [survey, setSurvey] = useState<Survey | null>(null);
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         if (!orgId || !uid) return;
@@ -40,7 +41,7 @@ export default function EmployeeHome() {
             .catch(() => { if (!cancelled) setError(true); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [orgId, uid, teamId]);
+    }, [orgId, uid, teamId, reloadKey]);
 
     return (
         <div className="max-w-lg mx-auto animate-fade-in space-y-4">
@@ -53,9 +54,12 @@ export default function EmployeeHome() {
                 {loading ? (
                     <div className="flex justify-center py-4"><div className="w-6 h-6 spinner" /></div>
                 ) : error ? (
-                    <p className="text-sm text-red-600 dark:text-red-400">담당 공간을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.</p>
+                    <div role="alert">
+                        <p className="text-sm text-red-700 dark:text-red-300">담당 공간을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 불러오세요.</p>
+                        <button type="button" className="btn-secondary btn-sm min-h-[44px] mt-3" onClick={() => setReloadKey((k) => k + 1)}>다시 불러오기</button>
+                    </div>
                 ) : spaces.length === 0 ? (
-                    <p className="text-sm text-surface-500 dark:text-surface-400">
+                    <p className="text-sm text-surface-600 dark:text-surface-400">
                         아직 담당 공간이 없습니다. 조사를 맡게 되면 재물 담당자가 공간을 지정해 줍니다.
                     </p>
                 ) : (
@@ -70,8 +74,8 @@ export default function EmployeeHome() {
                                 </li>
                             ))}
                         </ul>
-                        <Link to="/employee/assets" className="inline-block mt-3 text-sm font-medium text-primary-600 dark:text-primary-400 min-h-[44px] leading-[44px]">
-                            내 공간 재물 보기 →
+                        <Link to="/employee/assets" className="btn-secondary btn-sm min-h-[44px] mt-3">
+                            내 공간 재물 보기 <span aria-hidden="true">→</span>
                         </Link>
                     </>
                 )}

@@ -67,7 +67,7 @@ export default function WithdrawOrgModal({ orgName, submitting, onClose, onConfi
 
                     {/* 사유 선택 */}
                     <div>
-                        <label className="label">해지 사유 <span className="text-red-500 dark:text-red-400">*</span></label>
+                        <label className="label">해지 사유 <span className="text-red-700 dark:text-red-300">*</span></label>
                         <div className="space-y-2">
                             {REASON_ORDER.map((r) => (
                                 <label
@@ -103,7 +103,7 @@ export default function WithdrawOrgModal({ orgName, submitting, onClose, onConfi
                     {/* 기관명 확인 */}
                     <div>
                         <label className="label">
-                            확인을 위해 기관명 <span className="font-bold text-surface-900 dark:text-surface-100">{orgName}</span> 을(를) 입력하세요 <span className="text-red-500 dark:text-red-400">*</span>
+                            확인을 위해 기관명 <span className="font-bold text-surface-900 dark:text-surface-100">{orgName}</span> 을(를) 입력하세요 <span className="text-red-700 dark:text-red-300">*</span>
                         </label>
                         <input
                             type="text"

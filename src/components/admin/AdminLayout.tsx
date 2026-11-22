@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, startTransition } from 'react';
+import React, { useState, useEffect, useRef, Suspense, startTransition } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import { useAuth } from '../../hooks/useAuth';
@@ -59,12 +59,38 @@ function NavItem({ to, icon, label, badge, onClick }: NavItemProps) {
 export default function AdminLayout() {
     const { user, isSuperAdmin } = useAuth();
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const asideRef = useRef<HTMLElement>(null);
+    const menuButtonRef = useRef<HTMLButtonElement>(null);
+    // 넓은 화면(lg)에서는 메뉴가 늘 보인다 — 좁은 화면에서 닫힌 서랍은 키보드·화면낭독기가 들어가지 않게 inert로 막는다
+    const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1024px)')?.matches);
     const navigate = useNavigate();
     const location = useLocation();
     const { isDark, toggleTheme } = useTheme();
     const [showReleaseNotes, setShowReleaseNotes] = useState(false);
     const { hasNew: hasNewReleaseNotes, markSeen: markReleaseNotesSeen } = useReleaseNotesStatus();
     useBackButton();
+
+    useEffect(() => {
+        const mq = window.matchMedia?.('(min-width: 1024px)');
+        if (!mq) return;
+        const onChange = () => setIsDesktop(mq.matches);
+        mq.addEventListener?.('change', onChange);
+        return () => mq.removeEventListener?.('change', onChange);
+    }, []);
+
+    // 서랍이 열리면 첫 메뉴로 초점, Esc로 닫고 메뉴 버튼으로 초점을 돌려준다(2026-11-22 점검)
+    useEffect(() => {
+        if (!sidebarOpen || isDesktop) return;
+        asideRef.current?.querySelector<HTMLElement>('nav a, nav button')?.focus();
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setSidebarOpen(false);
+                menuButtonRef.current?.focus();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [sidebarOpen, isDesktop]);
 
     // 다음에 앱을 열 때 이 화면으로 돌아오게 기억한다 (슈퍼관리자 테스트 모드는 제외)
     useEffect(() => {
@@ -131,13 +157,13 @@ export default function AdminLayout() {
         <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex">
             {/* 모바일 오버레이 */}
             {sidebarOpen && (
-                <div role="presentation" className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} onKeyDown={(e) => { if (e.key === 'Escape') setSidebarOpen(false); }} />
+                <div role="presentation" className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
             )}
 
             {/* 사이드바 */}
-            <aside className={`
+            <aside ref={asideRef} id="admin-sidebar" inert={!sidebarOpen && !isDesktop} className={`
         fixed lg:sticky lg:top-0 inset-y-0 left-0 z-50
-        w-64 h-screen bg-white dark:bg-surface-900 border-r border-surface-100 dark:border-surface-700
+        w-64 h-dvh bg-white dark:bg-surface-900 border-r border-surface-100 dark:border-surface-700
         transform transition-transform duration-300 ease-out
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         flex flex-col
@@ -178,7 +204,7 @@ export default function AdminLayout() {
                         </div>
                         <Toggle label="다크 모드" checked={isDark} onChange={toggleTheme} />
                     </div>
-                    <button onClick={logout} className="sidebar-link w-full text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-300 min-h-[48px]">
+                    <button onClick={logout} className="sidebar-link w-full text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-200 min-h-[48px]">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
                         </svg>
@@ -198,8 +224,9 @@ export default function AdminLayout() {
                 고정 배너(40)보다 위, 모달(50)보다 아래여야 하므로 그 사이 값을 쓴다.
                 */}
                 <header className="sticky top-0 z-[45] bg-white/80 dark:bg-surface-900/80 backdrop-blur-md border-b border-surface-100 dark:border-surface-700 px-4 lg:px-6 h-[calc(3.5rem+env(safe-area-inset-top,0px))] flex items-center justify-between safe-top">
-                    <button onClick={() => setSidebarOpen(true)} className="btn-icon lg:hidden min-h-[48px] min-w-[48px]">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <button ref={menuButtonRef} type="button" onClick={() => setSidebarOpen(true)} className="btn-icon lg:hidden min-h-[48px] min-w-[48px]"
+                        aria-label="메뉴 열기" aria-expanded={sidebarOpen} aria-controls="admin-sidebar">
+                        <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                         </svg>
                     </button>
@@ -234,8 +261,9 @@ export default function AdminLayout() {
                             }}
                             className="btn-icon text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400"
                             title="직원 화면으로 전환"
+                            aria-label="직원 화면으로 전환"
                         >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                             </svg>
                         </button>
@@ -244,12 +272,13 @@ export default function AdminLayout() {
                             onClick={() => { markReleaseNotesSeen(); setShowReleaseNotes(true); }}
                             className="btn-icon relative min-h-[48px] min-w-[48px] text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400"
                             title="업데이트 소식"
+                            aria-label={hasNewReleaseNotes ? '업데이트 소식 (새 소식 있음)' : '업데이트 소식'}
                         >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
                             </svg>
                             {hasNewReleaseNotes && (
-                                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-surface-900" />
+                                <span aria-hidden="true" className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white dark:ring-surface-900" />
                             )}
                         </button>
                         <AdminNotice />

@@ -54,7 +54,7 @@ export default function DeletedOrgCard({ org, isDeleting, onRestore, onPermanent
                             <span>•</span>
                             <span>삭제 {elapsed}일 경과</span>
                             <span>•</span>
-                            <span className={remaining <= 7 ? 'text-red-500 font-medium' : ''}>
+                            <span className={remaining <= 7 ? 'text-red-700 dark:text-red-300 font-medium' : ''}>
                                 복구 가능: D-{remaining}
                             </span>
                         </div>
@@ -76,7 +76,7 @@ export default function DeletedOrgCard({ org, isDeleting, onRestore, onPermanent
                         <button
                             onClick={() => onPermanentDelete(org)}
                             disabled={isDeleting}
-                            className="btn-ghost btn-sm text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="btn-ghost btn-sm text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="영구 삭제"
                         >
                             {isDeleting ? (

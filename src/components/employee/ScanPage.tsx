@@ -14,6 +14,7 @@ import { SCAN_RESULT_LABEL, CONDITION_LABEL } from '../../lib/survey/judge';
 import { SCAN_MEMO_MAX } from '../../schemas';
 import { uploadScanPhoto, removeScanPhoto, PHOTO_SOURCE_MAX_BYTES } from '../../lib/firestore';
 import { useToast } from '../../hooks/useToast';
+import { useConfirm } from '../../hooks/useConfirm';
 import type { Scan, ScanCondition, ScanResult, SurveySubmission } from '../../types/survey';
 
 const sub = 'text-xs text-surface-500 dark:text-surface-400';
@@ -51,7 +52,7 @@ export default function ScanPage() {
     }, [sc.spaceId, params, setParams]);
 
     if (sc.loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
-    if (sc.error) return <Notice icon="⚠️" title="조사 정보를 불러오지 못했습니다" text="인터넷 연결을 확인하고 다시 열어 주세요." />;
+    if (sc.error) return <Notice icon="⚠️" title="조사 정보를 불러오지 못했습니다" text="인터넷 연결을 확인한 뒤 다시 불러오세요." retry />;
     if (!sc.survey) return <Notice icon="📋" title="진행 중인 재물조사가 없습니다" text="재물 담당자가 조사를 시작하면 이 탭에서 라벨의 QR을 찍어 조사합니다." />;
     if (sc.mySpaces.length === 0) {
         return (
@@ -180,7 +181,8 @@ export default function ScanPage() {
                 <ul className="glass-card divide-y divide-surface-100 dark:divide-surface-700">
                     {sc.here.map((s) => (
                         <li key={s.id} className="px-4 py-2.5 text-sm">
-                            <button type="button" className="w-full text-left min-h-[44px]" onClick={() => setEditing(editing === s.id ? null : s.id)} aria-expanded={editing === s.id}>
+                            <button type="button" className="w-full text-left min-h-[44px] flex items-start gap-2" onClick={() => setEditing(editing === s.id ? null : s.id)} aria-expanded={editing === s.id}>
+                                <span className="flex-1 min-w-0">
                                 <span className="font-mono font-medium text-surface-900 dark:text-surface-100">{s.code}</span>
                                 <span className="text-surface-600 dark:text-surface-300"> · {s.name ?? '-'}</span>
                                 <span className="block mt-0.5">
@@ -188,6 +190,13 @@ export default function ScanPage() {
                                     {s.condition !== 'normal' && <span className="ml-1 text-xs text-red-700 dark:text-red-300">{CONDITION_LABEL[s.condition]}</span>}
                                     {s.photoUrl && <span className="ml-1 text-xs" aria-label="사진 있음">📷</span>}
                                 </span>
+                                </span>
+                                {/* 누르면 상태·사진·지우기가 펼쳐진다는 표시(예전엔 평범한 글자 줄이라 찾을 수 없었다) */}
+                                {!sc.locked && (
+                                    <span className="flex-shrink-0 self-center text-xs font-medium text-primary-700 dark:text-primary-300 border border-surface-300 dark:border-surface-600 rounded-lg px-2 py-1">
+                                        고치기 <span aria-hidden="true">{editing === s.id ? '▴' : '▾'}</span>
+                                    </span>
+                                )}
                             </button>
                             {editing === s.id && !sc.locked && <ConditionEditor scan={s} onSave={sc.setCondition} onUndo={sc.undo} />}
                         </li>
@@ -261,13 +270,16 @@ function SurveyHeader({ name, start, end }: { name: string; start: string; end: 
     );
 }
 
-function Notice({ icon, title, text }: { icon: string; title: string; text: string }) {
+function Notice({ icon, title, text, retry = false }: { icon: string; title: string; text: string; retry?: boolean }) {
     return (
         <div className="max-w-lg mx-auto glass-card p-6 text-center animate-fade-in">
             <div className="text-4xl mb-3" aria-hidden="true">{icon}</div>
             <p className="text-surface-800 dark:text-surface-200 font-medium">{title}</p>
-            <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">{text}</p>
-            <Link to="/employee/home" className="inline-block mt-4 text-sm text-primary-600 dark:text-primary-400 min-h-[44px] leading-[44px]">홈으로</Link>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">{text}</p>
+            <div className="flex justify-center gap-2 mt-4">
+                {retry && <button type="button" className="btn-primary min-h-[48px] px-5" onClick={() => window.location.reload()}>다시 불러오기</button>}
+                <Link to="/employee/home" className="btn-secondary min-h-[48px] px-5">홈으로</Link>
+            </div>
         </div>
     );
 }
@@ -277,7 +289,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
         <button type="button" role="tab" aria-selected={active} onClick={onClick}
             className={`flex-1 min-h-[44px] rounded-xl text-sm font-medium ${active
                 ? 'bg-surface-800 text-white dark:bg-surface-200 dark:text-surface-900'
-                : 'text-surface-600 dark:text-surface-300'}`}>
+                : 'bg-white text-surface-700 border border-surface-300 dark:bg-surface-800 dark:text-surface-200 dark:border-surface-600'}`}>
             {children}
         </button>
     );
@@ -350,9 +362,10 @@ function ConditionEditor({ scan, onSave, onUndo, compact = false }: {
                 </label>
             )}
             <ScanPhoto scan={scan} />
-            <div className="flex gap-2 mt-2">
+            <div className="flex flex-wrap gap-2 mt-2">
                 <button type="button" className="btn-primary min-h-[44px] px-4 text-sm" disabled={!dirty} onClick={() => onSave(scan.id, condition, memo)}>상태 저장</button>
-                <button type="button" className="btn-secondary min-h-[44px] px-3 text-sm" onClick={() => onUndo(scan.id)}>잘못 찍음 · 지우기</button>
+                {/* 지우기는 저장과 떨어뜨리고(ml-auto) 묻고 지운다 — 휴대폰에서 잘못 누르기 쉬웠다 */}
+                <button type="button" className="btn-secondary min-h-[44px] px-3 text-sm text-red-700 dark:text-red-300 ml-auto" onClick={() => onUndo(scan.id)}>잘못 찍음 · 지우기</button>
             </div>
         </div>
     );
@@ -365,6 +378,7 @@ function ConditionEditor({ scan, onSave, onUndo, compact = false }: {
  */
 function ScanPhoto({ scan }: { scan: Scan }) {
     const { showToast } = useToast();
+    const { confirm } = useConfirm();
     const inputRef = useRef<HTMLInputElement>(null);
     const [busy, setBusy] = useState(false);
 
@@ -387,12 +401,14 @@ function ScanPhoto({ scan }: { scan: Scan }) {
     };
 
     const remove = async () => {
+        const ok = await confirm({ title: '현장 사진을 지울까요?', message: '스캔 기록은 그대로 남습니다.', confirmText: '사진 지우기', confirmColor: 'danger' });
+        if (!ok) return;
         setBusy(true);
         try { await removeScanPhoto(scan); } catch { showToast('사진을 지우지 못했습니다.', 'error'); } finally { setBusy(false); }
     };
 
     return (
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
             {scan.photoThumbUrl && (
                 <a href={scan.photoUrl ?? scan.photoThumbUrl} target="_blank" rel="noopener noreferrer" aria-label="현장 사진 크게 보기">
                     <img src={scan.photoThumbUrl} alt="현장 사진" className="w-14 h-14 rounded-lg object-cover" />

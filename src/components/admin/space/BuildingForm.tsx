@@ -45,7 +45,7 @@ export default function BuildingForm({ idPrefix, initial, submitLabel, busy, onS
         <form onSubmit={handleSubmit} className="space-y-3">
             <div>
                 <label htmlFor={`${idPrefix}-name`} className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-                    건물 이름 <span className="text-red-500" aria-hidden="true">*</span>
+                    건물 이름 <span className="text-red-700 dark:text-red-300" aria-hidden="true">*</span>
                 </label>
                 <input
                     id={`${idPrefix}-name`}
@@ -90,14 +90,14 @@ export default function BuildingForm({ idPrefix, initial, submitLabel, busy, onS
                     <label className="inline-flex items-center gap-1">
                         지하
                         <input type="number" min={0} max={10} inputMode="numeric" value={basement}
-                            onChange={(e) => setBasement(e.target.value)} className="input w-16 min-h-[40px]" aria-label="지하 층수" />
+                            onChange={(e) => setBasement(e.target.value)} className="input w-16 min-h-[44px]" aria-label="지하 층수" />
                     </label>
                     <label className="inline-flex items-center gap-1">
                         지상
                         <input type="number" min={0} max={40} inputMode="numeric" value={above}
-                            onChange={(e) => setAbove(e.target.value)} className="input w-16 min-h-[40px]" aria-label="지상 층수" />
+                            onChange={(e) => setAbove(e.target.value)} className="input w-16 min-h-[44px]" aria-label="지상 층수" />
                     </label>
-                    <button type="button" onClick={fillRange} disabled={!basement && !above} className="btn-secondary btn-sm min-h-[40px] px-3">
+                    <button type="button" onClick={fillRange} disabled={!basement && !above} className="btn-secondary btn-sm min-h-[44px] px-3">
                         채우기
                     </button>
                 </div>

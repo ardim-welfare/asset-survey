@@ -19,7 +19,7 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
             <div className="flex items-center justify-between mb-1">
                 <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">결재 라인</h2>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <span className={`text-xs font-medium ${form.hideApprovalLine ? 'text-surface-500 dark:text-surface-400' : 'text-primary-600 dark:text-primary-400'}`}>
+                    <span className={`text-xs font-medium ${form.hideApprovalLine ? 'text-surface-600 dark:text-surface-400' : 'text-primary-700 dark:text-primary-300'}`}>
                         {form.hideApprovalLine ? 'PDF 결재란 숨김' : 'PDF 결재란 표시'}
                     </span>
                     <Toggle
@@ -34,7 +34,9 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
             <div className={`space-y-2 mb-3 transition-opacity ${form.hideApprovalLine ? 'opacity-40 pointer-events-none' : ''}`}>
                 {form.approvalLine.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2">
+                        <label htmlFor={`approver-${idx}`} className="sr-only">{idx + 1}번째 결재자 직급</label>
                         <input
+                            id={`approver-${idx}`}
                             type="text"
                             value={item.title}
                             onChange={e => {
@@ -42,7 +44,7 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
                                 next[idx] = { ...next[idx], title: e.target.value };
                                 setForm({ ...form, approvalLine: next });
                             }}
-                            className="input text-sm flex-1"
+                            className="input text-sm flex-1 min-h-[48px]"
                             placeholder="직급 (예: 담당, 팀장)"
                         />
                         <button
@@ -51,10 +53,11 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
                                 const next = form.approvalLine.filter((_, i) => i !== idx);
                                 setForm({ ...form, approvalLine: next });
                             }}
-                            className="text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition-colors p-2 min-h-[48px] min-w-[48px] flex items-center justify-center"
+                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors p-2 min-h-[48px] min-w-[48px] flex items-center justify-center rounded-lg focus:outline-hidden focus-visible:ring-2 focus-visible:ring-red-500"
                             title="삭제"
+                            aria-label={`${idx + 1}번째 결재자 삭제`}
                         >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <svg aria-hidden="true" className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                             </svg>
                         </button>
@@ -66,7 +69,7 @@ export default function ApprovalLineSection({ form, setForm, handleSave, saving 
                 <button
                     type="button"
                     onClick={() => setForm({ ...form, approvalLine: [...form.approvalLine, { title: '' }] })}
-                    className="text-sm text-primary-500 hover:text-primary-700 dark:text-primary-400 font-medium transition-colors py-3 min-h-[48px]"
+                    className="btn-secondary btn-sm min-h-[44px]"
                 >
                     + 결재자 추가
                 </button>
