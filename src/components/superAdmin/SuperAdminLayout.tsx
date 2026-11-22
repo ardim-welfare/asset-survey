@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense, type ReactNode } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { logout } from '../../lib/auth';
@@ -95,13 +95,28 @@ export default function SuperAdminLayout() {
     const [countsVersion, setCountsVersion] = useState(0);
     const refreshCounts = useCallback(() => setCountsVersion(v => v + 1), []);
 
-    // 휴대폰에서 열린 사이드바는 Esc로도 닫는다
+    const asideRef = useRef<HTMLElement>(null);
+    const menuButtonRef = useRef<HTMLButtonElement>(null);
+    // 넓은 화면(lg)에서는 메뉴가 늘 보인다 — 좁은 화면에서 닫힌 서랍은 Tab·화면낭독기가 들어가지 않게 inert로 막는다(2026-11-22)
+    const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1024px)')?.matches);
     useEffect(() => {
-        if (!sidebarOpen) return;
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSidebarOpen(false); };
+        const mq = window.matchMedia?.('(min-width: 1024px)');
+        if (!mq) return;
+        const onChange = () => setIsDesktop(mq.matches);
+        mq.addEventListener?.('change', onChange);
+        return () => mq.removeEventListener?.('change', onChange);
+    }, []);
+
+    // 휴대폰에서 열린 사이드바: 첫 메뉴로 초점, Esc로 닫고 메뉴 버튼으로 초점을 돌려준다
+    useEffect(() => {
+        if (!sidebarOpen || isDesktop) return;
+        asideRef.current?.querySelector<HTMLElement>('nav a, nav button')?.focus();
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { setSidebarOpen(false); menuButtonRef.current?.focus(); }
+        };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [sidebarOpen]);
+    }, [sidebarOpen, isDesktop]);
 
     // 사이드바 배지 카운트 단발성 조회 (비용 절감)
     useEffect(() => {
@@ -172,7 +187,7 @@ export default function SuperAdminLayout() {
             )}
 
             {/* 사이드바 */}
-            <aside className={`
+            <aside ref={asideRef} id="superadmin-sidebar" inert={!sidebarOpen && !isDesktop} className={`
         fixed lg:sticky inset-y-0 left-0 lg:top-0 lg:h-screen z-50
         w-64 bg-white dark:bg-surface-900 border-r border-surface-100 dark:border-surface-700
         transform transition-transform duration-300 ease-out
@@ -205,7 +220,7 @@ export default function SuperAdminLayout() {
                     </div>
                 </div>
 
-                <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+                <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="슈퍼관리자 메뉴">
                     <NavItem
                         onNavigate={closeSidebar}
                         to="/super-admin/dashboard"
@@ -312,11 +327,13 @@ export default function SuperAdminLayout() {
                 */}
                 <header className="sticky top-0 z-[45] bg-white/80 dark:bg-surface-900/80 backdrop-blur-md border-b border-surface-100 dark:border-surface-700 px-4 lg:px-6 h-[calc(3.5rem+env(safe-area-inset-top,0px))] flex items-center justify-between safe-top">
                     <button
+                        ref={menuButtonRef}
                         type="button"
                         onClick={() => setSidebarOpen(true)}
                         className="btn-icon lg:hidden min-h-[48px] min-w-[48px]"
                         aria-label="메뉴 열기"
                         aria-expanded={sidebarOpen}
+                        aria-controls="superadmin-sidebar"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />

@@ -7,6 +7,8 @@ import FeedbackItem from './FeedbackItem';
 export default function FeedbackManagement() {
     const {
         loading,
+        loadError,
+        reload,
         feedbacks,
         searchQuery,
         setSearchQuery,
@@ -98,6 +100,15 @@ export default function FeedbackManagement() {
         return (
             <div className="flex items-center justify-center py-20" role="status" aria-label="의견 불러오는 중">
                 <div className="w-8 h-8 spinner" />
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div className="max-w-4xl mx-auto glass-card p-6 text-center">
+                <p className="text-red-700 dark:text-red-300 mb-3" role="alert">의견 목록을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 불러오세요.</p>
+                <button type="button" className="btn-secondary min-h-[48px] px-5" onClick={reload}>다시 불러오기</button>
             </div>
         );
     }

@@ -16,6 +16,10 @@ export default function useFeedbackManagement() {
     const { showToast } = useToast();
     const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
     const [loading, setLoading] = useState(true);
+    // 불러오기 실패 — 예전엔 콘솔에만 남고 '받은 의견이 없습니다'가 보였다(2026-11-22 점검)
+    const [loadError, setLoadError] = useState(false);
+    const [reloadKey, setReloadKey] = useState(0);
+    const reload = useCallback(() => setReloadKey((k) => k + 1), []);
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState<'all' | 'unread' | 'resolved'>('unread');
     // 확대 보기 중인 첨부 이미지 — 같은 의견의 다른 이미지로 넘겨 볼 수 있도록 목록과 위치를 함께 둔다
@@ -33,6 +37,8 @@ export default function useFeedbackManagement() {
 
     useEffect(() => {
         let isMounted = true;
+        setLoading(true);
+        setLoadError(false);
         getAllFeedbacks(300).then((data) => {
             if (!isMounted) return;
             setFeedbacks(data as Feedback[]);
@@ -53,12 +59,12 @@ export default function useFeedbackManagement() {
             }
         }).catch(err => {
             console.error(err);
-            if (isMounted) setLoading(false);
+            if (isMounted) { setLoadError(true); setLoading(false); }
         });
 
         return () => { isMounted = false; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 때 한 번만 조회한다. orgNames는 그 시점의 초기값(빈 객체)을 보면 된다
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트·다시 불러오기 때만 조회한다. orgNames는 그 시점 값을 보면 된다
+    }, [reloadKey]);
 
     const handleToggleResolve = useCallback(async (fb: Feedback) => {
         const newStatus = (fb.status === 'read' || fb.status === 'resolved') ? 'unread' : 'resolved';
@@ -69,8 +75,10 @@ export default function useFeedbackManagement() {
             );
         } catch (err) {
             console.error('상태 변경 실패:', err);
+            // 예전엔 실패해도 조용했다 — 바뀐 줄 알고 넘어가게 된다
+            showToast('처리 상태를 바꾸지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
         }
-    }, []);
+    }, [showToast]);
 
     const handleDelete = useCallback(async () => {
         if (!deleteTarget) return;
@@ -78,13 +86,15 @@ export default function useFeedbackManagement() {
         try {
             await deleteFeedback(deleteTarget.id);
             setFeedbacks(prev => prev.filter(f => f.id !== deleteTarget.id));
+            showToast('의견을 삭제했습니다.', 'success');
         } catch (err) {
             console.error('삭제 실패:', err);
+            showToast('의견을 삭제하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
         } finally {
             setDeleting(false);
             setDeleteTarget(null);
         }
-    }, [deleteTarget]);
+    }, [deleteTarget, showToast]);
 
     // 필터링
     const filteredRaw = feedbacks.filter(fb => {
@@ -197,6 +207,8 @@ export default function useFeedbackManagement() {
 
     return {
         loading,
+        loadError,
+        reload,
         feedbacks,
         searchQuery,
         setSearchQuery,
