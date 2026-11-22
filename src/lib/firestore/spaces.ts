@@ -74,8 +74,17 @@ export const getMySpaces = async (orgId: string, uid: string): Promise<Space[]> 
     }
 };
 
+/** 공간이 있는 곳 — 건물을 등록하지 않은 기관은 둘 다 null */
+export interface SpaceLocation {
+    buildingId: string | null;
+    floor: string | null;
+}
+
 /** 공간 추가 — 새 문서 ID를 돌려준다 */
-export const createSpace = async (orgId: string, name: string, order: number): Promise<string> => {
+export const createSpace = async (
+    orgId: string, name: string, order: number,
+    location: SpaceLocation = { buildingId: null, floor: null },
+): Promise<string> => {
     try {
         const ref = await addDoc(collection(db, 'spaces'), {
             organizationId: orgId,
@@ -83,6 +92,8 @@ export const createSpace = async (orgId: string, name: string, order: number): P
             order,
             managerUids: [],
             archived: false,
+            buildingId: location.buildingId,
+            floor: location.buildingId ? location.floor : null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
             ...actorStamp(),
@@ -94,7 +105,7 @@ export const createSpace = async (orgId: string, name: string, order: number): P
     }
 };
 
-/** 공간 수정 (이름·순서·담당자·숨김) */
+/** 공간 수정 (이름·순서·담당자·숨김·건물·층) */
 export const updateSpace = async (spaceId: string, patch: SpacePatch): Promise<void> => {
     try {
         const data: Record<string, unknown> = { ...patch, updatedAt: serverTimestamp(), ...actorStamp() };

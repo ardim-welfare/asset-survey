@@ -8,6 +8,7 @@ export * from './organization';
 export * from './auditLog';
 export * from './broadcast';
 export * from './space';
+export * from './building';
 export * from './asset';
 export * from './survey';
 export * from './dashboard';

@@ -204,7 +204,7 @@ export default function useAssetImport() {
             const active = spaces.filter((s) => !s.archived);
             const order = active.length === 0 ? 0 : Math.max(...active.map((s) => s.order)) + 1;
             const id = await createSpace(orgId, location, order);
-            setSpaces((prev) => [...prev, { id, organizationId: orgId, name: normalizeSpaceName(location), order, managerUids: [], archived: false }]);
+            setSpaces((prev) => [...prev, { id, organizationId: orgId, name: normalizeSpaceName(location), order, managerUids: [], archived: false, buildingId: null, floor: null }]);
             setLocationMap((prev) => ({ ...prev, [key]: id }));
             showToast(`공간 '${normalizeSpaceName(location)}'을(를) 만들었습니다.`, 'success');
         } catch {

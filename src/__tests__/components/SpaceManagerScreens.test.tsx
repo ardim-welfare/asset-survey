@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { Space } from '../../types/space';
+import type { Building } from '../../types/building';
 
 const hookState: { value: Record<string, unknown> } = { value: {} };
 vi.mock('../../hooks/useSpaceManager', () => ({ default: () => hookState.value }));
@@ -18,7 +19,7 @@ import SpaceManager from '../../components/admin/SpaceManager';
 import EmployeeHome from '../../components/employee/EmployeeHome';
 
 const space = (over: Partial<Space>): Space => ({
-    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, ...over,
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, buildingId: null, floor: null, ...over,
 });
 
 const baseHook = () => ({
@@ -28,6 +29,11 @@ const baseHook = () => ({
     nameOf: (uid: string) => (uid === 'u1' ? '김직원' : uid),
     addSpace: vi.fn().mockResolvedValue(true), renameSpace: vi.fn(), moveSpace: vi.fn(),
     addManager: vi.fn(), removeManager: vi.fn(), archiveSpace: vi.fn(), restoreSpace: vi.fn(),
+    setSpaceLocation: vi.fn(),
+    buildings: [] as Building[], activeBuildings: [] as Building[], archivedBuildings: [] as Building[],
+    spacesIn: () => [],
+    addBuilding: vi.fn().mockResolvedValue(true), editBuilding: vi.fn(), moveBuilding: vi.fn(),
+    archiveBuilding: vi.fn(), restoreBuilding: vi.fn(),
 });
 
 describe('SpaceManager', () => {
@@ -42,7 +48,7 @@ describe('SpaceManager', () => {
         fireEvent.click(screen.getByRole('button', { name: '공간 추가' }));
 
         await waitFor(() => expect(input).toHaveValue(''));
-        expect(hookState.value.addSpace).toHaveBeenCalledWith('2층 사무실');
+        expect(hookState.value.addSpace).toHaveBeenCalledWith('2층 사무실', { buildingId: null, floor: null });
     });
 
     it('공간마다 담당자를 보이고, 이미 담당인 사람은 후보에서 뺀다', () => {
@@ -106,5 +112,54 @@ describe('EmployeeHome — 내 담당 공간', () => {
         vi.mocked(firestore.getMySpaces).mockRejectedValueOnce(new Error('denied'));
         render(<MemoryRouter><EmployeeHome /></MemoryRouter>);
         expect(await screen.findByText(/불러오지 못했습니다/)).toBeInTheDocument();
+    });
+});
+
+describe('SpaceManager — 건물·층으로 묶어 보기 (2026-11-22)', () => {
+    const bld = (over: Partial<Building>): Building => ({
+        id: 'b1', organizationId: 'org-A', name: '본관', address: '', floors: ['1', '2'], order: 0, archived: false, ...over,
+    });
+
+    it('건물이 있으면 건물 → 층으로 묶고, 위·아래 버튼은 같은 층 안에서만 판단한다', () => {
+        hookState.value = {
+            ...baseHook(),
+            activeBuildings: [bld({})],
+            activeSpaces: [
+                space({ id: 'a', name: '상담실', order: 0, buildingId: 'b1', floor: '1' }),
+                space({ id: 'b', name: '사무실', order: 1, buildingId: 'b1', floor: '2' }),
+                space({ id: 'c', name: '창고', order: 2 }),
+            ],
+        };
+        render(<MemoryRouter><SpaceManager /></MemoryRouter>);
+        expect(screen.getByRole('heading', { name: /본관/ })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: '1층' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: '2층' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /건물 미지정/ })).toBeInTheDocument();
+        // 1층에 공간이 하나뿐이라 둘 다 막힌다
+        expect(screen.getByRole('button', { name: '상담실 위로' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: '상담실 아래로' })).toBeDisabled();
+        // 공간 추가 칸에 건물·층 고르기가 붙는다
+        expect(screen.getByLabelText('건물')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '상담실 위치 바꾸기' })).toBeInTheDocument();
+    });
+
+    it('건물이 없으면 예전처럼 한 줄 목록이고 위치 버튼도 없다', () => {
+        hookState.value = { ...baseHook(), activeSpaces: [space({ id: 'a', name: '상담실' })] };
+        render(<MemoryRouter><SpaceManager /></MemoryRouter>);
+        expect(screen.queryByLabelText('건물')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: '상담실 위치 바꾸기' })).not.toBeInTheDocument();
+    });
+
+    it('[건물·층] 탭에서 지하·지상 층수로 층을 채워 건물을 추가한다', async () => {
+        render(<MemoryRouter><SpaceManager /></MemoryRouter>);
+        fireEvent.click(screen.getByRole('tab', { name: /건물·층/ }));
+        fireEvent.change(screen.getByLabelText(/건물 이름/), { target: { value: '별관' } });
+        fireEvent.change(screen.getByLabelText('지하 층수'), { target: { value: '1' } });
+        fireEvent.change(screen.getByLabelText('지상 층수'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: '채우기' }));
+        fireEvent.click(screen.getByRole('button', { name: '건물 추가' }));
+        await waitFor(() => expect(hookState.value.addBuilding).toHaveBeenCalledWith({
+            name: '별관', address: '', floors: ['B1', '1', '2', '3'],
+        }));
     });
 });

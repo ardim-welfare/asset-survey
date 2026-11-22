@@ -97,6 +97,24 @@ export {
     normalizeSpaceName,
     validateSpaceName,
 } from './spaces';
+export type { SpaceLocation } from './spaces';
+
+// 건물 (Buildings) — 공간을 묶는 위 단계(건물 → 층 → 공간)
+export {
+    getBuildings,
+    createBuilding,
+    updateBuilding,
+    reorderBuildings,
+    sortBuildings,
+    normalizeBuildingText,
+    validateBuildingName,
+    validateBuildingAddress,
+    parseFloors,
+    floorsFromRange,
+    validateFloors,
+    floorLabel,
+} from './buildings';
+export type { BuildingInput } from './buildings';
 
 // 재물 (Assets) — 기획서 F04~F09
 export {

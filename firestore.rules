@@ -187,9 +187,13 @@ service cloud.firestore {
     // 다른 기관 uid를 넣어도 그 사람은 이 문서를 읽을 수 없으므로 권한이 새지 않는다 — 화면이 구성원만 고르게 한다.
     function spaceDataValid(d) {
       return d.keys().hasOnly(['organizationId', 'name', 'order', 'managerUids', 'archived',
-                               'lastEditedByUid', 'createdAt', 'updatedAt'])
+                               'buildingId', 'floor', 'lastEditedByUid', 'createdAt', 'updatedAt'])
              && d.organizationId is string
              && d.name is string && d.name.size() > 0 && d.name.size() <= 50
+             // 건물·층은 비워 둘 수 있다(건물을 등록하지 않은 기관). 건물이 같은 기관 것인지는 확인하지 않는다 —
+             // 다른 기관 건물 ID를 넣어도 그 문서를 읽을 수 없어 화면에서 '건물 미지정'으로 보일 뿐이다.
+             && (!('buildingId' in d) || nullableString(d.buildingId, 100))
+             && (!('floor' in d) || nullableString(d.floor, 10))
              && d.order is int && d.order >= 0
              && d.managerUids is list && d.managerUids.size() <= 20
              && d.archived is bool
@@ -204,6 +208,35 @@ service cloud.firestore {
                     && request.resource.data.lastEditedByUid == request.auth.uid;
       allow update: if (isSuperAdmin() || isOrgAdmin(resource.data.organizationId))
                     && spaceDataValid(request.resource.data)
+                    && request.resource.data.organizationId == resource.data.organizationId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.lastEditedByUid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // === 건물 (2026-11-22) ===
+    // 공간을 묶는 위 단계(건물 → 층 → 공간). 층은 건물 문서의 floors 목록이다.
+    // 읽기·쓰기 경계는 공간과 같다 — 같은 기관 구성원이 읽고, 관리자만 쓰며, 지우지 않는다(공간이 가리킨다).
+    function buildingDataValid(d) {
+      return d.keys().hasOnly(['organizationId', 'name', 'address', 'floors', 'order', 'archived',
+                               'lastEditedByUid', 'createdAt', 'updatedAt'])
+             && d.organizationId is string
+             && d.name is string && d.name.size() > 0 && d.name.size() <= 50
+             && d.address is string && d.address.size() <= 200
+             && d.floors is list && d.floors.size() <= 50
+             && d.order is int && d.order >= 0
+             && d.archived is bool
+             && d.updatedAt == request.time;
+    }
+
+    match /buildings/{buildingId} {
+      allow read: if isSuperAdmin() || isOrgMember(resource.data.organizationId);
+      allow create: if (isSuperAdmin() || isOrgAdmin(request.resource.data.organizationId))
+                    && buildingDataValid(request.resource.data)
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.lastEditedByUid == request.auth.uid;
+      allow update: if (isSuperAdmin() || isOrgAdmin(resource.data.organizationId))
+                    && buildingDataValid(request.resource.data)
                     && request.resource.data.organizationId == resource.data.organizationId
                     && request.resource.data.createdAt == resource.data.createdAt
                     && request.resource.data.lastEditedByUid == request.auth.uid;

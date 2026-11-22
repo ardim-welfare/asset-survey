@@ -33,7 +33,7 @@ import * as firestore from '../../lib/firestore';
 import useAssetImport, { suggestLocationMap, reportedTotalOf } from '../../hooks/useAssetImport';
 
 const space = (over: Partial<Space>): Space => ({
-    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, ...over,
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, buildingId: null, floor: null, ...over,
 });
 
 const ROWS = [

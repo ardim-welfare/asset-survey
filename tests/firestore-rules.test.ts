@@ -764,6 +764,62 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
         .update({ name: '스탬프 있음', updatedAt: serverTs(), lastEditedByUid: 'admin_A' }));
     });
 
+    it('#S5b 공간의 건물·층은 비워 두거나 짧은 글자만 저장된다', async () => {
+      const db = admin('A');
+      await assertSucceeds(db.collection('spaces').doc('loc1').set(spaceDoc('A', 'admin_A', { buildingId: 'b1', floor: 'B1' })));
+      await assertSucceeds(db.collection('spaces').doc('loc2').set(spaceDoc('A', 'admin_A', { buildingId: null, floor: null })));
+      await assertFails(db.collection('spaces').doc('loc3').set(spaceDoc('A', 'admin_A', { floor: '가'.repeat(11) })));
+      await assertFails(db.collection('spaces').doc('loc4').set(spaceDoc('A', 'admin_A', { buildingId: 3 })));
+    });
+
+    // ── 건물 (2026-11-22) — 경계는 공간과 같다 ──
+    const buildingDoc = (org: 'A' | 'B', uid: string, extra: Record<string, unknown> = {}) => ({
+      organizationId: `org-${org}`, name: `본관${org}`, address: '', floors: ['B1', '1', '2'], order: 0, archived: false,
+      createdAt: serverTs(), updatedAt: serverTs(), lastEditedByUid: uid, ...extra,
+    });
+    const seedBuilding = async (id: string, org: 'A' | 'B') => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().collection('buildings').doc(id).set({
+          organizationId: `org-${org}`, name: id, address: '', floors: ['1'], order: 0, archived: false,
+          createdAt: at, updatedAt: at, lastEditedByUid: `admin_${org}`,
+        });
+      });
+    };
+
+    it('#B1 건물은 같은 기관 구성원만 읽고, 그 기관 관리자만 추가·수정하며, 아무도 지울 수 없다', async () => {
+      await seedBuilding('bd_A', 'A');
+      await seedBuilding('bd_B', 'B');
+      await assertSucceeds(emp('A', 1).collection('buildings').doc('bd_A').get());
+      await assertSucceeds(emp('A', 1).collection('buildings').where('organizationId', '==', 'org-A').get());
+      await assertFails(emp('A', 1).collection('buildings').doc('bd_B').get());
+      await assertFails(anon().collection('buildings').doc('bd_A').get());
+
+      await assertSucceeds(admin('A').collection('buildings').doc('new_A').set(buildingDoc('A', 'admin_A')));
+      await assertFails(emp('A', 1).collection('buildings').doc('emp_new').set(buildingDoc('A', 'emp_A1')));
+      await assertFails(admin('B').collection('buildings').doc('cross').set(buildingDoc('A', 'admin_B')));
+
+      const upd = { floors: ['1', '2'], updatedAt: serverTs() };
+      await assertSucceeds(admin('A').collection('buildings').doc('bd_A').update({ ...upd, lastEditedByUid: 'admin_A' }));
+      await assertFails(emp('A', 1).collection('buildings').doc('bd_A').update({ ...upd, lastEditedByUid: 'emp_A1' }));
+      await assertFails(admin('A').collection('buildings').doc('bd_A').delete());
+      await assertFails(superAdmin().collection('buildings').doc('bd_A').delete());
+    });
+
+    it('#B2 건물 데이터 형식 — 빈 이름·긴 주소·층 과다·모르는 필드·다른 기관 이전은 막힌다', async () => {
+      const db = admin('A');
+      await assertFails(db.collection('buildings').doc('x1').set(buildingDoc('A', 'admin_A', { name: '' })));
+      await assertFails(db.collection('buildings').doc('x2').set(buildingDoc('A', 'admin_A', { address: '가'.repeat(201) })));
+      await assertFails(db.collection('buildings').doc('x3').set(buildingDoc('A', 'admin_A', {
+        floors: Array.from({ length: 51 }, (_, i) => String(i)),
+      })));
+      await assertFails(db.collection('buildings').doc('x4').set(buildingDoc('A', 'admin_A', { memo: '모르는 필드' })));
+      await assertFails(db.collection('buildings').doc('x5').set(buildingDoc('A', 'admin_A', { floors: '1,2' })));
+
+      await seedBuilding('bd_A', 'A');
+      await assertFails(db.collection('buildings').doc('bd_A')
+        .update({ organizationId: 'org-B', updatedAt: serverTs(), lastEditedByUid: 'admin_A' }));
+    });
+
     it('#S6 조사 방식(surveyMode)은 정해진 값만 저장된다', async () => {
       const db = admin('A');
       await assertSucceeds(db.collection('organizations').doc('org-A').update({ surveyMode: 'solo' }));

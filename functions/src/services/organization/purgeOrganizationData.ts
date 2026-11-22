@@ -52,6 +52,8 @@ const ORG_SCOPED: ReadonlyArray<readonly [collection: string, field: string]> = 
     ["assets", "organizationId"],
     // 공간 — 재물·조사 컬렉션을 만들면 이보다 앞에 둔다(기록이 공간을 가리킨다)
     ["spaces", "organizationId"],
+    // 건물 — 공간이 건물을 가리키므로 공간 뒤
+    ["buildings", "organizationId"],
     // 해지 시점에 이미 지워졌지만, 그 뒤에 남은 문서가 있으면 함께 지운다.
     ["users", "organizationId"],
 ];

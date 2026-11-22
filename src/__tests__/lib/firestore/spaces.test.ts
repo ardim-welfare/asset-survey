@@ -43,7 +43,7 @@ import {
 import type { Space } from '../../../types/space';
 
 const space = (over: Partial<Space>): Space => ({
-    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, ...over,
+    id: 's1', organizationId: 'org-A', name: '공간', order: 0, managerUids: [], archived: false, buildingId: null, floor: null, ...over,
 });
 
 const snapOf = (spaces: Space[]) => ({ docs: spaces.map((s) => ({ data: () => s })) });
@@ -94,7 +94,7 @@ describe('spaces — 쓰기', () => {
 
         expect(id).toBe('new-id');
         expect(vi.mocked(fs.addDoc).mock.calls[0][1]).toEqual({
-            organizationId: 'org-A', name: '2층 사무실', order: 3, managerUids: [], archived: false,
+            organizationId: 'org-A', name: '2층 사무실', order: 3, managerUids: [], archived: false, buildingId: null, floor: null,
             createdAt: '__serverTimestamp__', updatedAt: '__serverTimestamp__', lastEditedByUid: 'admin-1',
         });
     });
