@@ -38,6 +38,8 @@ function showValue(field: string, value: unknown, spaces: Space[]): string {
 const HISTORY_TYPE_LABEL: Record<HistoryEntry['type'], string> = {
     'import-change': '다시 가져오기로 바뀜',
     'import-missing': '대장에서 빠짐',
+    'manual-create': '직접 등록',
+    'manual-edit': '직접 고침',
 };
 
 /** 라벨 인쇄 대화상자 — 관리자 화면이 넘겨준다(공용 화면이 관리자 컴포넌트를 직접 부르지 않게) */
@@ -104,9 +106,14 @@ export default function AssetDetailView({ admin, renderLabelPrint }: Props) {
 
     return (
         <div className="max-w-2xl mx-auto animate-fade-in space-y-4">
-            <Link to={listPath} className="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 min-h-[44px]">
-                <span aria-hidden="true">←</span> 재물 목록
-            </Link>
+            <div className="flex items-center justify-between gap-2">
+                <Link to={listPath} className="inline-flex items-center gap-1 text-sm text-primary-600 dark:text-primary-400 min-h-[44px]">
+                    <span aria-hidden="true">←</span> 재물 목록
+                </Link>
+                {admin && (
+                    <Link to={`/admin/assets/${encodeURIComponent(a.id)}/edit`} className="btn-secondary btn-sm min-h-[44px] px-4">고치기</Link>
+                )}
+            </div>
 
             <section className="glass-card p-5">
                 <div className="flex flex-wrap items-center gap-2 mb-1">

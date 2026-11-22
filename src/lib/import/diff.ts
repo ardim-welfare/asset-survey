@@ -128,7 +128,8 @@ export function diffAssets(
     }
 
     for (const asset of existing) {
-        if (!seen.has(asset.id) && !asset.missingFromSource) diff.missing.push(asset);
+        // 앱에서 직접 등록한 재물은 대장에 없는 게 당연하다 — '대장에 없음'으로 표시하지 않는다
+        if (!seen.has(asset.id) && !asset.missingFromSource && !asset.manual) diff.missing.push(asset);
     }
     return diff;
 }

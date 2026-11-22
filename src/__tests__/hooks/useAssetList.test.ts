@@ -14,7 +14,7 @@ import useAssetList, { filterAssets, sortAssets, DEFAULT_FILTERS, LIST_PAGE, bui
 const asset = (code: string, over: Partial<Asset> = {}): Asset => ({
     id: `org-A__${code}`, organizationId: 'org-A', code, name: 'TV', category: null, spec: null, acquiredAt: null,
     acquiredQuantity: null, quantity: 1, status: 'active', statusRaw: null, locationRaw: '101호', spaceId: 'sp1',
-    department: null, usage: null, missingFromSource: false, lastImportId: null, tagId: null, ...over,
+    department: null, usage: null, missingFromSource: false, manual: false, lastImportId: null, tagId: null, ...over,
 });
 
 describe('sortAssets·filterAssets', () => {

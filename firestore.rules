@@ -276,7 +276,7 @@ service cloud.firestore {
     function assetDataValid(d) {
       return d.keys().hasOnly(['organizationId', 'code', 'name', 'category', 'spec', 'acquiredAt',
                                'acquiredQuantity', 'quantity', 'status', 'statusRaw', 'locationRaw',
-                               'spaceId', 'department', 'usage', 'missingFromSource', 'lastImportId',
+                               'spaceId', 'department', 'usage', 'missingFromSource', 'manual', 'lastImportId',
                                'tagId', 'lastEditedByUid', 'createdAt', 'updatedAt'])
              && d.organizationId is string
              && d.code is string && d.code.size() > 0 && d.code.size() <= 100
@@ -288,6 +288,8 @@ service cloud.firestore {
              && nullableString(d.spaceId, 100)
              && nullableString(d.department, 100) && nullableString(d.usage, 500)
              && d.missingFromSource is bool
+             // 앱에서 직접 등록한 재물 표시(2026-11-22) — 예전 문서에는 없다
+             && (!('manual' in d) || d.manual is bool)
              && nullableString(d.lastImportId, 100)
              // QR 태그 ID(기획서 F09) — 헷갈리는 글자(I·L·O·U)를 뺀 대문자·숫자 10자. 없으면 null
              && (d.get('tagId', null) == null || (d.tagId is string && d.tagId.matches('^[0-9A-HJKMNP-TV-Z]{10}$')))
@@ -350,7 +352,7 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly(['organizationId', 'assetId', 'code', 'type', 'changes',
                                                              'importId', 'lastEditedByUid', 'at'])
                     && request.resource.data.assetId.matches(request.resource.data.organizationId + '__.+')
-                    && request.resource.data.type in ['import-change', 'import-missing']
+                    && request.resource.data.type in ['import-change', 'import-missing', 'manual-create', 'manual-edit']
                     && request.resource.data.changes is map
                     && request.resource.data.lastEditedByUid == request.auth.uid
                     && request.resource.data.at == request.time;

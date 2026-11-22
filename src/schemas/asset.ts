@@ -14,6 +14,8 @@ export const assetStatusSchema = z.enum(['active', 'inactive', 'disposed']);
  *   (`status`·`spaceId`)을 따로 둔다 — 해석이 틀려도 원문으로 되짚을 수 있게.
  * - 금액은 이 문서에 두지 않는다 → `assetAccounting`(관리자만 읽음). 직원도 이 문서는 읽는다(4단계 조사).
  * - `missingFromSource`: 마지막 가져오기 파일에 없던 재물. 지우지 않고 표시만 한다(기획서 F07).
+ * - `manual`: 앱에서 한 건씩 직접 등록한 재물(2026-11-22). 대장 엑셀에 없는 게 당연하므로 다시 가져오기가
+ *   '대장에 없음'으로 표시하지 않는다. 같은 자산코드가 대장에 나타나면 그때부터 대장 관리로 넘어간다(false).
  * - 지우지 않는다 — Rules가 delete를 막는다.
  *
  * 필드를 추가하면 firestore.rules의 `assetDataValid` hasOnly 목록도 함께 고친다.
@@ -34,6 +36,7 @@ export const assetSchema = z.object({
     department: z.string().nullable().catch(null),
     usage: z.string().nullable().catch(null),
     missingFromSource: z.boolean().catch(false),
+    manual: z.boolean().catch(false),
     lastImportId: z.string().nullable().catch(null),
     /**
      * QR 라벨의 태그 ID(기획서 F09) — 라벨을 처음 인쇄할 때 발급한다. 없으면 null.
@@ -85,7 +88,7 @@ export const importRecordSchema = z.object({
 });
 
 /** 변경 이력 (history/{id}) — 생성만 한다. 값은 재물 정보뿐이라 개인정보를 담지 않는다 */
-export const historyTypeSchema = z.enum(['import-change', 'import-missing']);
+export const historyTypeSchema = z.enum(['import-change', 'import-missing', 'manual-create', 'manual-edit']);
 export const historySchema = z.object({
     organizationId: z.string().catch(''),
     assetId: z.string().catch(''),

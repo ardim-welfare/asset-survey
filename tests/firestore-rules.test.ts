@@ -947,6 +947,13 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(db.collection('history').doc('h1').delete());
       await assertFails(db.collection('history').doc('h2').set({ ...hist, assetId: 'org-B__1' }));
       await assertFails(db.collection('history').doc('h3').set({ ...hist, type: 'free-text' }));
+      // 직접 등록·수정 이력(2026-11-22)
+      await assertSucceeds(db.collection('history').doc('h4').set({ ...hist, type: 'manual-create', changes: {}, importId: null }));
+      await assertSucceeds(db.collection('history').doc('h5').set({ ...hist, type: 'manual-edit', importId: null }));
+      // 직접 등록 재물 표시(manual)는 참·거짓만, 직원은 등록할 수 없다
+      await assertSucceeds(db.collection('assets').doc('org-A__m-1').set(assetDoc('A', 'admin_A', { code: 'm-1', manual: true, lastImportId: null })));
+      await assertFails(db.collection('assets').doc('org-A__m-2').set(assetDoc('A', 'admin_A', { code: 'm-2', manual: 'yes' })));
+      await assertFails(emp('A', 1).collection('assets').doc('org-A__m-3').set(assetDoc('A', 'emp_A1', { code: 'm-3', manual: true })));
       await assertFails(emp('A', 1).collection('history').doc('h1').get());
     });
 

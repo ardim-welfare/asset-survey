@@ -50,14 +50,20 @@ export default function AssetList() {
                         전체 {al.assets.length.toLocaleString('ko-KR')}건 · 걸러진 {al.filtered.length.toLocaleString('ko-KR')}건
                     </p>
                 </div>
-                <Link to="/admin/import" className="btn-secondary min-h-[48px] px-4">재물 가져오기</Link>
+                <div className="flex gap-2">
+                    <Link to="/admin/assets/new" className="btn-secondary min-h-[48px] px-4">재물 등록</Link>
+                    <Link to="/admin/import" className="btn-secondary min-h-[48px] px-4">재물 가져오기</Link>
+                </div>
             </div>
 
             {al.assets.length === 0 ? (
                 <div className="glass-card p-8 text-center">
                     <p className="text-surface-700 dark:text-surface-300 font-medium mb-1">아직 재물이 없습니다</p>
-                    <p className={`${sub} mb-4`}>희망이음 고정자산대장이나 기관 재물 대장 엑셀을 먼저 가져오세요.</p>
-                    <Link to="/admin/import" className="btn-primary min-h-[48px] px-5">재물 가져오기</Link>
+                    <p className={`${sub} mb-4`}>희망이음 고정자산대장이나 기관 재물 대장 엑셀을 가져오거나, 한 건씩 등록하세요.</p>
+                    <div className="flex flex-col sm:flex-row justify-center gap-2">
+                        <Link to="/admin/import" className="btn-primary min-h-[48px] px-5">재물 가져오기</Link>
+                        <Link to="/admin/assets/new" className="btn-secondary min-h-[48px] px-5">한 건씩 등록</Link>
+                    </div>
                 </div>
             ) : (
                 <>

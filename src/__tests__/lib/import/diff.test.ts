@@ -85,6 +85,10 @@ describe('diffAssets', () => {
             [existingFrom(kept), existingFrom(gone), existingFrom(alreadyGone, { missingFromSource: true })],
             new Map([accFrom(kept)]));
         expect(d.missing.map((a) => a.code)).toEqual(['gone']);
+
+        // 앱에서 직접 등록한 재물은 대장에 없어도 '대장에 없음'이 아니다 (2026-11-22)
+        const manual = diffAssets(ORG, [kept], MAP, [existingFrom(kept), existingFrom(gone, { manual: true })], new Map([accFrom(kept)]));
+        expect(manual.missing).toEqual([]);
     });
 
     it('다시 나타난 재물은 표시를 거둔다(바뀜)', () => {

@@ -42,7 +42,7 @@ import type { Asset } from '../../../types/asset';
 const asset = (id: string, over: Partial<Asset> = {}): Asset => ({
     id, organizationId: 'org-A', code: id, name: 'TV', category: null, spec: null, acquiredAt: null, acquiredQuantity: null,
     quantity: 1, status: 'active', statusRaw: null, locationRaw: null, spaceId: 'sp-1', department: null, usage: null,
-    missingFromSource: false, lastImportId: null, tagId: null, ...over,
+    missingFromSource: false, manual: false, lastImportId: null, tagId: null, ...over,
 });
 const ASSETS = [
     asset('a1'), asset('a2', { spaceId: 'sp-2' }), asset('a3', { spaceId: null, tagId: 'AAAAAAAAA3' }),

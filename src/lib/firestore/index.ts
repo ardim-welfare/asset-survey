@@ -99,6 +99,12 @@ export {
 } from './spaces';
 export type { SpaceLocation } from './spaces';
 
+// 재물 직접 등록·수정 (2026-11-22)
+export {
+    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, MANUAL_EDIT_FIELDS,
+} from './assets';
+export type { ManualAssetFields } from './assets';
+
 // 재물 마지막 확인 (상시 확인 기록) — QR로 열거나 조사에서 찍을 때 남긴다
 export { recordAssetCheck, getAssetCheck, getAssetChecks } from './assetChecks';
 export type { RecordAssetCheckInput } from './assetChecks';

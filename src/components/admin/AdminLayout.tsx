@@ -21,6 +21,7 @@ const SpaceManager = lazyWithRetry(() => import('./SpaceManager'));
 const AssetImport = lazyWithRetry(() => import('./AssetImport'));
 const AssetList = lazyWithRetry(() => import('./AssetList'));
 const AssetDetail = lazyWithRetry(() => import('./AssetDetail'));
+const AssetForm = lazyWithRetry(() => import('./AssetForm'));
 const SurveyManager = lazyWithRetry(() => import('./SurveyManager'));
 const SurveyReport = lazyWithRetry(() => import('./SurveyReport'));
 const Settings = lazyWithRetry(() => import('./Settings'));
@@ -269,7 +270,9 @@ export default function AdminLayout() {
                                 <Route path="surveys" element={<SurveyManager />} />
                                 <Route path="surveys/:surveyId" element={<SurveyReport />} />
                                 <Route path="assets" element={<AssetList />} />
+                                <Route path="assets/new" element={<AssetForm />} />
                                 <Route path="assets/:assetId" element={<AssetDetail />} />
+                                <Route path="assets/:assetId/edit" element={<AssetForm />} />
                                 <Route path="import" element={<AssetImport />} />
                                 <Route path="employees" element={<EmployeeManager />} />
                                 <Route path="settings" element={<Settings />} />

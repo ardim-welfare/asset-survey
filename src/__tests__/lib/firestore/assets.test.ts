@@ -33,6 +33,7 @@ vi.mock('firebase/firestore', () => ({
     where: vi.fn((field: string, op: string, value: unknown) => ({ _type: 'where', field, op, value })),
     orderBy: vi.fn(), limit: vi.fn(),
     getDocs: vi.fn(),
+    getDoc: vi.fn(),
     getCountFromServer: vi.fn(),
     writeBatch: vi.fn(() => {
         const b = { ops: [] as Array<{ kind: string; label: string; data: Record<string, unknown> }> };
@@ -51,6 +52,7 @@ vi.mock('../../../lib/sentry', () => ({ captureError: vi.fn() }));
 import * as fs from 'firebase/firestore';
 import {
     commitImport, getAssets, getAssetCounts, issueTags, findAssetByTag, getAssetsBySpaces, getAssetHistory,
+    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError,
 } from '../../../lib/firestore/assets';
 import { diffAssets } from '../../../lib/import/diff';
 import type { ParsedAsset, ParseResult } from '../../../lib/import/parseSheet';
@@ -78,10 +80,10 @@ describe('commitImport', () => {
         const existing: Asset[] = [
             { id: 'org-A__keep', organizationId: 'org-A', code: 'keep', name: '옛 이름', category: null, spec: null, acquiredAt: null,
                 acquiredQuantity: null, quantity: 1, status: 'active', statusRaw: null, locationRaw: '101호', spaceId: 'sp1',
-                department: null, usage: null, missingFromSource: false, lastImportId: 'old', tagId: null },
+                department: null, usage: null, missingFromSource: false, manual: false, lastImportId: 'old', tagId: null },
             { id: 'org-A__gone', organizationId: 'org-A', code: 'gone', name: 'x', category: null, spec: null, acquiredAt: null,
                 acquiredQuantity: null, quantity: 1, status: 'active', statusRaw: null, locationRaw: '101호', spaceId: 'sp1',
-                department: null, usage: null, missingFromSource: false, lastImportId: 'old', tagId: null },
+                department: null, usage: null, missingFromSource: false, manual: false, lastImportId: 'old', tagId: null },
         ];
         const rows = [row('new', { amount: null }), row('keep', { name: '새 이름' })];
         const diff = diffAssets('org-A', rows, { '101호': 'sp1' }, existing,
@@ -106,7 +108,7 @@ describe('commitImport', () => {
             'set doc:imports/auto',                      // 마지막: 기록
         ]);
         expect(ops[0].data).toMatchObject({ organizationId: 'org-A', code: 'new', missingFromSource: false, lastEditedByUid: 'admin-1', createdAt: '__ts__' });
-        expect(ops[1].data).toMatchObject({ name: '새 이름', missingFromSource: false, lastImportId: id });
+        expect(ops[1].data).toMatchObject({ name: '새 이름', missingFromSource: false, manual: false, lastImportId: id });
         expect(ops[2].data).toMatchObject({ type: 'import-change', code: 'keep', changes: { name: { before: '옛 이름', after: '새 이름' } } });
         expect(ops[3].data).toEqual({ missingFromSource: true, lastImportId: id, updatedAt: '__ts__', lastEditedByUid: 'admin-1' });
         expect(ops[5].data).toEqual({ importColumnMap: { code: '자산코드' }, locationSpaceMap: { '101호': 'sp1' } });
@@ -211,5 +213,51 @@ describe('직원 목록·재물 이력', () => {
         await getAssetHistory('org-A', 'org-A__1');
         expect(fs.where).toHaveBeenCalledWith('organizationId', '==', 'org-A');
         expect(fs.where).toHaveBeenCalledWith('assetId', '==', 'org-A__1');
+    });
+});
+
+describe('재물 직접 등록·수정 (2026-11-22)', () => {
+    const fields = {
+        name: '책상', category: '집기', spec: null, acquiredAt: '2024-03-15', quantity: 1, status: 'active' as const,
+        spaceId: 'sp1', department: null, usage: null,
+    };
+
+    it('자동 번호는 올해-순번, 같은 해 가장 큰 번호 다음', () => {
+        const now = new Date(2026, 10, 22);
+        expect(nextAssetCode([], now)).toBe('2026-001');
+        expect(nextAssetCode(['2026-009', '2026-010', '2025-500', 'A-1'], now)).toBe('2026-011');
+    });
+
+    it('등록은 재물(manual)·금액·이력을 한 배치로 쓴다', async () => {
+        vi.mocked(fs.getDoc).mockResolvedValueOnce({ exists: () => false } as never);
+        const id = await createAssetManually({ orgId: 'org-A', code: ' 2026-001 ', fields, amount: 250000 });
+        expect(id).toBe('org-A__2026-001');
+        const ops = batches[0].ops;
+        expect(ops.map((o) => o.label)).toEqual(['doc:assets/org-A__2026-001', 'doc:assetAccounting/org-A__2026-001', 'doc:history/auto1']);
+        expect(ops[0].data).toMatchObject({ code: '2026-001', name: '책상', manual: true, missingFromSource: false, tagId: null, lastEditedByUid: 'admin-1' });
+        expect(ops[1].data).toMatchObject({ amount: 250000 });
+        expect(ops[2].data).toMatchObject({ type: 'manual-create', importId: null });
+    });
+
+    it('같은 자산코드가 있으면 쓰지 않고 AssetCodeTakenError', async () => {
+        vi.mocked(fs.getDoc).mockResolvedValueOnce({ exists: () => true } as never);
+        await expect(createAssetManually({ orgId: 'org-A', code: 'X', fields, amount: null })).rejects.toBeInstanceOf(AssetCodeTakenError);
+        expect(batches).toHaveLength(0);
+    });
+
+    it('수정은 바뀐 값만 쓰고 전·후 값을 이력에 남긴다, 바뀐 게 없으면 쓰지 않는다', async () => {
+        const asset = {
+            id: 'org-A__1', organizationId: 'org-A', code: '1', ...fields, acquiredQuantity: null, statusRaw: null, locationRaw: null,
+            missingFromSource: false, manual: true, lastImportId: null, tagId: null,
+        };
+        expect(await updateAssetManually({ asset, fields, amount: null, accounting: null })).toBe(0);
+        expect(batches).toHaveLength(0);
+
+        const n = await updateAssetManually({ asset, fields: { ...fields, name: '큰 책상' }, amount: 300000, accounting: null });
+        expect(n).toBe(2);
+        const ops = batches[0].ops;
+        expect(ops[0]).toMatchObject({ kind: 'update', label: 'doc:assets/org-A__1', data: { name: '큰 책상' } });
+        expect(ops[1]).toMatchObject({ kind: 'set', label: 'doc:assetAccounting/org-A__1', data: { amount: 300000 } });
+        expect(ops[2].data).toMatchObject({ type: 'manual-edit', changes: { name: { before: '책상', after: '큰 책상' }, amount: { before: null, after: 300000 } } });
     });
 });
