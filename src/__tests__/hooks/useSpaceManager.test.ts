@@ -45,6 +45,8 @@ vi.mock('../../lib/firestore', async () => {
         getOrganizationMembers: vi.fn(),
         createSpace: vi.fn(),
         updateSpace: vi.fn(),
+        updateSpacesBatch: vi.fn(),
+        createSpacesBatch: vi.fn(),
         reorderSpaces: vi.fn(),
         validateSpaceName: actual.validateSpaceName,
         normalizeSpaceName: actual.normalizeSpaceName,
@@ -77,6 +79,7 @@ beforeEach(() => {
         { id: 'sa', uid: 'sa', name: '운영자', role: 'superAdmin', status: 'active' },
     ] as never);
     vi.mocked(firestore.updateSpace).mockResolvedValue(undefined);
+    vi.mocked(firestore.updateSpacesBatch).mockResolvedValue(undefined);
     vi.mocked(firestore.reorderSpaces).mockResolvedValue(undefined);
     vi.mocked(firestore.getBuildings).mockResolvedValue([]);
     vi.mocked(firestore.updateBuilding).mockResolvedValue(undefined);
@@ -260,4 +263,57 @@ describe('useSpaceManager', () => {
         expect(firestore.createBuilding).toHaveBeenCalledWith('org-A', { name: '별관', address: '', floors: ['1'] }, 1);
         expect(result.current.activeBuildings.map((x) => x.name)).toEqual(['본관', '별관']);
     });
+
+    it('여러 곳 담당 지정(2026-11-22) — 이미 지정된 곳은 건너뛰고 나머지를 한 번에 저장한다', async () => {
+        const { result } = await setup();
+        await act(async () => { await result.current.bulkAssign(['a', 'b'], 'u:u1'); });
+        // a에는 이미 u1이 있다 → b만
+        expect(firestore.updateSpacesBatch).toHaveBeenCalledWith([{ id: 'b', patch: { managerUids: ['u1'] } }]);
+        expect(result.current.activeSpaces.find((s) => s.id === 'b')?.managerUids).toEqual(['u1']);
+        expect(mockShowToast).toHaveBeenLastCalledWith(expect.stringMatching(/1곳에 담당.*이미 지정 1곳/), 'success');
+
+        await act(async () => { await result.current.bulkAssign(['a', 'b'], 't:t1'); });
+        expect(firestore.updateSpacesBatch).toHaveBeenLastCalledWith([
+            { id: 'a', patch: { teamIds: ['t1'] } }, { id: 'b', patch: { teamIds: ['t1'] } },
+        ]);
+    });
+
+    it('여러 곳 담당 지정이 실패하면 화면을 되돌린다', async () => {
+        const { result } = await setup();
+        vi.mocked(firestore.updateSpacesBatch).mockRejectedValueOnce(new Error('denied'));
+        await act(async () => { await result.current.bulkAssign(['b'], 'u:u2'); });
+        expect(result.current.activeSpaces.find((s) => s.id === 'b')?.managerUids).toEqual([]);
+        expect(mockShowToast).toHaveBeenLastCalledWith(expect.stringMatching(/지정하지 못했습니다/), 'error');
+    });
+
+    it('여러 곳 옮기기·삭제 — 옮긴 곳 맨 아래 순서, 삭제는 확인을 받는다', async () => {
+        vi.mocked(firestore.getBuildings).mockResolvedValue([building({})]);
+        const { result } = await setup();
+        await act(async () => { await result.current.bulkSetLocation(['a', 'b'], { buildingId: 'b1', floor: '2' }); });
+        expect(firestore.updateSpacesBatch).toHaveBeenCalledWith([
+            { id: 'a', patch: { buildingId: 'b1', floor: '2', order: 2 } },
+            { id: 'b', patch: { buildingId: 'b1', floor: '2', order: 3 } },
+        ]);
+
+        vi.mocked(firestore.updateSpacesBatch).mockClear();
+        mockConfirm.mockResolvedValueOnce(false);
+        await act(async () => { await result.current.bulkArchive(['a', 'b']); });
+        expect(firestore.updateSpacesBatch).not.toHaveBeenCalled();
+        mockConfirm.mockResolvedValueOnce(true);
+        await act(async () => { await result.current.bulkArchive(['a', 'b']); });
+        expect(firestore.updateSpacesBatch).toHaveBeenCalledWith([{ id: 'a', patch: { archived: true } }, { id: 'b', patch: { archived: true } }]);
+        expect(result.current.activeSpaces).toHaveLength(0);
+    });
+
+    it('여러 공간 한꺼번에 추가 — 빈 줄·겹친 이름·이미 있는 이름은 건너뛰고, 엑셀은 첫 칸만 쓴다', async () => {
+        const { result } = await setup();
+        vi.mocked(firestore.createSpacesBatch).mockResolvedValue(['n1', 'n2']);
+        let added = 0;
+        await act(async () => { added = await result.current.addSpaces('교육장\t비고\n\n 상담실2 \n교육장\n1층 상담실\n'); });
+        expect(added).toBe(2);
+        expect(firestore.createSpacesBatch).toHaveBeenCalledWith('org-A', ['교육장', '상담실2'], 2, { buildingId: null, floor: null });
+        expect(result.current.activeSpaces.map((s) => s.name)).toEqual(expect.arrayContaining(['교육장', '상담실2']));
+        expect(mockShowToast).toHaveBeenLastCalledWith(expect.stringMatching(/2곳을 추가.*2줄은 건너뜀/), 'warning');
+    });
+
 });

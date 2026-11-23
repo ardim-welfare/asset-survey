@@ -93,6 +93,8 @@ export {
     getMySpaces,
     createSpace,
     updateSpace,
+    updateSpacesBatch,
+    createSpacesBatch,
     reorderSpaces,
     sortSpaces,
     normalizeSpaceName,

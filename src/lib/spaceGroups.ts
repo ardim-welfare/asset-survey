@@ -97,3 +97,7 @@ export function spaceLocationMap(spaces: Space[], buildings: Building[]): Record
     for (const s of spaces) map[s.id] = spaceLocationText(s, buildings);
     return map;
 }
+
+/** 담당(직원·팀)이 하나도 없는 공간 — '나눠서 조사'에서 아무도 찍지 않게 되는 곳 (2026-11-22) */
+export const hasNoAssignee = (s: Pick<Space, 'managerUids' | 'teamIds'>): boolean =>
+    s.managerUids.length === 0 && (s.teamIds ?? []).length === 0;

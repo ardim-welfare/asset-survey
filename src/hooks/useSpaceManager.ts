@@ -13,7 +13,7 @@ import { useAuth } from './useAuth';
 import { useToast } from './useToast';
 import { useConfirm } from './useConfirm';
 import {
-    getSpaces, createSpace, updateSpace, reorderSpaces, getOrganizationMembers,
+    getSpaces, createSpace, updateSpace, updateSpacesBatch, createSpacesBatch, reorderSpaces, getOrganizationMembers,
     validateSpaceName, normalizeSpaceName, sortSpaces,
     getBuildings, createBuilding, updateBuilding, reorderBuildings, sortBuildings,
     validateBuildingName, validateBuildingAddress, validateFloors, normalizeBuildingText, floorLabel,
@@ -258,6 +258,126 @@ export default function useSpaceManager() {
         );
     }, [spaces, withRollback]);
 
+    // ── 여러 곳 한꺼번에(2026-11-22) — 공간이 수십 곳인 기관에서 한 곳씩 고르기가 너무 길었다 ──
+
+    /**
+     * 고른 공간들에 담당을 한꺼번에 지정한다. value는 `t:팀ID` 또는 `u:직원uid`.
+     * 이미 그 담당이 있거나 공간당 최대 수에 닿은 곳은 건너뛰고 알린다.
+     */
+    const bulkAssign = useCallback(async (spaceIds: string[], value: string): Promise<boolean> => {
+        const isTeam = value.startsWith('t:');
+        const target = value.slice(2);
+        if (!target || (!isTeam && !value.startsWith('u:'))) return false;
+        const picked = spaces.filter((s) => spaceIds.includes(s.id));
+        const patches: Array<{ id: string; patch: Partial<Pick<Space, 'teamIds' | 'managerUids'>> }> = [];
+        let already = 0;
+        let full = 0;
+        for (const s of picked) {
+            const list = isTeam ? (s.teamIds ?? []) : s.managerUids;
+            if (list.includes(target)) { already++; continue; }
+            if (list.length >= (isTeam ? SPACE_TEAMS_MAX : SPACE_MANAGERS_MAX)) { full++; continue; }
+            patches.push({ id: s.id, patch: isTeam ? { teamIds: [...list, target] } : { managerUids: [...list, target] } });
+        }
+        const skipped = [already > 0 ? `이미 지정 ${already}곳` : '', full > 0 ? `더 넣을 수 없음 ${full}곳` : ''].filter(Boolean).join(', ');
+        if (patches.length === 0) {
+            showToast(skipped ? `지정할 공간이 없습니다(${skipped}).` : '지정할 공간이 없습니다.', 'info');
+            return false;
+        }
+        const byId = new Map(patches.map((x) => [x.id, x.patch]));
+        const ok = await withRollback(
+            spaces.map((s) => (byId.has(s.id) ? { ...s, ...byId.get(s.id) } : s)),
+            () => updateSpacesBatch(patches),
+            '담당을 지정하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',
+        );
+        if (ok) showToast(`${patches.length}곳에 담당을 지정했습니다.${skipped ? ` (${skipped}은 건너뜀)` : ''}`, 'success');
+        return ok;
+    }, [spaces, showToast, withRollback]);
+
+    /** 고른 공간들을 같은 건물·층으로 옮긴다 — 옮긴 곳의 맨 아래에 고른 순서대로 붙인다 */
+    const bulkSetLocation = useCallback(async (spaceIds: string[], location: SpaceLocation): Promise<boolean> => {
+        const buildingId = location.buildingId;
+        const floor = buildingId ? location.floor : null;
+        const moving = activeSpaces.filter((s) => spaceIds.includes(s.id)
+            && ((s.buildingId ?? null) !== buildingId || (s.floor ?? null) !== floor));
+        if (moving.length === 0) {
+            showToast('이미 그 건물·층에 있습니다.', 'info');
+            return true;
+        }
+        const patches = moving.map((s, i) => ({ id: s.id, patch: { buildingId, floor, order: nextSpaceOrder + i } }));
+        const byId = new Map(patches.map((x) => [x.id, x.patch]));
+        const ok = await withRollback(
+            sortSpaces(spaces.map((s) => (byId.has(s.id) ? { ...s, ...byId.get(s.id) } : s))),
+            () => updateSpacesBatch(patches),
+            '공간을 옮기지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',
+        );
+        if (ok) showToast(`${patches.length}곳을 옮겼습니다.`, 'success');
+        return ok;
+    }, [activeSpaces, spaces, nextSpaceOrder, showToast, withRollback]);
+
+    /** 고른 공간들을 한꺼번에 삭제(숨김) — 확인을 받는다 */
+    const bulkArchive = useCallback(async (spaceIds: string[]): Promise<boolean> => {
+        const picked = activeSpaces.filter((s) => spaceIds.includes(s.id));
+        if (picked.length === 0) return false;
+        const ok = await confirm({
+            title: `공간 ${picked.length}곳을 삭제할까요?`,
+            message: `${picked.slice(0, 5).map((s) => s.name).join(', ')}${picked.length > 5 ? ` 외 ${picked.length - 5}곳` : ''}\n공간 목록과 조사 대상에서 빠집니다. 이 공간들의 재물은 지워지지 않고, '삭제한 공간'에서 되살릴 수 있습니다.`,
+            confirmText: '삭제',
+            confirmColor: 'danger',
+        });
+        if (!ok) return false;
+        const ids = new Set(picked.map((s) => s.id));
+        const done = await withRollback(
+            spaces.map((s) => (ids.has(s.id) ? { ...s, archived: true } : s)),
+            () => updateSpacesBatch(picked.map((s) => ({ id: s.id, patch: { archived: true } }))),
+            '공간을 삭제하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.',
+        );
+        if (done) showToast(`${picked.length}곳을 삭제했습니다.`, 'success');
+        return done;
+    }, [activeSpaces, spaces, confirm, showToast, withRollback]);
+
+    /**
+     * 여러 공간 한꺼번에 추가 — 한 줄에 하나씩(엑셀 칸을 복사하면 탭으로 나뉘어 와 첫 칸만 쓴다).
+     * 빈 줄·같은 이름은 건너뛰고, 문제가 있는 이름은 무엇인지 알린다.
+     * @returns 추가한 수(하나도 못 넣으면 0)
+     */
+    const addSpaces = useCallback(async (text: string, location: SpaceLocation = { buildingId: null, floor: null }): Promise<number> => {
+        if (!orgId) return 0;
+        const lines = text.split(/\r?\n/).map((l) => l.split('\t')[0].trim()).filter(Boolean);
+        const accepted: string[] = [];
+        const problems: string[] = [];
+        const seen = [...spaces];
+        for (const line of lines) {
+            const problem = validateSpaceName(line, seen);
+            if (problem) { problems.push(`${line}: ${problem}`); continue; }
+            const name = normalizeSpaceName(line);
+            accepted.push(name);
+            // 같은 목록 안의 겹친 이름도 잡히게 검사 대상에 더한다
+            seen.push({ id: `new-${accepted.length}`, organizationId: orgId, name, order: 0, managerUids: [], teamIds: [], archived: false, buildingId: null, floor: null });
+        }
+        if (accepted.length === 0) {
+            showToast(problems.length > 0 ? `추가할 공간이 없습니다. ${problems.slice(0, 2).join(' / ')}` : '공간 이름을 한 줄에 하나씩 적어 주세요.', 'warning');
+            return 0;
+        }
+        const loc: SpaceLocation = { buildingId: location.buildingId, floor: location.buildingId ? location.floor : null };
+        const start = nextSpaceOrder;
+        setBusy(true);
+        try {
+            const ids = await createSpacesBatch(orgId, accepted, start, loc);
+            setSpaces((prev) => sortSpaces([...prev, ...ids.map((id, i) => ({
+                id, organizationId: orgId, name: accepted[i], order: start + i, managerUids: [], teamIds: [], archived: false,
+                buildingId: loc.buildingId, floor: loc.floor,
+            }))]));
+            showToast(`공간 ${ids.length}곳을 추가했습니다.${problems.length > 0 ? ` ${problems.length}줄은 건너뜀(${problems.slice(0, 2).join(' / ')}${problems.length > 2 ? ' …' : ''})` : ''}`,
+                problems.length > 0 ? 'warning' : 'success');
+            return ids.length;
+        } catch {
+            showToast('공간을 추가하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
+            return 0;
+        } finally {
+            setBusy(false);
+        }
+    }, [orgId, spaces, nextSpaceOrder, showToast]);
+
     const archiveSpace = useCallback(async (space: Space) => {
         // '삭제'라고 부르지만 문서는 지우지 않는다 — 재물·지난 조사 기록이 이 공간을 가리킨다
         const ok = await confirm({
@@ -409,6 +529,7 @@ export default function useSpaceManager() {
         loading, loadError, busy, reload: load,
         activeSpaces, archivedSpaces, members, nameOf,
         addSpace, renameSpace, saveSpaceDetails, moveSpace, setSpaceLocation, addManager, removeManager, addTeam, removeTeam, archiveSpace, restoreSpace,
+        bulkAssign, bulkSetLocation, bulkArchive, addSpaces,
         buildings, activeBuildings, archivedBuildings, spacesIn,
         addBuilding, editBuilding, moveBuilding, archiveBuilding, restoreBuilding,
     };

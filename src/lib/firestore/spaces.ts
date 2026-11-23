@@ -124,6 +124,66 @@ export const updateSpace = async (spaceId: string, patch: SpacePatch): Promise<v
     }
 };
 
+/** 한 배치에 담는 쓰기 수 — Firestore 한도(500)보다 넉넉히 작게 */
+const BATCH_LIMIT = 400;
+
+/**
+ * 여러 공간을 한꺼번에 고친다(2026-11-22) — 담당 지정·위치 옮기기·삭제(숨김)를 여러 곳에 한 번에.
+ * 400건씩 배치로 나눠 쓴다(공간이 수백 곳이어도 일부만 바뀐 채 남는 범위를 배치 하나로 줄인다).
+ */
+export const updateSpacesBatch = async (patches: Array<{ id: string; patch: SpacePatch }>): Promise<void> => {
+    try {
+        for (let i = 0; i < patches.length; i += BATCH_LIMIT) {
+            const batch = writeBatch(db);
+            for (const { id, patch } of patches.slice(i, i + BATCH_LIMIT)) {
+                batch.update(doc(db, 'spaces', id), { ...patch, updatedAt: serverTimestamp(), ...actorStamp() });
+            }
+            await batch.commit();
+        }
+    } catch (error) {
+        captureError(error, { context: 'updateSpacesBatch', count: patches.length });
+        throw error;
+    }
+};
+
+/**
+ * 여러 공간을 한꺼번에 만든다(2026-11-22) — 이름 목록을 붙여 넣어 추가할 때. 이름은 미리 검사해 넘긴다.
+ * @returns 만든 순서대로의 문서 ID
+ */
+export const createSpacesBatch = async (
+    orgId: string, names: string[], startOrder: number,
+    location: SpaceLocation = { buildingId: null, floor: null },
+): Promise<string[]> => {
+    try {
+        const ids: string[] = [];
+        for (let i = 0; i < names.length; i += BATCH_LIMIT) {
+            const batch = writeBatch(db);
+            names.slice(i, i + BATCH_LIMIT).forEach((name, j) => {
+                const ref = doc(collection(db, 'spaces'));
+                ids.push(ref.id);
+                batch.set(ref, {
+                    organizationId: orgId,
+                    name: normalizeSpaceName(name),
+                    order: startOrder + i + j,
+                    managerUids: [],
+                    teamIds: [],
+                    archived: false,
+                    buildingId: location.buildingId,
+                    floor: location.buildingId ? location.floor : null,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                    ...actorStamp(),
+                });
+            });
+            await batch.commit();
+        }
+        return ids;
+    } catch (error) {
+        captureError(error, { context: 'createSpacesBatch', orgId, count: names.length });
+        throw error;
+    }
+};
+
 /**
  * 순서 다시 매기기 — 화면에 보이는 순서대로 0, 1, 2…를 준다.
  * 바뀐 문서만 한 배치로 쓴다(일부만 바뀐 채 남지 않게).
