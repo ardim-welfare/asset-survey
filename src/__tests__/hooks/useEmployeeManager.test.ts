@@ -76,6 +76,10 @@ const mockRegenerateInviteCode = vi.fn().mockResolvedValue('NEW_CODE');
 const mockUpdateUser = vi.fn().mockResolvedValue({});
 const mockAddPreRegisteredEmployee = vi.fn().mockResolvedValue({});
 const mockDeletePreRegisteredEmployee = vi.fn().mockResolvedValue({});
+const mockAddPreRegisteredBatch = vi.fn().mockResolvedValue(undefined);
+const mockUpdateUsersTeamBatch = vi.fn().mockResolvedValue(undefined);
+const mockUpdatePreRegisteredTeamBatch = vi.fn().mockResolvedValue(undefined);
+const mockDeletePreRegisteredBatch = vi.fn().mockResolvedValue(undefined);
 
 const actualUsers = await vi.importActual<typeof import('../../lib/firestore/users')>('../../lib/firestore/users');
 
@@ -90,6 +94,10 @@ vi.mock('../../lib/firestore', () => ({
     updateUser: (...args: unknown[]) => mockUpdateUser(...args),
     addPreRegisteredEmployee: (...args: unknown[]) => mockAddPreRegisteredEmployee(...args),
     deletePreRegisteredEmployee: (...args: unknown[]) => mockDeletePreRegisteredEmployee(...args),
+    addPreRegisteredBatch: (...args: unknown[]) => mockAddPreRegisteredBatch(...args),
+    updateUsersTeamBatch: (...args: unknown[]) => mockUpdateUsersTeamBatch(...args),
+    updatePreRegisteredTeamBatch: (...args: unknown[]) => mockUpdatePreRegisteredTeamBatch(...args),
+    deletePreRegisteredBatch: (...args: unknown[]) => mockDeletePreRegisteredBatch(...args),
 }));
 
 import useEmployeeManager from '../../hooks/useEmployeeManager';
@@ -115,6 +123,66 @@ describe('useEmployeeManager', () => {
         renderHook(() => useEmployeeManager());
 
         await waitFor(() => expect(mockGetOrganizationMembers).toHaveBeenCalledWith('org1'));
+    });
+
+    it('상태로 나눠 보기(2026-11-23) — 처음엔 활성만, 가입 대기를 고르면 가입 대기만', async () => {
+        mockGetPreRegisteredEmployees.mockResolvedValueOnce([{ id: 'p1', name: '대기자', email: 'wait@test.com', teamId: null, createdAt: null }]);
+        const { result } = renderHook(() => useEmployeeManager());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.statusFilter).toBe('active');
+        expect(result.current.filteredUnifiedList.every((m) => m.memberStatus === 'active')).toBe(true);
+        act(() => result.current.setStatusFilter('pending'));
+        expect(result.current.filteredUnifiedList.map((m) => m.id)).toEqual(['p1']);
+    });
+
+    it('여러 명 붙여 넣어 등록 — 쉼표·탭, 팀 이름 찾기, 머리글·겹침·형식 오류·이미 있는 이메일은 건너뜀', async () => {
+        const { result } = renderHook(() => useEmployeeManager());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        const text = [
+            '이름, 이메일, 팀',
+            '홍길동, Hong@Gmail.com, 행정지원팀',
+            '최영희\tchoi@gmail.com',
+            '중복, hong@gmail.com',
+            '이상해, not-an-email',
+            '김직원, kim@test.com',
+            '박모름, park2@gmail.com, 없는팀',
+        ].join('\n');
+        let n = 0;
+        await act(async () => {
+            n = await result.current.addPreRegisteredMany(text, 'team-default', (name) => (name === '행정지원팀' ? 'team-admin' : null));
+        });
+        expect(n).toBe(3);
+        expect(mockAddPreRegisteredBatch).toHaveBeenCalledWith('org1', [
+            { name: '홍길동', email: 'hong@gmail.com', teamId: 'team-admin' },
+            { name: '최영희', email: 'choi@gmail.com', teamId: 'team-default' },
+            { name: '박모름', email: 'park2@gmail.com', teamId: 'team-default' },
+        ]);
+        expect(mockShowToast).toHaveBeenLastCalledWith(expect.stringMatching(/3명을 미리 등록.*3줄은 건너뜀.*모르는 팀 이름 1줄/), 'warning');
+    });
+
+    it('여러 명 팀 지정 — 활성은 직원 문서, 가입 대기는 사전 등록, 비활성은 건너뜀', async () => {
+        const { result } = renderHook(() => useEmployeeManager());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        await act(async () => {
+            await result.current.bulkAssignTeam([
+                { id: 'u1', name: '김직원', email: '', memberStatus: 'active', original: {} as never },
+                { id: 'p1', name: '대기', email: '', memberStatus: 'pending', original: {} as never },
+                { id: 'd1', name: '비활', email: '', memberStatus: 'disabled', original: {} as never },
+            ], 'team-x');
+        });
+        expect(mockUpdateUsersTeamBatch).toHaveBeenCalledWith(['u1'], 'team-x');
+        expect(mockUpdatePreRegisteredTeamBatch).toHaveBeenCalledWith('org1', ['p1'], 'team-x');
+        expect(mockShowToast).toHaveBeenLastCalledWith(expect.stringMatching(/2명의 팀을 바꿨습니다.*비활성 1명/), 'success');
+    });
+
+    it('가입 대기 한꺼번에 취소는 확인을 받는다', async () => {
+        const { result } = renderHook(() => useEmployeeManager());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        mockConfirm.mockResolvedValueOnce(false);
+        await act(async () => { await result.current.bulkDeletePending(['p1']); });
+        expect(mockDeletePreRegisteredBatch).not.toHaveBeenCalled();
+        await act(async () => { await result.current.bulkDeletePending(['p1', 'p2']); });
+        expect(mockDeletePreRegisteredBatch).toHaveBeenCalledWith('org1', ['p1', 'p2']);
     });
 
     it('검색 필터가 동작한다', async () => {

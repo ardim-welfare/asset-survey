@@ -7,7 +7,11 @@ import { useAuth } from './useAuth';
 import { useToast } from './useToast';
 import { useConfirm } from './useConfirm';
 import useRetry from './useRetry';
-import { getOrganizationMembers, getOrganization, regenerateInviteCode, updateUser, getPreRegisteredEmployees, addPreRegisteredEmployee, deletePreRegisteredEmployee, updatePreRegisteredTeam, recheckDeniedTarget } from '../lib/firestore';
+import {
+    getOrganizationMembers, getOrganization, regenerateInviteCode, updateUser, getPreRegisteredEmployees, addPreRegisteredEmployee,
+    deletePreRegisteredEmployee, updatePreRegisteredTeam, recheckDeniedTarget,
+    updateUsersTeamBatch, addPreRegisteredBatch, updatePreRegisteredTeamBatch, deletePreRegisteredBatch,
+} from '../lib/firestore';
 import { invalidateCache } from '../lib/firestore/cache';
 import type { User, UserRole, MemberStatus, UnifiedMember } from '../types/user';
 import type { Organization } from '../types/organization';
@@ -53,6 +57,11 @@ export default function useEmployeeManager() {
     const [searchQuery, setSearchQuery] = useState('');
     /** 팀 거르기 — 'all' / 'none'(팀 없음) / 팀 ID (2026-11-22) */
     const [teamFilter, setTeamFilter] = useState<string>('all');
+    /**
+     * 상태로 나눠 보기(2026-11-23) — 가입 대기 직원이 수십 명이면 목록이 끝없이 길었다.
+     * null = 아직 고르지 않음(활성 직원이 있으면 '활성', 없으면 '전체'로 본다)
+     */
+    const [statusFilter, setStatusFilter] = useState<'all' | MemberStatus | null>(null);
 
     const orgId = userData?.organizationId;
 
@@ -373,8 +382,11 @@ export default function useEmployeeManager() {
         })),
     ];
 
-    // 통합 검색 + 팀 거르기
+    const effectiveStatus: 'all' | MemberStatus = statusFilter ?? (employees.length > 0 ? 'active' : 'all');
+
+    // 통합 검색 + 팀 거르기 + 상태
     const filteredUnifiedList = unifiedList.filter(m => {
+        if (effectiveStatus !== 'all' && m.memberStatus !== effectiveStatus) return false;
         const team = (m.original as { teamId?: string | null }).teamId ?? null;
         if (teamFilter === 'none' ? team !== null : teamFilter !== 'all' && team !== teamFilter) return false;
         if (!searchQuery.trim()) return true;
@@ -392,7 +404,113 @@ export default function useEmployeeManager() {
         regularEmployees: regularEmployees.length,
     };
 
+    // ── 여러 명 한꺼번에(2026-11-23) ──
+
+    /** 고른 직원들의 팀을 한꺼번에 — 활성은 직원 문서, 가입 대기는 사전 등록 문서. 비활성은 건너뛴다 */
+    const bulkAssignTeam = async (members: UnifiedMember[], teamId: string | null): Promise<boolean> => {
+        if (!orgId) return false;
+        const active = members.filter((m) => m.memberStatus === 'active').map((m) => m.id);
+        const pending = members.filter((m) => m.memberStatus === 'pending').map((m) => m.id);
+        const skipped = members.length - active.length - pending.length;
+        if (active.length + pending.length === 0) {
+            showToast('팀을 바꿀 수 있는 직원이 없습니다(비활성 직원은 건너뜁니다).', 'info');
+            return false;
+        }
+        try {
+            if (active.length > 0) await updateUsersTeamBatch(active, teamId);
+            if (pending.length > 0) await updatePreRegisteredTeamBatch(orgId, pending, teamId);
+            showToast(`${active.length + pending.length}명의 팀을 ${teamId ? '바꿨습니다' : '비웠습니다'}.${skipped > 0 ? ` (비활성 ${skipped}명은 건너뜀)` : ''}`, 'success');
+            await fetchData();
+            return true;
+        } catch {
+            showToast('팀을 바꾸지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
+            await fetchData(); // 일부만 바뀌었을 수 있어 다시 읽는다
+            return false;
+        }
+    };
+
+    /** 고른 가입 대기 직원들의 사전 등록을 한꺼번에 취소 — 이미 가입한 직원은 여기서 지우지 않는다 */
+    const bulkDeletePending = async (ids: string[]): Promise<boolean> => {
+        if (!orgId || ids.length === 0) return false;
+        const names = preRegisteredEmployees.filter((p) => ids.includes(p.id)).map((p) => p.name || p.email);
+        const ok = await confirm({
+            title: `가입 대기 ${ids.length}명의 사전 등록을 취소할까요?`,
+            message: `${names.slice(0, 5).join(', ')}${names.length > 5 ? ` 외 ${names.length - 5}명` : ''}\n아직 가입하지 않은 사람들이라 계정은 없습니다. 나중에 다시 등록하거나 초대 링크로 가입하면 됩니다.`,
+            confirmText: '등록 취소',
+            confirmColor: 'danger',
+        });
+        if (!ok) return false;
+        try {
+            await deletePreRegisteredBatch(orgId, ids);
+            showToast(`${ids.length}명의 사전 등록을 취소했습니다.`, 'success');
+            await fetchData();
+            return true;
+        } catch {
+            showToast('사전 등록을 취소하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
+            await fetchData();
+            return false;
+        }
+    };
+
+    /**
+     * 여러 명 한꺼번에 미리 등록 — 한 줄에 "이름, 이메일, 팀"(쉼표·탭, 팀은 생략 가능).
+     * 엑셀에서 세 칸을 복사하면 탭으로 나뉘어 온다. 팀 이름이 없거나 모르는 팀이면 기본 팀을 쓴다.
+     * 이메일 형식이 틀렸거나 이미 등록·가입한 이메일, 같은 목록 안의 겹친 이메일은 건너뛰고 알린다.
+     * @returns 등록한 수
+     */
+    const addPreRegisteredMany = async (
+        text: string, defaultTeamId: string | null, findTeamId: (name: string) => string | null,
+    ): Promise<number> => {
+        if (!orgId) return 0;
+        const known = new Set([
+            ...employees.map((e) => (e.email || '').toLowerCase()),
+            ...disabledEmployees.map((e) => (e.email || '').toLowerCase()),
+            ...preRegisteredEmployees.map((p) => (p.email || '').toLowerCase()),
+        ].filter(Boolean));
+        const rows: Array<{ name: string; email: string; teamId: string | null }> = [];
+        const problems: string[] = [];
+        let unknownTeam = 0;
+        for (const raw of text.split(/\r?\n/)) {
+            const line = raw.trim();
+            if (!line) continue;
+            const [name = '', email = '', team = ''] = line.split(/\t|,/).map((x) => x.trim());
+            const mail = email.toLowerCase();
+            // 머리글 줄(이름, 이메일, 팀)은 조용히 건너뛴다
+            if (name === '이름' && /메일/.test(email)) continue;
+            if (!name) { problems.push(`${line}: 이름이 없습니다`); continue; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { problems.push(`${name}: 이메일 형식이 아닙니다`); continue; }
+            if (known.has(mail)) { problems.push(`${name}: 이미 등록·가입한 이메일입니다`); continue; }
+            known.add(mail);
+            let teamId = defaultTeamId;
+            if (team) {
+                const found = findTeamId(team);
+                if (found) teamId = found; else unknownTeam++;
+            }
+            rows.push({ name, email: mail, teamId });
+        }
+        if (rows.length === 0) {
+            showToast(problems.length > 0 ? `등록할 직원이 없습니다. ${problems.slice(0, 2).join(' / ')}` : '한 줄에 "이름, 이메일"을 적어 주세요.', 'warning');
+            return 0;
+        }
+        try {
+            await addPreRegisteredBatch(orgId, rows);
+            const notes = [
+                problems.length > 0 ? `${problems.length}줄은 건너뜀(${problems.slice(0, 2).join(' / ')}${problems.length > 2 ? ' …' : ''})` : '',
+                unknownTeam > 0 ? `모르는 팀 이름 ${unknownTeam}줄은 기본 팀으로 넣음` : '',
+            ].filter(Boolean).join(' · ');
+            showToast(`${rows.length}명을 미리 등록했습니다.${notes ? ` ${notes}` : ''}`, notes ? 'warning' : 'success');
+            setStatusFilter('pending'); // 방금 넣은 사람들을 바로 보이게
+            await fetchData();
+            return rows.length;
+        } catch {
+            showToast('직원을 등록하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
+            return 0;
+        }
+    };
+
     return {
+        statusFilter: effectiveStatus, setStatusFilter,
+        bulkAssignTeam, bulkDeletePending, addPreRegisteredMany,
         employees, disabledEmployees, preRegisteredEmployees, organization, loading,
         showAddForm, setShowAddForm,
         newEmployee, setNewEmployee,

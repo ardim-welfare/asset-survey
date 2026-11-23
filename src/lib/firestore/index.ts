@@ -11,6 +11,7 @@ export {
     createUser,
     leaveOrganization,
     updateUser,
+    updateUsersTeamBatch,
     getOrganizationMembers,
     getOrganizationAdmins,
     getOrgMemberCounts,
@@ -24,6 +25,9 @@ export {
     addPreRegisteredEmployee,
     deletePreRegisteredEmployee,
     updatePreRegisteredTeam,
+    addPreRegisteredBatch,
+    updatePreRegisteredTeamBatch,
+    deletePreRegisteredBatch,
 } from './preRegistered';
 
 // 기관 (Organizations)

@@ -4,7 +4,7 @@
 import {
     doc, getDoc, setDoc, updateDoc, deleteDoc,
     collection, query, where, getDocs, getCountFromServer,
-    serverTimestamp,
+    serverTimestamp, writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { User } from '../../types/user';
@@ -137,6 +137,23 @@ export const updateUser = async (uid: string, data: Partial<User>) => {
         const resolved = await recheckDeniedTarget(error, uid);
         reportUnlessMissing(resolved, { context: 'updateUser', uid, data });
         throw resolved;
+    }
+};
+
+/**
+ * 여러 직원의 팀을 한꺼번에 바꾼다(2026-11-23) — 400명씩 배치. Rules는 문서마다 같은 검사를 한다.
+ */
+export const updateUsersTeamBatch = async (uids: string[], teamId: string | null): Promise<void> => {
+    try {
+        for (let i = 0; i < uids.length; i += 400) {
+            const batch = writeBatch(db);
+            uids.slice(i, i + 400).forEach((uid) => batch.update(doc(db, 'users', uid), { teamId, ...actorStamp() }));
+            await batch.commit();
+        }
+        invalidateCache('members');
+    } catch (error) {
+        captureError(error, { context: 'updateUsersTeamBatch', count: uids.length });
+        throw error;
     }
 };
 

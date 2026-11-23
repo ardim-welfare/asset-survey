@@ -3,7 +3,7 @@
  */
 import {
     collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
-    serverTimestamp,
+    serverTimestamp, writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { captureError } from '../sentry';
@@ -66,6 +66,53 @@ export const deletePreRegisteredEmployee = async (orgId: string, preRegId: strin
         await deleteDoc(doc(db, 'organizations', orgId, 'preRegistered', preRegId));
     } catch (error) {
         captureError(error, { context: 'deletePreRegisteredEmployee', orgId, preRegId });
+        throw error;
+    }
+};
+
+/** 한 배치에 담는 쓰기 수 — Firestore 한도(500)보다 넉넉히 작게 */
+const BATCH_LIMIT = 400;
+
+async function inBatches<T>(items: T[], write: (batch: ReturnType<typeof writeBatch>, item: T) => void): Promise<void> {
+    for (let i = 0; i < items.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        items.slice(i, i + BATCH_LIMIT).forEach((item) => write(batch, item));
+        await batch.commit();
+    }
+}
+
+/** 여러 명 한꺼번에 미리 등록(2026-11-23) — 이름·이메일은 미리 검사해 넘긴다 */
+export const addPreRegisteredBatch = async (
+    orgId: string, rows: Array<{ name: string; email: string; teamId: string | null }>,
+): Promise<void> => {
+    try {
+        await inBatches(rows, (batch, r) => {
+            batch.set(doc(collection(db, 'organizations', orgId, 'preRegistered')), {
+                name: r.name.trim(), email: r.email.trim().toLowerCase(), teamId: r.teamId, createdAt: serverTimestamp(),
+            });
+        });
+    } catch (error) {
+        captureError(error, { context: 'addPreRegisteredBatch', orgId, count: rows.length });
+        throw error;
+    }
+};
+
+/** 가입 대기 여러 명의 팀을 한꺼번에(2026-11-23) */
+export const updatePreRegisteredTeamBatch = async (orgId: string, ids: string[], teamId: string | null): Promise<void> => {
+    try {
+        await inBatches(ids, (batch, id) => batch.update(doc(db, 'organizations', orgId, 'preRegistered', id), { teamId }));
+    } catch (error) {
+        captureError(error, { context: 'updatePreRegisteredTeamBatch', orgId, count: ids.length });
+        throw error;
+    }
+};
+
+/** 가입 대기 여러 명을 한꺼번에 취소(2026-11-23) */
+export const deletePreRegisteredBatch = async (orgId: string, ids: string[]): Promise<void> => {
+    try {
+        await inBatches(ids, (batch, id) => batch.delete(doc(db, 'organizations', orgId, 'preRegistered', id)));
+    } catch (error) {
+        captureError(error, { context: 'deletePreRegisteredBatch', orgId, count: ids.length });
         throw error;
     }
 };
