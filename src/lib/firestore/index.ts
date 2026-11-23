@@ -28,6 +28,7 @@ export {
     addPreRegisteredBatch,
     updatePreRegisteredTeamBatch,
     deletePreRegisteredBatch,
+    sendInviteEmails,
 } from './preRegistered';
 
 // 기관 (Organizations)

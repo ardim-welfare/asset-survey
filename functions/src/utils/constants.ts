@@ -19,6 +19,8 @@ export const DEFAULT_RATE_LIMITS = {
     // 초대 코드 재발급 — 정상 사용은 기관당 몇 달에 한 번. 상한은 코드를 계속 돌려
     // 직원 가입을 방해하는 남용만 막으면 된다.
     regenerateInviteCode: { max: 5, windowSec: 3600 },        // uid당 시간당 5회
+    // 초대 메일(2026-11-23) — 한 번에 100명까지 보내므로 호출 수는 적다. 메일 폭탄 남용만 막는다.
+    sendInviteEmails: { max: 10, windowSec: 3600 },           // uid당 시간당 10회
 } as const;
 
 export type RateLimitKey = keyof typeof DEFAULT_RATE_LIMITS;

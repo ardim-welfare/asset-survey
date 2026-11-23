@@ -108,6 +108,7 @@ describe('useAssetImport', () => {
     it('비교 단계: 위치를 공간에 미리 연결하고, 확정하면 저장을 부른다', async () => {
         const { result } = renderHook(() => useAssetImport());
         await act(async () => { await result.current.pickFile(fakeFile()); });
+        mockConfirm.mockResolvedValueOnce(true); // 자주 쓰는 열을 빠뜨렸다는 물음에 "그대로 진행"
         await act(async () => { await result.current.goCompare(); });
 
         expect(result.current.step).toBe('compare');
@@ -130,6 +131,7 @@ describe('useAssetImport', () => {
     it('확정을 취소하면 저장하지 않고, 저장이 실패하면 비교 단계로 돌아와 다시 하라고 안내한다', async () => {
         const { result } = renderHook(() => useAssetImport());
         await act(async () => { await result.current.pickFile(fakeFile()); });
+        mockConfirm.mockResolvedValueOnce(true); // 자주 쓰는 열을 빠뜨렸다는 물음에 "그대로 진행"
         await act(async () => { await result.current.goCompare(); });
 
         mockConfirm.mockResolvedValueOnce(false);
@@ -148,6 +150,7 @@ describe('useAssetImport', () => {
         vi.mocked(firestore.createSpace).mockResolvedValue('sp-new');
         const { result } = renderHook(() => useAssetImport());
         await act(async () => { await result.current.pickFile(fakeFile()); });
+        mockConfirm.mockResolvedValueOnce(true); // 자주 쓰는 열을 빠뜨렸다는 물음에 "그대로 진행"
         await act(async () => { await result.current.goCompare(); });
         expect(result.current.locationMap['창고']).toBeUndefined();
 
@@ -164,10 +167,21 @@ describe('useAssetImport', () => {
         vi.mocked(firestore.createSpace).mockResolvedValue('sp-new');
         const { result } = renderHook(() => useAssetImport());
         await act(async () => { await result.current.pickFile(fakeFile()); });
+        mockConfirm.mockResolvedValueOnce(true); // 자주 쓰는 열을 빠뜨렸다는 물음에 "그대로 진행"
         await act(async () => { await result.current.goCompare(); });
 
         await act(async () => { await result.current.createSpaceFor('본관 2층 창고', '본관 2층 창고'); });
         expect(firestore.createSpace).toHaveBeenCalledWith('org-A', '창고', 2, { buildingId: 'b1', floor: '2' });
         expect(result.current.locationMap['본관 2층 창고']).toBe('sp-new');
     });
+
+    it('자주 쓰는 열(분류·수량 등)을 빠뜨렸으면 비교 단계로 가기 전에 묻고, [돌아가서 연결]이면 머문다(2026-11-23)', async () => {
+        const { result } = renderHook(() => useAssetImport());
+        await act(async () => { await result.current.pickFile(fakeFile()); });
+        mockConfirm.mockResolvedValueOnce(false);
+        await act(async () => { await result.current.goCompare(); });
+        expect(mockConfirm).toHaveBeenLastCalledWith(expect.objectContaining({ title: '자주 쓰는 열을 연결하지 않았습니다', cancelText: '돌아가서 연결' }));
+        expect(result.current.step).toBe('map');
+    });
+
 });

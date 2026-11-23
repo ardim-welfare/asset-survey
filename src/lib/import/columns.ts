@@ -45,6 +45,17 @@ export const IMPORT_FIELDS: ImportFieldDef[] = [
     { field: 'usage', label: '용도', aliases: ['용도', '자산명세', '명세', '비고'] },
 ];
 
+/**
+ * 꼭 필요하진 않지만 거의 모든 대장에 있는 열(2026-11-23) — 연결하지 않으면 가져오기 전에 한 번 묻는다.
+ * 시범 기관 첫 가져오기에서 분류·현재수량을 연결하지 않아 2,942건 모두 이 칸이 비어 들어갔다.
+ */
+export const RECOMMENDED_FIELDS: ImportField[] = ['category', 'quantity', 'acquiredAt', 'amount', 'status', 'location'];
+
+/** 연결하지 않은 자주 쓰는 열 */
+export function missingRecommended(columnMap: Partial<Record<ImportField, string>>): ImportField[] {
+    return RECOMMENDED_FIELDS.filter((f) => !columnMap[f]);
+}
+
 export const FIELD_DEF: Record<ImportField, ImportFieldDef> =
     Object.fromEntries(IMPORT_FIELDS.map((d) => [d.field, d])) as Record<ImportField, ImportFieldDef>;
 

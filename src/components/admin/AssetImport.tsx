@@ -8,7 +8,7 @@ import { useState, type ChangeEvent } from 'react';
 import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { useNavigate } from 'react-router-dom';
 import useAssetImport from '../../hooks/useAssetImport';
-import { IMPORT_FIELDS, type ImportField } from '../../lib/import/columns';
+import { IMPORT_FIELDS, FIELD_DEF, missingRecommended, type ImportField } from '../../lib/import/columns';
 import { ASSET_STATUS_LABEL } from '../../lib/import/values';
 import { downloadImportTemplate } from '../../lib/import/template';
 import { useToast } from '../../hooks/useToast';
@@ -262,6 +262,14 @@ function MapSection({ im, locked }: { im: Im; locked: boolean }) {
                 </ul>
                 {unusedHeaders.length > 0 && (
                     <p className={`${sub} mt-3`}>가져오지 않는 열: {unusedHeaders.join(', ')}</p>
+                )}
+                {/* 자주 쓰는 열을 빠뜨렸으면 미리 알린다(다음 단계로 갈 때도 한 번 묻는다) */}
+                {!locked && missingRecommended(im.columnMap).length > 0 && (
+                    <p className="mt-3 text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
+                        <span aria-hidden="true">⚠️ </span>
+                        <b>{missingRecommended(im.columnMap).map((f) => FIELD_DEF[f].label).join(', ')}</b> 열을 연결하지 않았습니다.
+                        엑셀에 이런 열이 있으면 위에서 골라 주세요. 없으면 그대로 두셔도 됩니다.
+                    </p>
                 )}
             </div>
 

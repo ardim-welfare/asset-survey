@@ -11,7 +11,9 @@ import {
     getOrganizationMembers, getOrganization, regenerateInviteCode, updateUser, getPreRegisteredEmployees, addPreRegisteredEmployee,
     deletePreRegisteredEmployee, updatePreRegisteredTeam, recheckDeniedTarget,
     updateUsersTeamBatch, addPreRegisteredBatch, updatePreRegisteredTeamBatch, deletePreRegisteredBatch,
+    sendInviteEmails,
 } from '../lib/firestore';
+import type { PreRegisteredEmployee } from '../lib/firestore/preRegistered';
 import { invalidateCache } from '../lib/firestore/cache';
 import type { User, UserRole, MemberStatus, UnifiedMember } from '../types/user';
 import type { Organization } from '../types/organization';
@@ -45,7 +47,7 @@ export default function useEmployeeManager() {
     const { runWithRetry } = useRetry();
     const [employees, setEmployees] = useState<User[]>([]);
     const [disabledEmployees, setDisabledEmployees] = useState<User[]>([]);
-    const [preRegisteredEmployees, setPreRegisteredEmployees] = useState<{ id: string; name: string; email: string; teamId?: string | null; createdAt: unknown }[]>([]);
+    const [preRegisteredEmployees, setPreRegisteredEmployees] = useState<PreRegisteredEmployee[]>([]);
     const [organization, setOrganization] = useState<Organization | null>(null);
     const [loading, setLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
@@ -453,6 +455,43 @@ export default function useEmployeeManager() {
     };
 
     /**
+     * 가입 대기 직원에게 초대 메일 보내기(2026-11-23).
+     * 미리 등록만 하고 링크를 따로 보내지 않아 아무도 가입하지 않은 일이 있었다. 메일에는 가입 링크와
+     * "이 주소의 구글 계정으로 로그인" 안내가 들어간다. 10분 안에 이미 보낸 사람은 서버가 건너뛴다.
+     */
+    const bulkSendInvites = async (ids: string[]): Promise<boolean> => {
+        if (!orgId || ids.length === 0) return false;
+        const picked = preRegisteredEmployees.filter((p) => ids.includes(p.id));
+        const names = picked.map((p) => p.name || p.email);
+        const again = picked.filter((p) => p.invitedAt).length;
+        const ok = await confirm({
+            title: `${ids.length}명에게 초대 메일을 보낼까요?`,
+            message: `${names.slice(0, 5).join(', ')}${names.length > 5 ? ` 외 ${names.length - 5}명` : ''}\n`
+                + '미리 등록한 이메일로 가입 링크를 보냅니다. 받은 사람은 그 이메일의 구글 계정으로 로그인하면 바로 가입됩니다.'
+                + (again > 0 ? `\n${again}명은 전에 보낸 적이 있습니다(10분 안에 보낸 사람은 건너뜁니다).` : ''),
+            confirmText: '메일 보내기',
+        });
+        if (!ok) return false;
+        try {
+            const r = await sendInviteEmails(orgId, ids);
+            const extra = [r.skipped > 0 ? `${r.skipped}명은 방금 보내서 건너뜀` : '', r.failed > 0 ? `${r.failed}명 실패` : ''].filter(Boolean).join(', ');
+            if (r.sent === 0 && r.failed > 0) {
+                showToast(`초대 메일을 보내지 못했습니다(${extra}). 잠시 뒤 다시 누르거나 초대 링크를 복사해 보내 주세요.`, 'error');
+            } else {
+                showToast(`${r.sent}명에게 초대 메일을 보냈습니다.${extra ? ` (${extra})` : ''}`, r.failed > 0 ? 'warning' : 'success');
+            }
+            await fetchData();
+            return r.sent > 0;
+        } catch (err) {
+            const code = (err as { code?: string })?.code ?? '';
+            const msg = (err as { message?: string })?.message ?? '';
+            showToast(code.endsWith('failed-precondition') || code.endsWith('resource-exhausted') ? msg
+                : '초대 메일을 보내지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
+            return false;
+        }
+    };
+
+    /**
      * 여러 명 한꺼번에 미리 등록 — 한 줄에 "이름, 이메일, 팀"(쉼표·탭, 팀은 생략 가능).
      * 엑셀에서 세 칸을 복사하면 탭으로 나뉘어 온다. 팀 이름이 없거나 모르는 팀이면 기본 팀을 쓴다.
      * 이메일 형식이 틀렸거나 이미 등록·가입한 이메일, 같은 목록 안의 겹친 이메일은 건너뛰고 알린다.
@@ -510,7 +549,7 @@ export default function useEmployeeManager() {
 
     return {
         statusFilter: effectiveStatus, setStatusFilter,
-        bulkAssignTeam, bulkDeletePending, addPreRegisteredMany,
+        bulkAssignTeam, bulkDeletePending, addPreRegisteredMany, bulkSendInvites,
         employees, disabledEmployees, preRegisteredEmployees, organization, loading,
         showAddForm, setShowAddForm,
         newEmployee, setNewEmployee,

@@ -37,8 +37,8 @@ export default function EmployeeManager() {
         regenerating,
         editingId, setEditingId, editForm, setEditForm,
         searchQuery, setSearchQuery, teamFilter, setTeamFilter, statusFilter, setStatusFilter,
-        filteredUnifiedList, unifiedList, stats, employees,
-        bulkAssignTeam, bulkDeletePending, addPreRegisteredMany,
+        filteredUnifiedList, unifiedList, stats, employees, preRegisteredEmployees,
+        bulkAssignTeam, bulkDeletePending, addPreRegisteredMany, bulkSendInvites,
         handleAddEmployee, handleCopyInviteCode, handleRegenerateCode,
         handleEditEmployee, handleSaveEdit, handleDeleteEmployee, handleChangeRole,
         handleDeletePreRegistered, handleRestoreEmployee, handleDeletePermanently, handleChangeTeam, handleChangePendingTeam,
@@ -70,6 +70,8 @@ export default function EmployeeManager() {
     // 목록에서 사라진 사람(삭제·가입으로 상태가 바뀜)은 고른 목록에서도 뺀다
     const pickedMembers = unifiedList.filter((m) => selected.has(keyOf(m)));
     const pickedPending = pickedMembers.filter((m) => m.memberStatus === 'pending').map((m) => m.id);
+    // 초대 메일을 한 번도 안 보낸 가입 대기 직원
+    const notInvited = preRegisteredEmployees.filter((p) => !p.invitedAt).map((p) => p.id);
     const pickedShown = filteredUnifiedList.filter((m) => selected.has(keyOf(m))).length;
     const allShownPicked = filteredUnifiedList.length > 0 && pickedShown === filteredUnifiedList.length;
     const editingMember = editingKey ? unifiedList.find((m) => keyOf(m) === editingKey) ?? null : null;
@@ -221,6 +223,13 @@ export default function EmployeeManager() {
                     {(statusFilter === 'pending' || statusFilter === 'all') && stats.pending > 0 && (
                         <p className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 mb-3">
                             <b className="font-semibold">가입 대기</b>는 미리 등록만 하고 아직 가입하지 않은 사람입니다. 초대 링크로 같은 이메일(구글 계정)로 가입하면 이름과 팀이 저절로 들어가고 '활성'이 됩니다.
+                            {' '}아직 메일을 안 보낸 사람에게는 아래에서 골라 [초대 메일 보내기]를 누르세요.
+                            {notInvited.length > 0 && (
+                                <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3 mt-2 block"
+                                    onClick={() => void bulkSendInvites(notInvited)}>
+                                    ✉️ 아직 안 보낸 {notInvited.length}명 모두에게 초대 메일 보내기
+                                </button>
+                            )}
                         </p>
                     )}
                 </>
@@ -289,6 +298,12 @@ export default function EmployeeManager() {
                             {teams.activeTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                             <option value={NO_TEAM}>팀 비우기</option>
                         </select>
+                        {pickedPending.length > 0 && (
+                            <button type="button" className="btn-primary btn-sm min-h-[44px] px-3"
+                                onClick={() => void bulkSendInvites(pickedPending).then((ok) => { if (ok) setSelected(new Set()); })}>
+                                ✉️ 초대 메일 보내기 ({pickedPending.length}명)
+                            </button>
+                        )}
                         {pickedPending.length > 0 && (
                             <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3 text-red-700 dark:text-red-300"
                                 onClick={() => void bulkDeletePending(pickedPending).then((ok) => { if (ok) setSelected(new Set()); })}>

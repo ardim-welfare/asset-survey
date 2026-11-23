@@ -25,6 +25,7 @@ export { sendManualRejectionAlimtalk } from "./handlers/callable/sendManualRejec
 // ── 기관 합류·초대 코드·약관 ──
 export { joinOrganization } from "./handlers/callable/joinOrganization";
 export { regenerateInviteCode } from "./handlers/callable/regenerateInviteCode";
+export { sendInviteEmails } from "./handlers/callable/sendInviteEmails";
 export { acceptCurrentTerms } from "./handlers/callable/acceptCurrentTerms";
 export { trackFirstEmployee } from "./handlers/triggers/trackFirstEmployee";
 

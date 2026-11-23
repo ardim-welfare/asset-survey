@@ -80,6 +80,7 @@ const mockAddPreRegisteredBatch = vi.fn().mockResolvedValue(undefined);
 const mockUpdateUsersTeamBatch = vi.fn().mockResolvedValue(undefined);
 const mockUpdatePreRegisteredTeamBatch = vi.fn().mockResolvedValue(undefined);
 const mockDeletePreRegisteredBatch = vi.fn().mockResolvedValue(undefined);
+const mockSendInviteEmails = vi.fn();
 
 const actualUsers = await vi.importActual<typeof import('../../lib/firestore/users')>('../../lib/firestore/users');
 
@@ -98,6 +99,7 @@ vi.mock('../../lib/firestore', () => ({
     updateUsersTeamBatch: (...args: unknown[]) => mockUpdateUsersTeamBatch(...args),
     updatePreRegisteredTeamBatch: (...args: unknown[]) => mockUpdatePreRegisteredTeamBatch(...args),
     deletePreRegisteredBatch: (...args: unknown[]) => mockDeletePreRegisteredBatch(...args),
+    sendInviteEmails: (...args: unknown[]) => mockSendInviteEmails(...args),
 }));
 
 import useEmployeeManager from '../../hooks/useEmployeeManager';
@@ -183,6 +185,28 @@ describe('useEmployeeManager', () => {
         expect(mockDeletePreRegisteredBatch).not.toHaveBeenCalled();
         await act(async () => { await result.current.bulkDeletePending(['p1', 'p2']); });
         expect(mockDeletePreRegisteredBatch).toHaveBeenCalledWith('org1', ['p1', 'p2']);
+    });
+
+    it('초대 메일은 확인을 받고 보내며, 건너뛴 사람·실패를 알린다(2026-11-23)', async () => {
+        const { result } = renderHook(() => useEmployeeManager());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        mockConfirm.mockResolvedValueOnce(false);
+        await act(async () => { await result.current.bulkSendInvites(['p1']); });
+        expect(mockSendInviteEmails).not.toHaveBeenCalled();
+
+        mockConfirm.mockResolvedValueOnce(true);
+        mockSendInviteEmails.mockResolvedValueOnce({ sent: 2, skipped: 1, failed: 0 });
+        let ok = false;
+        await act(async () => { ok = await result.current.bulkSendInvites(['p1', 'p2', 'p3']); });
+        expect(ok).toBe(true);
+        expect(mockSendInviteEmails).toHaveBeenCalledWith('org1', ['p1', 'p2', 'p3']);
+        expect(mockShowToast).toHaveBeenLastCalledWith(expect.stringMatching(/2명에게 초대 메일을 보냈습니다.*1명은 방금 보내서 건너뜀/), 'success');
+
+        mockConfirm.mockResolvedValueOnce(true);
+        mockSendInviteEmails.mockRejectedValueOnce(Object.assign(new Error('메일 발송 설정이 아직 되어 있지 않습니다.'), { code: 'functions/failed-precondition' }));
+        await act(async () => { ok = await result.current.bulkSendInvites(['p1']); });
+        expect(ok).toBe(false);
+        expect(mockShowToast).toHaveBeenLastCalledWith('메일 발송 설정이 아직 되어 있지 않습니다.', 'error');
     });
 
     it('검색 필터가 동작한다', async () => {

@@ -25,6 +25,11 @@ export default function EmployeeRow({ member, checked, onCheck, teamName, isSelf
     const who = member.name || member.email || '이름 없음';
     const team = teamName((member.original as { teamId?: string | null }).teamId ?? null);
     const status = STATUS[member.memberStatus];
+    // 가입 대기 직원에게 초대 메일을 보낸 날(2026-11-23)
+    const invitedAt = member.memberStatus === 'pending'
+        ? (member.original as { invitedAt?: { toDate?: () => Date } | null }).invitedAt?.toDate?.()
+        : undefined;
+    const invitedText = invitedAt ? `${invitedAt.getMonth() + 1}/${invitedAt.getDate()}` : null;
     return (
         <li className={`flex items-center gap-1 pr-2 ${checked ? 'bg-primary-50/70 dark:bg-primary-900/20' : ''}`}>
             <label className="w-11 h-11 flex items-center justify-center flex-shrink-0 cursor-pointer">
@@ -41,6 +46,7 @@ export default function EmployeeRow({ member, checked, onCheck, teamName, isSelf
                 <p className="text-xs text-surface-600 dark:text-surface-400 break-all">
                     {member.email || '이메일 없음'}
                     <span className="break-keep"> · {team ? `👥 ${team}` : '팀 없음'}</span>
+                    {invitedText && <span className="break-keep"> · ✉️ {invitedText} 초대 메일 보냄</span>}
                 </p>
             </div>
             <button type="button" onClick={onEdit} className="btn-secondary btn-sm min-h-[44px] px-3 flex-shrink-0" aria-label={`${who} 고치기`}>

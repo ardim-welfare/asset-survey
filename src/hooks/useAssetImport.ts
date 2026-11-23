@@ -14,7 +14,7 @@ import {
 } from '../lib/firestore';
 import { matchSpaceByLocation, parseLocation } from '../lib/import/locationMatch';
 import { readWorkbook, toImportTable, parseAssets, blockingReasons, type SheetTable } from '../lib/import/parseSheet';
-import { autoMapColumns, type ColumnMap, type ImportField } from '../lib/import/columns';
+import { autoMapColumns, type ColumnMap, type ImportField, missingRecommended, FIELD_DEF } from '../lib/import/columns';
 import { diffAssets, countByLocation, type LocationSpaceMap } from '../lib/import/diff';
 import { captureError } from '../lib/sentry';
 import type { Space } from '../types/space';
@@ -172,6 +172,18 @@ export default function useAssetImport() {
     /** 다음 단계 — 앱에 있는 재물·공간을 읽어 비교를 준비한다 */
     const goCompare = useCallback(async () => {
         if (!orgId || !parsed || blockers.length > 0) return;
+        // 자주 쓰는 열을 빠뜨렸으면 한 번 묻는다 — 그대로 가져오면 모든 재물에서 그 칸이 빈다(2026-11-23)
+        const missing = missingRecommended(columnMap);
+        if (missing.length > 0) {
+            const names = missing.map((f) => FIELD_DEF[f].label).join(', ');
+            const ok = await confirm({
+                title: '자주 쓰는 열을 연결하지 않았습니다',
+                message: `${names} 열을 연결하지 않았습니다. 이대로 가져오면 모든 재물에서 이 칸이 비어 있습니다.\n엑셀에 이런 열이 있으면 [돌아가서 연결]을 누르고 '열 연결'에서 고르세요. 없으면 그대로 진행하세요.`,
+                confirmText: '그대로 진행',
+                cancelText: '돌아가서 연결',
+            });
+            if (!ok) return;
+        }
         setWorking(true);
         setError('');
         try {
@@ -189,7 +201,7 @@ export default function useAssetImport() {
         } finally {
             setWorking(false);
         }
-    }, [orgId, parsed, blockers, locations, org]);
+    }, [orgId, parsed, blockers, locations, org, columnMap, confirm]);
 
     const backToMap = useCallback(() => setStep('map'), []);
 
