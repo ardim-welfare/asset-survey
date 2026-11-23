@@ -81,6 +81,9 @@ export {
     getRecentBroadcasts,
 } from './broadcasts';
 
+// 앱 오류 기록 (superAdmin 전용)
+export { getRecentClientErrors } from './clientErrors';
+
 // 접속기록 (Audit Logs) — 기관 관리자 점검용 읽기 전용
 export {
     getAuditLogs,

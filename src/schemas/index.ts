@@ -7,6 +7,7 @@ export * from './user';
 export * from './organization';
 export * from './auditLog';
 export * from './broadcast';
+export * from './clientError';
 export * from './space';
 export * from './building';
 export * from './assetCheck';

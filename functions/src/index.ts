@@ -26,6 +26,7 @@ export { sendManualRejectionAlimtalk } from "./handlers/callable/sendManualRejec
 export { joinOrganization } from "./handlers/callable/joinOrganization";
 export { regenerateInviteCode } from "./handlers/callable/regenerateInviteCode";
 export { sendInviteEmails } from "./handlers/callable/sendInviteEmails";
+export { reportClientError } from "./handlers/callable/reportClientError";
 export { acceptCurrentTerms } from "./handlers/callable/acceptCurrentTerms";
 export { trackFirstEmployee } from "./handlers/triggers/trackFirstEmployee";
 

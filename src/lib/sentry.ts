@@ -1,5 +1,6 @@
 import { isFirestoreTerminated } from './firestoreLifecycle';
 import { scrubContext, scrubConsoleArgs, joinConsoleArgs, scrubUrl, scrubDomTarget, scrubSpanAttributes, scrubSpanName } from './sentryScrub';
+import { reportClientError, listenForUncaughtErrors } from './errorReport';
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
 
@@ -38,7 +39,9 @@ function isLoopbackProductionBuild(): boolean {
 }
 
 export function initSentry() {
-    if (!SENTRY_DSN || sentryLoading || isLoopbackProductionBuild()) return;
+    // Sentry를 쓰지 않으면 처리하지 못한 오류를 자체 오류 기록(errorReport)으로 보낸다(2026-11-23)
+    if (!SENTRY_DSN) { listenForUncaughtErrors(); return; }
+    if (sentryLoading || isLoopbackProductionBuild()) return;
 
     sentryLoading = import('./sentryClient')
         .then((Sentry) => {
@@ -488,6 +491,9 @@ export function captureError(error: unknown, context: Record<string, unknown> = 
         // 사용자 없이 나갔다(JAVASCRIPT-REACT-66 "0 users"). 미루는 것은 로드 중일 때뿐이다.
         if (sentry) sentry.captureException(error, { extra: safeContext });
         else sentryLoading.then((Sentry) => Sentry?.captureException(error, { extra: safeContext }));
+    } else if (!SENTRY_DSN) {
+        // Sentry를 쓰지 않을 때의 최소 오류 기록 — 오류 요약만, context는 기능 이름만 보낸다
+        reportClientError(error, context);
     }
     console.error(error);
 }

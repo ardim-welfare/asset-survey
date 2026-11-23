@@ -2,9 +2,9 @@
 
 > **자동 생성 문서** — `scripts/generate-functions-doc.ts`로 생성됨
 >
-> 마지막 업데이트: 2026. 11. 23. 오후 8:59:01
+> 마지막 업데이트: 2026. 11. 23. 오후 9:58:43
 >
-> 총 함수 수: **36개**
+> 총 함수 수: **37개**
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 📞 onCall (클라이언트 직접 호출)
 
-> 총 24개
+> 총 25개
 
 ### `ocrDocument`
 
@@ -73,6 +73,16 @@
 | **인증** | 해당 기관 관리자(클레임 `role=admin` + `orgId` 일치) 또는 superAdmin |
 | **요청 파라미터** | `{ organizationId: string; preRegIds: string[] }` |
 | **반환값** | `{ sent: number; skipped: number; failed: number }` |
+
+### `reportClientError`
+
+| 항목 | 내용 |
+|------|------|
+| **파일** | `functions/src/handlers/callable/reportClientError.ts` |
+| **설명** | 앱 화면에서 난 오류 요약(이름·문구·기능·코드·스택 앞부분·화면 경로·버전)을 받아 같은 오류끼리 `clientErrors/{묶음 열쇠}`에 횟수·처음/마지막 시각·브라우저 종류·겪은 기관과 함께 센다. Sentry를 쓰지 않아 생긴 운영 관측 공백을 메운다. 이메일·전화번호·긴 ID는 지우고 uid는 받지 않으며, 기관은 로그인 토큰에서만 읽는다. 30일 TTL(expiresAt). 로그인 전 오류도 받도록 인증·App Check를 요구하지 않고 IP당 시간당 60회·전역 시간당 600회로 막는다. 한도 초과·저장 실패도 오류를 던지지 않는다. |
+| **인증** | 없음(로그인 전 화면 포함) — IP·전역 상한 |
+| **요청 파라미터** | `{ name?, message, where?, code?, stack?, path?, version? }` |
+| **반환값** | `{ ok: boolean }` |
 
 ### `acceptCurrentTerms`
 

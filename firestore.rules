@@ -685,6 +685,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 앱 오류 기록(2026-11-23) — reportClientError(Admin SDK)만 쓴다. 개인정보를 뺀 오류 요약이고
+    // 30일 TTL(expiresAt)로 지워진다. 슈퍼관리자만 읽는다.
+    match /clientErrors/{errorId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
     // === 피드백 ===
     //
     // create가 `isSignedIn()` 하나였을 때, 로그인한 누구나 이 컬렉션에 문서를 무제한으로

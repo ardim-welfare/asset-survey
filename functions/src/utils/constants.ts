@@ -45,6 +45,8 @@ export const GLOBAL_BUDGETS = {
     feedbackAlert: { max: 200, windowSec: 86400 },
     /** 의견 등록 알림 — 작성자 1인당 일일 상한 */
     feedbackAlertPerAuthor: { max: 20, windowSec: 86400 },
+    /** 앱 오류 보고(2026-11-23) — 보고마다 Firestore 쓰기 1~3회. 정상은 시간당 몇 건이다. */
+    reportClientError: { max: 600, windowSec: 3600 },
 } as const;
 type RateLimitConfig = { max: number; windowSec: number };
 

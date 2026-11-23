@@ -27,6 +27,7 @@ import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https
 import { log, wrapHandler } from "../../utils/helpers";
 import { checkRateLimitByUid } from "../../utils/rateLimit";
 import { resolveClientIp } from "../../utils/clientIp";
+import { summarizeUserAgent } from "../../utils/userAgent";
 import { writeAuditEntry, resolveOrgId } from "../../services/audit/writeAuditEntry";
 
 /** 세션 식별자 형식 — 클라이언트가 생성하는 난수. 문서 ID에 들어가므로 좁게 제한한다. */
@@ -53,37 +54,6 @@ function clientIp(req: { headers: Record<string, unknown>; ip?: string } | undef
     if (!req) return null;
     const resolved = resolveClientIp(req);
     return resolved === "unknown" ? null : resolved;
-}
-
-/**
- * User-Agent를 브라우저·OS 수준으로 축약한다.
- *
- * 원문을 그대로 저장하면 기기 지문에 가까워져 접속기록 자체가 과잉 수집이 된다.
- * 비정상 접근 탐지에는 "어떤 브라우저·OS에서 들어왔는가"면 충분하다.
- */
-function summarizeUserAgent(ua: unknown): string {
-    if (typeof ua !== "string" || !ua) return "unknown";
-
-    const os =
-        /Android/i.test(ua) ? "Android"
-            : /iPhone|iPad|iPod/i.test(ua) ? "iOS"
-                : /Windows/i.test(ua) ? "Windows"
-                    : /Mac OS X|Macintosh/i.test(ua) ? "macOS"
-                        : /Linux/i.test(ua) ? "Linux"
-                            : "기타";
-
-    // 순서 주의 — Edge/Samsung/Chrome은 UA에 서로를 포함하므로 좁은 것부터 본다.
-    const browser =
-        /Edg\//i.test(ua) ? "Edge"
-            : /SamsungBrowser/i.test(ua) ? "Samsung Internet"
-                : /OPR\//i.test(ua) ? "Opera"
-                    : /Whale/i.test(ua) ? "Whale"
-                        : /Chrome\//i.test(ua) ? "Chrome"
-                            : /Firefox\//i.test(ua) ? "Firefox"
-                                : /Safari\//i.test(ua) ? "Safari"
-                                    : "기타";
-
-    return `${browser} / ${os}`;
 }
 
 export const recordSession = onCall(

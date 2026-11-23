@@ -32,6 +32,8 @@ const PUBLIC_EXEMPT: Record<string, string> = {
         '비로그인 공개 폼(/apply). 강제 시 기관신청 유입이 막히는 획득 경로',
     'https/submitPublicFeedback.ts':
         '비로그인 공개 피드백 폼. 위와 동일',
+    'callable/reportClientError.ts':
+        '앱 오류 기록(2026-11-23). App Check 실패·인앱 브라우저·로그인 전 화면의 오류도 받아야 한다. IP·전역 상한으로 막는다',
 };
 
 /**

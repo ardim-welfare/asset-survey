@@ -199,6 +199,7 @@ export default defineConfig([
       'src/lib/firestore/preRegistered.ts',
       'src/lib/firestore/cache.ts',
       'src/lib/firestore/broadcasts.ts',
+      'src/lib/firestore/clientErrors.ts',
     ],
     plugins: {
       local: { rules: { 'require-organization-filter': requireOrganizationFilter } },

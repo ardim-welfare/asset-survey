@@ -371,6 +371,25 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
     await assertFails(superAdmin.collection('broadcasts').doc('bc_1').delete());
   });
 
+  it('10-6. 앱 오류 기록(clientErrors) — 클라이언트 쓰기 전면 차단, 읽기는 운영자만 (2026-11-23)', async () => {
+    // reportClientError(Admin SDK)만 기록한다. 기관 관리자가 읽으면 다른 기관이 겪은 오류가 보인다.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('clientErrors').doc('e_1').set({
+        name: 'TypeError', message: 'x is undefined', where: 'getAssets', count: 3, orgIds: ['org-A'],
+      });
+    });
+
+    const superAdmin = setupContext('sa_1', { role: 'superAdmin' }).firestore();
+    const adminA = setupContext('admin_A', { role: 'admin', orgId: 'org-A' }).firestore();
+
+    await assertSucceeds(superAdmin.collection('clientErrors').doc('e_1').get());
+    await assertFails(adminA.collection('clientErrors').doc('e_1').get());
+    // 운영자도 쓰지 못한다 — 기록은 서버 함수만 남긴다
+    await assertFails(superAdmin.collection('clientErrors').doc('e_2').set({ message: '위조' }));
+    await assertFails(adminA.collection('clientErrors').doc('e_1').update({ count: 0 }));
+    await assertFails(superAdmin.collection('clientErrors').doc('e_1').delete());
+  });
+
   it('11. 비밀 사용자 데이터(users/{uid}/private) — 본인·같은 기관 모두 접근 차단 (Functions 전용)', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await context.firestore().doc('users/user_A/private/oauth').set({
