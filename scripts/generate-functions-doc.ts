@@ -75,6 +75,15 @@ const FUNCTIONS: FunctionEntry[] = [
     returns: '{ inviteCode: string }',
   },
   {
+    name: 'sendInviteEmails',
+    type: 'onCall',
+    file: 'handlers/callable/sendInviteEmails.ts',
+    description: '가입 대기(사전 등록) 직원에게 초대 메일(가입 링크·"이 주소의 구글 계정으로 로그인" 안내)을 Gmail로 보낸다. 받는 주소는 요청이 아니라 사전 등록 문서에서 읽어 임의 주소로 시스템 메일을 보내지 못하게 한다. 승인된 기관·초대 코드가 있을 때만, 한 번에 100명까지. 10분 안에 보낸 사람은 건너뛰고, 보낸 사람 문서에 `invitedAt`·`inviteCount`를 남긴다.',
+    auth: '해당 기관 관리자(클레임 `role=admin` + `orgId` 일치) 또는 superAdmin',
+    params: '{ organizationId: string; preRegIds: string[] }',
+    returns: '{ sent: number; skipped: number; failed: number }',
+  },
+  {
     name: 'acceptCurrentTerms',
     type: 'onCall',
     file: 'handlers/callable/acceptCurrentTerms.ts',
