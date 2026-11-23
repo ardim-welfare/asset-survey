@@ -45,6 +45,7 @@ vi.mock('firebase/firestore', () => ({
         };
     }),
     serverTimestamp: vi.fn(() => '__ts__'),
+    Timestamp: { fromMillis: (ms: number) => ({ ms }) },
 }));
 vi.mock('../../../lib/firebase', () => ({ db: {}, auth: { currentUser: { uid: 'admin-1' } } }));
 vi.mock('../../../lib/sentry', () => ({ captureError: vi.fn() }));
@@ -53,6 +54,7 @@ import * as fs from 'firebase/firestore';
 import {
     commitImport, getAssets, getAssetCounts, issueTags, findAssetByTag, getAssetsBySpaces, getAssetHistory,
     createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, moveAssetsToSpace,
+    clearAssetSnapshots, ASSET_FULL_REFRESH_MS,
 } from '../../../lib/firestore/assets';
 import { diffAssets } from '../../../lib/import/diff';
 import type { ParsedAsset, ParseResult } from '../../../lib/import/parseSheet';
@@ -71,6 +73,7 @@ const parsedOf = (rows: ParsedAsset[]): ParseResult => ({
 
 beforeEach(() => {
     vi.clearAllMocks();
+    clearAssetSnapshots();
     batches.length = 0;
     autoId = 0;
 });
@@ -145,6 +148,51 @@ describe('조회', () => {
         vi.mocked(fs.getDocs).mockResolvedValue({ docs: [] } as never);
         await getAssets('org-A');
         expect(fs.where).toHaveBeenCalledWith('organizationId', '==', 'org-A');
+    });
+
+    it('getAssets는 두 번째부터 바뀐 재물만 읽어 기억한 목록에 더한다(2026-11-23)', async () => {
+        const at = (ms: number) => ({ toMillis: () => ms });
+        const snapOf = (list: Array<Record<string, unknown>>) => ({ docs: list.map((a) => ({ data: () => a })) });
+        vi.mocked(fs.getDocs)
+            .mockResolvedValueOnce(snapOf([
+                { id: 'org-A__2', code: '2', name: '냉장고', updatedAt: at(5_000_000) },
+                { id: 'org-A__1', code: '1', name: 'TV', updatedAt: at(4_000_000) },
+            ]) as never)
+            .mockResolvedValueOnce(snapOf([
+                { id: 'org-A__1', code: '1', name: 'TV(고침)', updatedAt: at(6_000_000) },
+                { id: 'org-A__3', code: '3', name: '책상', updatedAt: at(6_000_000) },
+            ]) as never);
+
+        const first = await getAssets('org-A');
+        expect(first.map((a) => a.id)).toEqual(['org-A__1', 'org-A__2']);
+
+        const second = await getAssets('org-A');
+        // 두 번째는 마지막으로 본 시각(5,000,000)에서 2분 겹쳐 그 뒤에 바뀐 것만 묻는다
+        expect(fs.where).toHaveBeenCalledWith('updatedAt', '>=', { ms: 5_000_000 - 120_000 });
+        expect(second.map((a) => [a.id, a.name])).toEqual([['org-A__1', 'TV(고침)'], ['org-A__2', '냉장고'], ['org-A__3', '책상']]);
+        expect(fs.getDocs).toHaveBeenCalledTimes(2);
+    });
+
+    it('getAssets: 동시에 부르면 한 번만 읽고, 바뀐 것만 읽기가 실패하거나 30분이 지나면 전부 다시 읽는다', async () => {
+        const snapOf = (n: number) => ({ docs: Array.from({ length: n }, (_, i) => ({ data: () => ({ id: `org-A__${i}`, code: String(i), updatedAt: { toMillis: () => 1000 } }) })) });
+        vi.mocked(fs.getDocs).mockResolvedValue(snapOf(2) as never);
+        const [a, b] = await Promise.all([getAssets('org-A'), getAssets('org-A')]);
+        expect(a).toHaveLength(2);
+        expect(b).toHaveLength(2);
+        expect(fs.getDocs).toHaveBeenCalledTimes(1);
+
+        // 바뀐 것만 읽기가 실패(인덱스 생성 중 등) → 전부 읽기로 돌아간다
+        vi.mocked(fs.getDocs).mockRejectedValueOnce(new Error('index building')).mockResolvedValueOnce(snapOf(3) as never);
+        expect(await getAssets('org-A')).toHaveLength(3);
+
+        // 30분이 지나면 전부 다시 읽는다(조건에 updatedAt이 없다)
+        const now = Date.now();
+        const spy = vi.spyOn(Date, 'now').mockReturnValue(now + ASSET_FULL_REFRESH_MS + 1);
+        vi.mocked(fs.where).mockClear();
+        vi.mocked(fs.getDocs).mockResolvedValueOnce(snapOf(1) as never);
+        expect(await getAssets('org-A')).toHaveLength(1);
+        expect(vi.mocked(fs.where).mock.calls.some((c) => c[0] === 'updatedAt')).toBe(false);
+        spy.mockRestore();
     });
 
     it('getAssetCounts는 상태별로 센다', async () => {

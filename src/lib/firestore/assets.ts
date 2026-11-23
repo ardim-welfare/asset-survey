@@ -6,10 +6,10 @@
  */
 import {
     collection, doc, query, where, getDoc, getDocs, getCountFromServer, writeBatch,
-    serverTimestamp, orderBy, limit,
+    serverTimestamp, orderBy, limit, Timestamp,
     type DocumentReference,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import {
     createZodConverter, assetSchema, assetAccountingSchema, importRecordSchema, historySchema,
 } from '../../schemas';
@@ -29,18 +29,95 @@ const historyConverter = createZodConverter(historySchema);
 /** 한 배치에 넣는 쓰기 수 — Firestore 상한(500)보다 여유를 둔다 */
 const BATCH_SIZE = 400;
 
-/** 기관의 재물 전부 (다시 가져오기 비교용) */
-export const getAssets = async (orgId: string): Promise<Asset[]> => {
-    try {
-        const snap = await getDocs(query(
-            collection(db, 'assets').withConverter(assetConverter),
-            where('organizationId', '==', orgId),
-        ));
-        return snap.docs.map((d) => d.data() as Asset);
-    } catch (error) {
-        captureError(error, { context: 'getAssets', orgId });
-        throw error;
+/**
+ * 재물 목록 기억 — 한 번 전부 읽은 뒤에는 바뀐 것만 읽는다(2026-11-23).
+ *
+ * 재물 목록·등록·가져오기·조사 열기가 모두 기관의 재물 전부를 읽었다. 시범 기관(2,942건)은 화면을
+ * 열 때마다 약 3천 회를 읽었다. 재물은 ① 지우지 않고(allow delete: if false) ② 모든 쓰기에 서버 시각
+ * `updatedAt == request.time`이 찍히므로(firestore.rules `assetDataValid`), 기억해 둔 목록에
+ * `updatedAt >= 마지막으로 본 시각`인 문서만 더하면 서버와 같아진다.
+ *
+ * - 기억은 탭 메모리에만 둔다(새로 고침하면 다시 전부 읽는다). 사용자·기관별로 따로 둔다.
+ * - 시각은 기기 시계가 아니라 받은 문서의 updatedAt 최댓값을 쓰고, 2분을 겹쳐 읽어 경계에서 빠지지 않게 한다.
+ * - 30분마다 한 번은 전부 다시 읽는다(혹시 모를 어긋남을 스스로 바로잡는다).
+ * - 바뀐 것만 읽기가 실패하면(새 인덱스가 아직 만들어지는 중 등) 전부 읽기로 돌아간다.
+ */
+interface AssetSnapshot {
+    byId: Map<string, Asset>;
+    /** 받은 문서 updatedAt의 최댓값(ms) */
+    maxUpdatedMs: number;
+    /** 마지막으로 전부 읽은 때(기기 시각 ms) */
+    fullAt: number;
+}
+const assetSnapshots = new Map<string, AssetSnapshot>();
+const assetLoads = new Map<string, Promise<Asset[]>>();
+export const ASSET_FULL_REFRESH_MS = 30 * 60 * 1000;
+const ASSET_DELTA_OVERLAP_MS = 2 * 60 * 1000;
+
+const updatedMs = (a: Asset): number => {
+    const t = a.updatedAt as { toMillis?: () => number } | undefined;
+    return typeof t?.toMillis === 'function' ? t.toMillis() : 0;
+};
+
+/** 기억한 재물 목록 비우기 — 테스트·강제 새로 고침용 */
+export function clearAssetSnapshots(): void {
+    assetSnapshots.clear();
+    assetLoads.clear();
+}
+
+async function loadAssets(orgId: string, key: string): Promise<Asset[]> {
+    const assetsOf = (extra: ReturnType<typeof where>[] = []) => getDocs(query(
+        collection(db, 'assets').withConverter(assetConverter),
+        where('organizationId', '==', orgId),
+        ...extra,
+    ));
+    const prev = assetSnapshots.get(key);
+    let snap: AssetSnapshot | null = null;
+    if (prev && Date.now() - prev.fullAt < ASSET_FULL_REFRESH_MS) {
+        try {
+            const since = Timestamp.fromMillis(Math.max(0, prev.maxUpdatedMs - ASSET_DELTA_OVERLAP_MS));
+            const changed = await assetsOf([where('updatedAt', '>=', since)]);
+            for (const d of changed.docs) {
+                const a = d.data() as Asset;
+                prev.byId.set(a.id, a);
+                prev.maxUpdatedMs = Math.max(prev.maxUpdatedMs, updatedMs(a));
+            }
+            snap = prev;
+        } catch (error) {
+            // 바뀐 것만 읽기가 안 되면 전부 읽는다 — 화면은 멈추지 않는다
+            captureError(error, { context: 'getAssets:delta', orgId });
+        }
     }
+    if (!snap) {
+        const all = await assetsOf();
+        const byId = new Map<string, Asset>();
+        let maxUpdatedMs = 0;
+        for (const d of all.docs) {
+            const a = d.data() as Asset;
+            byId.set(a.id, a);
+            maxUpdatedMs = Math.max(maxUpdatedMs, updatedMs(a));
+        }
+        snap = { byId, maxUpdatedMs, fullAt: Date.now() };
+        assetSnapshots.set(key, snap);
+    }
+    // 예전처럼 문서 ID 순서로 돌려준다(바뀐 문서를 더해도 순서가 흔들리지 않게)
+    return [...snap.byId.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** 기관의 재물 전부 — 두 번째부터는 바뀐 것만 서버에서 읽는다(위 설명) */
+export const getAssets = async (orgId: string): Promise<Asset[]> => {
+    const key = `${auth.currentUser?.uid ?? ''}|${orgId}`;
+    // 같은 때 여러 화면·훅이 부르면 한 번만 읽는다
+    const running = assetLoads.get(key);
+    if (running) return running;
+    const load = loadAssets(orgId, key)
+        .catch((error) => {
+            captureError(error, { context: 'getAssets', orgId });
+            throw error;
+        })
+        .finally(() => assetLoads.delete(key));
+    assetLoads.set(key, load);
+    return load;
 };
 
 /** 기관의 금액 문서 전부 — 재물 문서 ID → 금액 (관리자만 읽을 수 있다) */
