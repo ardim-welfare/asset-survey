@@ -185,8 +185,13 @@ export default function useAssetList() {
         setAssets((prev) => prev.map((a) => (!a.tagId && tags.has(a.id) ? { ...a, tagId: tags.get(a.id) ?? null } : a)));
     }, []);
 
+    /** 공간을 옮긴 재물을 목록에 반영한다(다시 읽지 않고) — 공간 옮기기·공간 미지정 정리(2026-11-23) */
+    const applySpace = useCallback((ids: Set<string>, spaceId: string | null) => {
+        setAssets((prev) => prev.map((a) => (ids.has(a.id) ? { ...a, spaceId } : a)));
+    }, []);
+
     return {
-        orgId, assets, spaces, buildings, spaceName, checks, loading, error, reload: load,
+        orgId, assets, spaces, buildings, spaceName, checks, loading, error, reload: load, applySpace,
         filters, setFilter, resetFilters, filtered,
         visible: filtered.slice(0, shown), hasMore: filtered.length > shown, showMore: () => setShown((n) => n + LIST_PAGE),
         selected, toggle, setMany, selectFiltered, clearSelection, selectedAssets, applyTags,

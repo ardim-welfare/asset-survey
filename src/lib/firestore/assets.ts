@@ -452,3 +452,50 @@ export const updateAssetManually = async (input: {
         throw error;
     }
 };
+
+/**
+ * 여러 재물을 한 공간으로 옮긴다(2026-11-23) — 재물 목록의 '공간 옮기기'와 '공간 미지정 정리'가 쓴다.
+ * 재물마다 바뀐 공간을 변경 이력(manual-edit)에 남긴다. 이미 그 공간인 재물은 건너뛴다.
+ * locationLinks가 있으면 기관의 '대장 위치 → 공간' 연결에 더한다 — 다음에 대장을 다시 가져와도
+ * 같은 위치가 그 공간으로 들어가 이번 정리가 되돌아가지 않게.
+ * @returns 실제로 옮긴 재물 수
+ */
+export const moveAssetsToSpace = async (input: {
+    orgId: string;
+    assets: Asset[];
+    spaceId: string | null;
+    locationLinks?: LocationSpaceMap;
+    onProgress?: (done: number, total: number) => void;
+}): Promise<number> => {
+    const { orgId, spaceId } = input;
+    const moving = input.assets.filter((a) => (a.spaceId ?? null) !== spaceId);
+    const stamp = actorStamp();
+    const now = serverTimestamp();
+    try {
+        // 재물 1건 = 쓰기 2번(재물·이력)이라 200건씩
+        const per = Math.floor(BATCH_SIZE / 2);
+        for (let i = 0; i < moving.length; i += per) {
+            const batch = writeBatch(db);
+            for (const a of moving.slice(i, i + per)) {
+                batch.update(doc(db, 'assets', a.id), { spaceId, updatedAt: now, ...stamp });
+                batch.set(doc(collection(db, 'history')), {
+                    organizationId: orgId, assetId: a.id, code: a.code, type: 'manual-edit',
+                    changes: { spaceId: { before: a.spaceId ?? null, after: spaceId } }, importId: null, at: now, ...stamp,
+                });
+            }
+            await batch.commit();
+            input.onProgress?.(Math.min(moving.length, i + per), moving.length);
+        }
+        if (input.locationLinks && Object.keys(input.locationLinks).length > 0) {
+            const orgRef = doc(db, 'organizations', orgId);
+            const current = ((await getDoc(orgRef)).data()?.locationSpaceMap ?? {}) as LocationSpaceMap;
+            const batch = writeBatch(db);
+            batch.update(orgRef, { locationSpaceMap: { ...current, ...input.locationLinks } });
+            await batch.commit();
+        }
+        return moving.length;
+    } catch (error) {
+        captureError(error, { context: 'moveAssetsToSpace', orgId, count: moving.length });
+        throw error;
+    }
+};

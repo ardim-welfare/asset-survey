@@ -52,7 +52,7 @@ vi.mock('../../../lib/sentry', () => ({ captureError: vi.fn() }));
 import * as fs from 'firebase/firestore';
 import {
     commitImport, getAssets, getAssetCounts, issueTags, findAssetByTag, getAssetsBySpaces, getAssetHistory,
-    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError,
+    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, moveAssetsToSpace,
 } from '../../../lib/firestore/assets';
 import { diffAssets } from '../../../lib/import/diff';
 import type { ParsedAsset, ParseResult } from '../../../lib/import/parseSheet';
@@ -259,5 +259,33 @@ describe('재물 직접 등록·수정 (2026-11-22)', () => {
         expect(ops[0]).toMatchObject({ kind: 'update', label: 'doc:assets/org-A__1', data: { name: '큰 책상' } });
         expect(ops[1]).toMatchObject({ kind: 'set', label: 'doc:assetAccounting/org-A__1', data: { amount: 300000 } });
         expect(ops[2].data).toMatchObject({ type: 'manual-edit', changes: { name: { before: '책상', after: '큰 책상' }, amount: { before: null, after: 300000 } } });
+    });
+});
+
+describe('재물 공간 옮기기 (2026-11-23)', () => {
+    const a = (id: string, spaceId: string | null) => ({
+        id: `org-A__${id}`, organizationId: 'org-A', code: id, name: 'TV', category: null, spec: null, acquiredAt: null,
+        acquiredQuantity: null, quantity: 1, status: 'active' as const, statusRaw: null, locationRaw: '창고', spaceId,
+        department: null, usage: null, missingFromSource: false, manual: false, lastImportId: null, tagId: null,
+    });
+
+    it('이미 그 공간인 재물은 건너뛰고, 재물마다 공간과 변경 이력을 함께 쓴다', async () => {
+        batches.length = 0;
+        const n = await moveAssetsToSpace({ orgId: 'org-A', assets: [a('1', null), a('2', 'sp1'), a('3', 'sp2')], spaceId: 'sp1' });
+        expect(n).toBe(2);
+        const ops = batches.flatMap((b) => b.ops);
+        expect(ops.filter((o) => o.kind === 'update').map((o) => o.label)).toEqual(['doc:assets/org-A__1', 'doc:assets/org-A__3']);
+        expect(ops.filter((o) => o.kind === 'update')[0].data).toMatchObject({ spaceId: 'sp1', updatedAt: '__ts__' });
+        const hist = ops.filter((o) => o.kind === 'set');
+        expect(hist).toHaveLength(2);
+        expect(hist[1].data).toMatchObject({ type: 'manual-edit', importId: null, code: '3', changes: { spaceId: { before: 'sp2', after: 'sp1' } } });
+    });
+
+    it('위치 연결을 주면 기관의 위치→공간 연결에 더한다(있던 연결은 남긴다)', async () => {
+        batches.length = 0;
+        vi.mocked(fs.getDoc).mockResolvedValueOnce({ data: () => ({ locationSpaceMap: { '101호': 'sp9' } }) } as never);
+        await moveAssetsToSpace({ orgId: 'org-A', assets: [a('1', null)], spaceId: 'sp1', locationLinks: { '창고': 'sp1' } });
+        const orgOp = batches.flatMap((b) => b.ops).find((o) => o.label === 'doc:organizations/org-A');
+        expect(orgOp?.data).toEqual({ locationSpaceMap: { '101호': 'sp9', '창고': 'sp1' } });
     });
 });

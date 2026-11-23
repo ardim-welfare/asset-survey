@@ -118,7 +118,7 @@ export { uploadScanPhoto, removeScanPhoto } from './scanPhotos';
 
 // 재물 직접 등록·수정 (2026-11-22)
 export {
-    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, MANUAL_EDIT_FIELDS,
+    createAssetManually, updateAssetManually, nextAssetCode, AssetCodeTakenError, moveAssetsToSpace, MANUAL_EDIT_FIELDS,
 } from './assets';
 export type { ManualAssetFields } from './assets';
 

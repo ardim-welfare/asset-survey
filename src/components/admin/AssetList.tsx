@@ -12,6 +12,10 @@ import { groupSpacesByLocation } from '../../lib/spaceGroups';
 import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from '../common/AssetBadges';
 import { isUsefulLifeOver, todayText, usefulLifeEnd } from '../../lib/usefulLife';
 import LabelPrintDialog from './LabelPrintDialog';
+import PanelModal from './space/PanelModal';
+import SpacePickOptions from './space/SpacePickOptions';
+import { useToast } from '../../hooks/useToast';
+import { moveAssetsToSpace } from '../../lib/firestore';
 import type { Asset } from '../../types/asset';
 import type { Space } from '../../types/space';
 import type { Building } from '../../types/building';
@@ -22,6 +26,9 @@ const detailPath = (a: Asset) => `/admin/assets/${encodeURIComponent(a.id)}`;
 export default function AssetList() {
     const al = useAssetList();
     const [printing, setPrinting] = useState(false);
+    // 고른 재물 공간 옮기기(2026-11-23)
+    const [moving, setMoving] = useState(false);
+    const unplacedCount = al.assets.filter((a) => !a.spaceId).length;
     const { filters, setFilter } = al;
     const today = todayText(); // 내용연수 지남 판단 기준일(한 번만 계산)
 
@@ -69,6 +76,14 @@ export default function AssetList() {
                 </div>
             ) : (
                 <>
+                    {unplacedCount > 0 && (
+                        <div className="glass-card p-3 mb-3 flex flex-wrap items-center gap-2 border border-amber-200 dark:border-amber-800/60">
+                            <p className="flex-1 min-w-[12rem] text-sm text-amber-800 dark:text-amber-300">
+                                <span aria-hidden="true">⚠️ </span>공간이 정해지지 않은 재물이 <b className="tabular-nums">{unplacedCount.toLocaleString('ko-KR')}건</b> 있습니다. 공간을 정해야 조사 대상에 들어갑니다.
+                            </p>
+                            <Link to="/admin/assets/unplaced" className="btn-secondary btn-sm min-h-[44px] px-3">위치별로 공간 정하기</Link>
+                        </div>
+                    )}
                     <Filters filters={filters} setFilter={setFilter} spaces={al.spaces} buildings={al.buildings} onReset={al.resetFilters} />
 
                     <div className="glass-card p-3 mb-3 flex flex-wrap items-center gap-2 sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-10">
@@ -81,6 +96,9 @@ export default function AssetList() {
                         </button>
                         {al.selected.size > 0 && (
                             <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3" onClick={al.clearSelection}>고르기 해제</button>
+                        )}
+                        {al.selected.size > 0 && (
+                            <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3" onClick={() => setMoving(true)}>공간 옮기기</button>
                         )}
                         <button type="button" className="btn-primary btn-sm min-h-[44px] px-4" onClick={() => setPrinting(true)} disabled={al.selected.size === 0}>
                             라벨 인쇄
@@ -182,6 +200,16 @@ export default function AssetList() {
                     )}
                 </>
             )}
+
+            <PanelModal open={moving} title={`재물 ${al.selected.size.toLocaleString('ko-KR')}건 공간 옮기기`} titleId="asset-move-title" onClose={() => setMoving(false)}>
+                {moving && (
+                    <MoveAssetsForm
+                        al={al}
+                        onDone={() => { setMoving(false); al.clearSelection(); }}
+                        onCancel={() => setMoving(false)}
+                    />
+                )}
+            </PanelModal>
 
             {printing && (
                 <LabelPrintDialog
@@ -331,3 +359,58 @@ function Thumb({ asset, size }: { asset: Asset; size: string }) {
         ? <img src={asset.photoThumbUrl} alt="" loading="lazy" className={`${size} rounded-lg object-cover flex-shrink-0 bg-surface-100 dark:bg-surface-800`} />
         : <span aria-hidden="true" className={`${size} rounded-lg flex-shrink-0 bg-surface-100 dark:bg-surface-800`} />;
 }
+
+/** 고른 재물을 한 공간으로 옮기는 창(2026-11-23) — 변경 이력에 남긴다 */
+function MoveAssetsForm({ al, onDone, onCancel }: {
+    al: ReturnType<typeof useAssetList>;
+    onDone: () => void;
+    onCancel: () => void;
+}) {
+    const { showToast } = useToast();
+    const [spaceId, setSpaceId] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [done, setDone] = useState(0);
+    const picked = al.selectedAssets;
+    const fromLedger = picked.filter((a) => !a.manual).length;
+    const submit = async () => {
+        if (!al.orgId || !spaceId) return;
+        setBusy(true);
+        try {
+            const target = spaceId === NONE ? null : spaceId;
+            const n = await moveAssetsToSpace({ orgId: al.orgId, assets: picked, spaceId: target, onProgress: (d) => setDone(d) });
+            al.applySpace(new Set(picked.map((a) => a.id)), target);
+            showToast(n > 0 ? `재물 ${n.toLocaleString('ko-KR')}건을 옮겼습니다.` : '이미 그 공간에 있습니다.', n > 0 ? 'success' : 'info');
+            onDone();
+        } catch {
+            showToast('공간을 옮기지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.', 'error');
+            void al.reload();
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+            <div>
+                <label htmlFor="asset-move-space" className="label">옮길 공간</label>
+                <select id="asset-move-space" className="input min-h-[48px]" value={spaceId} onChange={(e) => setSpaceId(e.target.value)} disabled={busy}>
+                    <option value="">공간 고르기…</option>
+                    <SpacePickOptions spaces={al.spaces} buildings={al.buildings} />
+                    <option value={NONE}>공간 미지정으로</option>
+                </select>
+            </div>
+            {fromLedger > 0 && (
+                <p className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
+                    대장에서 가져온 재물 {fromLedger.toLocaleString('ko-KR')}건이 들어 있습니다. 다음에 대장을 다시 가져오면 대장의 위치에 따라 공간이 다시 정해집니다.
+                    위치 이름 단위로 맞추려면 <Link to="/admin/assets/unplaced" className="underline underline-offset-2 font-medium">공간 미지정 정리</Link>나 가져오기의 &lsquo;위치 → 공간&rsquo; 연결을 쓰세요.
+                </p>
+            )}
+            {busy && <p className="text-sm text-surface-700 dark:text-surface-300 tabular-nums" role="status">옮기는 중… {done.toLocaleString('ko-KR')} / {picked.length.toLocaleString('ko-KR')}건</p>}
+            <div className="flex gap-2">
+                <button type="button" className="btn-secondary flex-1 min-h-[48px]" onClick={onCancel} disabled={busy}>취소</button>
+                <button type="submit" className="btn-primary flex-1 min-h-[48px]" disabled={busy || !spaceId}>옮기기</button>
+            </div>
+        </form>
+    );
+}
+
+const NONE = '__none__';
