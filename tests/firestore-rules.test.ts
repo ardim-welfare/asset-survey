@@ -917,7 +917,7 @@ describe('Firestore Security Rules for Multi-Tenant Isolation', () => {
       await assertFails(admin('A').collection('assetAccounting').doc('org-A__3').set({ ...acc, amount: '천원' }));
     });
 
-        it('#A2b 아직 없는 재물은 같은 기관만 있는지 확인할 수 있다 (직접 등록 전 중복 확인)', async () => {
+    it('#A2b 아직 없는 재물은 같은 기관만 있는지 확인할 수 있다 (직접 등록 전 중복 확인)', async () => {
       await assertSucceeds(admin('A').collection('assets').doc('org-A__NEW-1').get());
       await assertSucceeds(emp('A', 1).collection('assets').doc('org-A__NEW-1').get());
       await assertFails(admin('B').collection('assets').doc('org-A__NEW-1').get());
