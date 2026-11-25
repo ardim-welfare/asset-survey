@@ -59,15 +59,16 @@ export default function UnplacedAssets() {
     const createFor = async (g: Group) => {
         if (!al.orgId || !g.location) return;
         const parsed = parseLocation(g.location, al.buildings);
+        const place = { buildingId: parsed.buildingId, floor: parsed.floor };
         let name = parsed.name;
-        if (name !== normalizeSpaceName(g.location) && validateSpaceName(name, al.spaces)) name = g.location;
-        const problem = validateSpaceName(name, al.spaces);
+        if (name !== normalizeSpaceName(g.location) && validateSpaceName(name, al.spaces, undefined, place)) name = g.location;
+        const problem = validateSpaceName(name, al.spaces, undefined, place);
         if (problem) { showToast(problem, 'warning'); return; }
         setWorking(true);
         try {
             const active = al.spaces.filter((s) => !s.archived);
             const order = active.length === 0 ? 0 : Math.max(...active.map((s) => s.order)) + 1;
-            const id = await createSpace(al.orgId, name, order, { buildingId: parsed.buildingId, floor: parsed.floor });
+            const id = await createSpace(al.orgId, name, order, place);
             await al.reload(); // 새 공간이 고르기 칸에 보이게
             setChoice((prev) => ({ ...prev, [g.key]: id }));
             showToast(`공간 '${normalizeSpaceName(name)}'을(를) 만들었습니다. [옮기기]를 누르면 재물이 들어갑니다.`, 'success');

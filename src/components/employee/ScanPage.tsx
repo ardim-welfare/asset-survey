@@ -4,7 +4,7 @@
  * 공간을 고르고 라벨 QR을 연속으로 찍는다. 카메라가 안 되면 자산코드를 직접 입력한다(바코드 스캐너도
  * 키보드처럼 입력되므로 같은 칸을 쓴다). 찍을 때마다 판정을 크게 보여 주고, 예외면 물건 상태·메모를 남긴다.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import useScanner, { type LastScan } from '../../hooks/useScanner';
 import usePendingSyncCount from '../../hooks/usePendingSyncCount';
@@ -16,6 +16,7 @@ import { uploadScanPhoto, removeScanPhoto, PHOTO_SOURCE_MAX_BYTES } from '../../
 import { SkeletonBox, SkeletonCard, SkeletonList } from '../common/Skeleton';
 import { useToast } from '../../hooks/useToast';
 import { useConfirm } from '../../hooks/useConfirm';
+import { spaceDisplayNames } from '../../lib/spaceGroups';
 import type { Scan, ScanCondition, ScanResult, SurveySubmission } from '../../types/survey';
 
 const sub = 'text-xs text-surface-600 dark:text-surface-400';
@@ -46,6 +47,7 @@ export default function ScanPage() {
     const [editing, setEditing] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const pendingCount = usePendingSyncCount();
+    const spaceLabels = useMemo(() => spaceDisplayNames(sc.mySpaces), [sc.mySpaces]);
 
     // 공간을 바꾸면 주소에도 남긴다(새로고침·뒤로 가기에도 같은 공간)
     useEffect(() => {
@@ -113,7 +115,7 @@ export default function ScanPage() {
                     {sc.mySpaces.map((s) => (
                         <li key={s.id}>
                             <button type="button" className="glass-card w-full text-left p-4 min-h-[56px] font-medium text-surface-900 dark:text-surface-100 flex items-center gap-2 hover:border-primary-300 dark:hover:border-primary-700 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary-500" onClick={() => sc.setSpaceId(s.id)}>
-                                <span className="flex-1 break-keep">{s.name}</span>
+                                <span className="flex-1 break-keep">{spaceLabels.get(s.id) ?? s.name}</span>
                                 <span aria-hidden="true" className="text-surface-500 text-lg">›</span>
                             </button>
                         </li>
@@ -150,7 +152,7 @@ export default function ScanPage() {
                             value={sc.spaceId}
                             onChange={(e) => { sc.setSpaceId(e.target.value); sc.clearLast(); }}
                         >
-                            {sc.mySpaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            {sc.mySpaces.map((s) => <option key={s.id} value={s.id}>{spaceLabels.get(s.id) ?? s.name}</option>)}
                         </select>
                     ) : (
                         <span className="font-semibold text-surface-900 dark:text-surface-100 truncate">{sc.spaceName.get(sc.spaceId)}</span>

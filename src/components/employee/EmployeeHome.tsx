@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getMySpaces, getOpenSurvey } from '../../lib/firestore';
 import { SkeletonBox, SkeletonCard } from '../common/Skeleton';
+import { spaceDisplayNames } from '../../lib/spaceGroups';
 import type { Space } from '../../types/space';
 import type { Survey } from '../../types/survey';
 
@@ -104,7 +105,7 @@ export default function EmployeeHome() {
                             <li key={s.id}>
                                 <Link to={`/employee/assets?space=${encodeURIComponent(s.id)}`}
                                     className="inline-flex items-center px-3.5 min-h-[48px] rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/50 text-sm font-medium transition-colors">
-                                    {s.name}
+                                    {spaceDisplayNames(spaces).get(s.id) ?? s.name}
                                 </Link>
                             </li>
                         ))}

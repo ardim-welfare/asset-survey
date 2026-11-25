@@ -85,6 +85,28 @@ export function spaceLocationText(space: Space, buildings: Building[]): string {
     return space.floor ? `${b.name} ${floorLabel(space.floor)}` : b.name;
 }
 
+/**
+ * 공간 표시 이름 — 이름이 겹치는 공간만 층을 앞에 붙인다(2026-11-25).
+ * 층마다 같은 이름을 쓸 수 있게 되어 "부모휴게실"이 둘이면 "2층 부모휴게실"·"3층 부모휴게실"로 보인다.
+ * 겹치지 않는 공간은 이름 그대로라 예전 화면과 같다. 층까지 같으면(다른 건물) 건물 이름을 넣는다(건물 목록이 있을 때).
+ */
+export function spaceDisplayNames(spaces: Pick<Space, 'id' | 'name' | 'buildingId' | 'floor'>[], buildings: Building[] = []): Map<string, string> {
+    const count = new Map<string, number>();
+    for (const s of spaces) count.set(s.name, (count.get(s.name) ?? 0) + 1);
+    const floorKey = (s: Pick<Space, 'name' | 'floor'>) => `${s.floor ?? ''}\u0000${s.name}`;
+    const sameFloor = new Map<string, number>();
+    for (const s of spaces) sameFloor.set(floorKey(s), (sameFloor.get(floorKey(s)) ?? 0) + 1);
+    const out = new Map<string, string>();
+    for (const s of spaces) {
+        if ((count.get(s.name) ?? 0) < 2) { out.set(s.id, s.name); continue; }
+        const b = buildings.find((x) => x.id === s.buildingId);
+        const floor = s.floor ? floorLabel(s.floor) : '';
+        const prefix = (sameFloor.get(floorKey(s)) ?? 0) > 1 && b ? `${b.name} ${floor}`.trim() : floor;
+        out.set(s.id, prefix ? `${prefix} ${s.name}` : s.name);
+    }
+    return out;
+}
+
 /** 숨기지 않은 공간을 화면 순서(건물 → 층 → 공간)로 편다 — 회차 대상·현황판·보고서가 이 순서를 따른다 */
 export function orderSpacesByLocation(spaces: Space[], buildings: Building[]): Space[] {
     return groupSpacesByLocation(spaces.filter((s) => !s.archived), buildings)
