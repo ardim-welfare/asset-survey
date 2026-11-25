@@ -10,8 +10,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { getMySpaces, getAssetsBySpaces } from '../../lib/firestore';
 import { sortAssets, filterAssets, DEFAULT_FILTERS } from '../../hooks/useAssetList';
 import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from '../common/AssetBadges';
+import { SkeletonBox, SkeletonList } from '../common/Skeleton';
 import { isUsefulLifeOver, usefulLifeEnd } from '../../lib/usefulLife';
 import type { Asset } from '../../types/asset';
+import { spaceDisplayNames } from '../../lib/spaceGroups';
 import type { Space } from '../../types/space';
 
 const sub = 'text-xs text-surface-600 dark:text-surface-400';
@@ -49,12 +51,21 @@ export default function MyAssets() {
 
     const spaceParam = params.get('space');
     const current = spaces.some((s) => s.id === spaceParam) ? spaceParam : 'all';
+    const labels = useMemo(() => spaceDisplayNames(spaces), [spaces]);
     const shown = useMemo(() => filterAssets(assets, {
         ...DEFAULT_FILTERS, search, space: current ?? 'all', status: withInactive ? 'all' : 'active',
     }), [assets, search, current, withInactive]);
     const countIn = (id: string) => assets.filter((a) => a.spaceId === id && (withInactive || a.status === 'active')).length;
 
-    if (loading) return <div className="flex justify-center py-20"><div className="w-8 h-8 spinner" /></div>;
+    if (loading) {
+        return (
+            <div className="max-w-lg mx-auto animate-fade-in space-y-3" role="status" aria-label="내 공간 재물을 불러오는 중">
+                <SkeletonBox className="h-7 w-32" />
+                <SkeletonBox className="h-12 w-full rounded-xl" />
+                <SkeletonList count={4} />
+            </div>
+        );
+    }
     if (error) {
         return (
             <div role="alert" className="max-w-lg mx-auto glass-card p-6 text-center">
@@ -81,11 +92,11 @@ export default function MyAssets() {
                                 <button
                                     key={s.id} type="button" aria-pressed={active}
                                     onClick={() => setParams(s.id === 'all' ? {} : { space: s.id }, { replace: true })}
-                                    className={`flex-shrink-0 px-3 min-h-[44px] rounded-xl text-sm font-medium ${active
+                                    className={`flex-shrink-0 px-3 min-h-[48px] rounded-xl text-sm font-medium ${active
                                         ? 'bg-primary-600 text-white dark:bg-primary-500'
                                         : 'bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 border border-surface-200 dark:border-surface-700'}`}
                                 >
-                                    {s.name}{s.id !== 'all' && <span className="tabular-nums"> {countIn(s.id)}</span>}
+                                    {s.id === 'all' ? s.name : (labels.get(s.id) ?? s.name)}{s.id !== 'all' && <span className="tabular-nums"> {countIn(s.id)}</span>}
                                 </button>
                             );
                         })}
@@ -95,7 +106,7 @@ export default function MyAssets() {
                         <span className="sr-only">검색</span>
                         <input type="search" className="input min-h-[48px]" placeholder="자산코드·품명으로 찾기" value={search} onChange={(e) => setSearch(e.target.value)} />
                     </label>
-                    <label className="flex items-center gap-2 min-h-[44px] text-sm text-surface-700 dark:text-surface-300">
+                    <label className="flex items-center gap-2 min-h-[48px] text-sm text-surface-700 dark:text-surface-300">
                         <input type="checkbox" className="w-5 h-5 accent-primary-600" checked={withInactive} onChange={(e) => setWithInactive(e.target.checked)} />
                         불용·폐기도 보기
                     </label>

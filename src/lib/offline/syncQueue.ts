@@ -30,7 +30,7 @@ export interface SyncData {
     type: 'CREATE' | 'UPDATE' | 'DELETE';
     collection: string;
     docId: string;
-    /** 쓴 내용 — 다시 보내지 않는다. 유실 안내에 "무엇을 잃었는지"(날짜·계기판)를 적는 데만 쓴다 */
+    /** 쓴 내용 — 다시 보내지 않는다. 유실 안내에 "무엇을 잃었는지"(재물 스캔의 자산코드·품명)를 적는 데만 쓴다 */
     data: Record<string, unknown> | null;
 }
 
@@ -321,7 +321,7 @@ export function trackWrite(
 ): Promise<void> {
     const startedAt = Date.now();
     // 거부 처리기를 **바로** 단다. 장부 기록을 기다린 뒤에 달면, 그 사이에 거부된 쓰기가
-    // 처리되지 않은 거부로 잡힌다(Sentry 오탐).
+    // 처리되지 않은 거부로 잡힌다(오류 보고 오탐).
     const outcome = write.then(
         () => ({ ok: true as const }),
         (error: unknown) => ({ ok: false as const, error }),

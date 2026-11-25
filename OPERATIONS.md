@@ -17,13 +17,13 @@
 | Secret Manager 비밀값 등록 | 사용자 | `GEMINI_API_KEY` · `GMAIL_APP_PASSWORD` · `ALIMTALK_PROXY_TOKEN` → [README](README.md#환경변수) |
 | `functions/.env` 채우기 | 사용자 + AI | [functions/.env.example](functions/.env.example) |
 | 카카오 알림톡 | 사용자 + AI | 재물조사용 템플릿 4종(@소셜프리즘 채널, 강조표기형)을 2026-11-21 등록 — 신청접수 `UO_1053`·승인 `UO_1054`·반려 `UO_1055`·중복신청 `UO_1056`. 문구는 [sendAlimtalk.ts](functions/src/services/alimtalk/sendAlimtalk.ts)와 글자 하나까지 같아야 한다(테스트가 지킨다). 검수 완료 뒤 `FUNCTIONS_ENV_FILE`에 `ALIMTALK_PROXY_URL`을 넣는다 |
-| Discord·Sentry | **쓰지 않기로 함 (2026-11-21)** | 처리방침 수탁자 목록에서 뺐다. 코드는 남아 있으니 `DISCORD_WEBHOOK_URL`·`VITE_SENTRY_DSN`·`SENTRY_DSN_FUNCTIONS`를 **비워 둔다** — 넣으면 처리방침에 없는 곳으로 개인정보가 나간다. 켜려면 [PrivacyPage.tsx](src/components/auth/PrivacyPage.tsx) 목록부터 되살린다 |
+| Discord·Sentry | **쓰지 않기로 함 (2026-11-21)** | 처리방침 수탁자 목록에서 뺐다. **Sentry는 코드·패키지까지 걷어냈다(2026-11-24)** — 화면 오류는 자체 [오류 기록], 서버 경보는 운영자 메일로 간다. Discord 코드는 남아 있으니 `DISCORD_WEBHOOK_URL`을 **비워 둔다** — 넣으면 처리방침에 없는 곳으로 개인정보가 나간다. 켜려면 [PrivacyPage.tsx](src/components/auth/PrivacyPage.tsx) 목록부터 되살린다 |
 | 이용약관·개인정보 처리방침 검토 | 사용자 검토 | 6단계에서 재물조사 서비스용 첫 초안으로 바꿨다(차량 처리 제거, 재물·조사 기록 처리 추가). **법률 검토와 시행일 확정**이 남았다 — 시행일은 `src/lib/constants.ts`의 `TERMS_VERSION`·`PRIVACY_VERSION` |
 | Storage 버킷 리전 | 사용자 | 처리방침 제8조는 증빙서류 사본을 **미국(us-east1)**에 둔다고 적었다. 다른 리전으로 만들면 처리방침을 고친다 |
-| 앱 아이콘 교체 | 사용자 + AI | `public/icons/`는 차량운행일지 아이콘이다 |
+| 앱 아이콘 교체 | **완료 (AI)** | `public/icons/`를 재물조사 아이콘(QR+체크, `app-icon.svg`에서 PNG·maskable·apple-touch 생성)으로 바꿨다 |
 | 백업 버킷 `{프로젝트 ID}-backups` (asia-northeast3) | **완료 (2026-11-21, AI)** | `asset-survey-sp-backups` 서울·공개 차단·90일 자동 삭제([storage-lifecycle-backups.json](storage-lifecycle-backups.json)). Firestore 서비스 에이전트에 버킷 `storage.admin`, 기본 컴퓨트 계정에 `datastore.importExportAdmin`. 수동 export 시험 통과 — [dailyNightlyBatch.ts](functions/src/handlers/scheduled/dailyNightlyBatch.ts) |
 | `auditLogs` TTL 정책 (`expiresAt`) | **배포가 자동으로 건다** | 접속기록 1년 보관(`RETENTION_DAYS = 365`). [firestore.indexes.json](firestore.indexes.json)의 `fieldOverrides`(`ttl: true`)라 인덱스 배포 때 함께 적용된다(`_rateLimits`도 같다). asset-survey-sp는 첫 배포(2026-11-21)에 ACTIVE 확인 — `gcloud firestore fields ttls list` |
-| GitHub 저장소·Actions Secrets | 사용자 | `ENV_FILE` · `FUNCTIONS_ENV_FILE` · `FIREBASE_SERVICE_ACCOUNT` · `SENTRY_AUTH_TOKEN` |
+| GitHub 저장소·Actions Secrets | 사용자 | `ENV_FILE` · `FUNCTIONS_ENV_FILE` · `FIREBASE_SERVICE_ACCOUNT` (예전 `SENTRY_AUTH_TOKEN`은 더 이상 쓰지 않으니 지워도 된다) |
 
 ## 2. 처음 배포까지 — 단계별
 
@@ -56,6 +56,7 @@
    npx.cmd firebase-tools functions:secrets:set GEMINI_API_KEY --project <프로젝트 ID>
    ```
    (나머지 비밀도 같은 명령으로 이름만 바꿔 넣는다. 알림톡은 템플릿 등록 전까지 쓰지 않으므로 나중에 넣어도 된다.)
+   - ⚠️ `GMAIL_APP_PASSWORD`는 **`GMAIL_USER` 계정의 앱 비밀번호**(16자리, 띄어쓰기 빼고)다. 2026-11-21에 넣은 값이 틀려 앱 메일이 전부 `535-5.7.8 Username and Password not accepted`로 실패한 채 11-25에야 발견했다 — 넣은 뒤 Google 계정 > 앱 비밀번호 화면에 **"최종 사용일"이 찍히는지**로 확인한다. 다시 넣으면 firebase-tools가 쓰는 함수를 새 버전으로 재배포할지 묻는다(Yes).
 3. 주소를 아직 정하지 않았으면 `VITE_APP_URL`·`SERVICE_URL`은 비워 둔다 — Firebase 기본 주소(`https://<프로젝트 ID>.web.app`)를 쓴다.
 
 ### 2.4 배포용 계정과 GitHub 설정 (사용자)
@@ -70,8 +71,8 @@
    - **첫 배포 뒤 호출형(onCall) 함수의 공개 호출 권한을 확인한다.** 첫 배포가 여러 번 실패·재시도하는 동안 22개 중 19개가 `allUsers` → Cloud Run 호출자 권한 없이 만들어졌고, 이후 배포는 이미 있는 함수의 권한을 다시 걸지 않는다. 증상은 앱에서 서버 함수를 부를 때 **CORS 오류**(사전 요청 403)다. 확인: `gcloud run services get-iam-policy <함수 이름 소문자> --region asia-northeast3`. 고침: 호출형 함수마다 `gcloud run services add-iam-policy-binding <이름> --region asia-northeast3 --member=allUsers --role=roles/run.invoker`. 이벤트·스케줄 함수에는 붙이지 않는다.
 2. 그 계정의 **키(JSON)**를 만든다.
 3. GitHub 저장소 → Settings → Secrets and variables → Actions:
-   - **Secrets**: `FIREBASE_SERVICE_ACCOUNT`(키 JSON 전체), `ENV_FILE`(완성한 `.env` 전체), `FUNCTIONS_ENV_FILE`(완성한 `functions/.env` 전체), `SENTRY_AUTH_TOKEN`(Sentry를 쓰면)
-   - **Variables**: `FIREBASE_PROJECT_ID`, (Sentry를 쓰면) `SENTRY_ORG` · `SENTRY_PROJECT` · `SENTRY_PROJECT_FUNCTIONS`
+   - **Secrets**: `FIREBASE_SERVICE_ACCOUNT`(키 JSON 전체), `ENV_FILE`(완성한 `.env` 전체), `FUNCTIONS_ENV_FILE`(완성한 `functions/.env` 전체)
+   - **Variables**: `FIREBASE_PROJECT_ID`
 4. 키 JSON 파일은 PC에서 지운다.
 
 ### 2.5 첫 배포와 확인 (AI + 사용자)
@@ -103,12 +104,12 @@
 
 | 대상 | 백업 방식 | 근거 | 최근 확인 | 복원 훈련 |
 |---|---|---|---|---|
-| Firestore (기본 DB, 서울) | 매일 02:20(서울) 전체 export → `gs://asset-survey-sp-backups/backups/firestore/{날짜}/`, **90일 뒤 자동 삭제** | [dailyNightlyBatch.ts](functions/src/handlers/scheduled/dailyNightlyBatch.ts) `backupFirestore`, 버킷 목록에 11-22·11-23·11-24 폴더 있음 | 2026-11-24(목록만) | **미확인 — 한 번도 안 함** |
+| Firestore (기본 DB, 서울) | 매일 02:20(서울) 전체 export → `gs://asset-survey-sp-backups/backups/firestore/{날짜}/`, **90일 뒤 자동 삭제** | [dailyNightlyBatch.ts](functions/src/handlers/scheduled/dailyNightlyBatch.ts) `backupFirestore`, 버킷 목록에 11-22~11-25 폴더 있음 | 2026-11-25 | **통과 (2026-11-25)** — 아래 5.2 기록 |
 | Firestore 특정 시점 복구(PITR) | 꺼짐 | `gcloud firestore databases describe` → `POINT_IN_TIME_RECOVERY_DISABLED` | 2026-11-24 | 해당 없음 |
-| Firestore DB 삭제 보호 | 꺼짐 | 같은 명령 → `DELETE_PROTECTION_DISABLED` | 2026-11-24 | 해당 없음 |
-| Storage(재물 사진·현장 사진·증빙서류, us-east1) | **별도 백업 없음.** 지운 파일은 소프트 삭제로 **7일** 동안 되살릴 수 있다 | `gcloud storage buckets describe` → `soft_delete_policy 604800초` | 2026-11-24 | **미확인** |
+| Firestore DB 삭제 보호 | **켜짐 (2026-11-25)** | 같은 명령 → `DELETE_PROTECTION_ENABLED` | 2026-11-25 | 해당 없음 |
+| Storage(재물 사진·현장 사진·증빙서류, us-east1) | **별도 백업 없음.** 지운 파일은 소프트 삭제로 **7일** 동안 되살릴 수 있다 | `gcloud storage buckets describe` → `soft_delete_policy 604800초` | 2026-11-25 | **통과 (2026-11-25)** — 시험 파일 지웠다 되살림 |
 | Authentication(로그인 계정) | **백업 없음** — Firestore export에 들어가지 않는다 | Firebase 기본 동작 | — | 해당 없음 |
-| 담당자 | **미정** — 백업 실패 알림을 받고 복원을 결정할 사람 | — | — | — |
+| 담당자 | **미정** — 백업 실패 알림을 받고 복원을 결정할 사람. 야간·주간 배치의 실패·경고, superAdmin 승격, 새 의견은 `ADMIN_NOTIFICATION_EMAIL`(없으면 `GMAIL_USER`)로 메일이 간다([adminAlertMail.ts](functions/src/core/adminAlertMail.ts)) — 담당자가 정해지면 이 주소를 그 사람으로 | — | — | — |
 
 **알아 둘 한계**
 - export는 Firestore 문서만 담는다. **사진 파일은 export에 없다** — 문서에 남은 사진 주소는 복원되지만 파일이 지워졌으면 깨진 사진이 된다(7일 안이면 소프트 삭제에서 되살린다).
@@ -137,11 +138,11 @@
 
 | 날짜 | 한 사람 | 사용한 export | 문서 수 일치 | 걸린 시간 | Storage 되살리기 | 메모 |
 |---|---|---|---|---|---|---|
-| (아직 없음) | | | | | | |
+| 2026-11-25 | AI(사용자 승인) | `2026-11-25`(02:20 KST, 3.4MB) | **12개 컬렉션 전부 같음** (재물 2,943·금액 2,943·반영 목록 520 등). 표본 5건(재물 2·회차 1·스캔 1·반영 목록 1) 필드·형식 일치 | **51초** (import 23:14:32→23:15:23 UTC, 문서 6,626) | 통과 — `restore-drill/drill.txt` 지운 뒤 `#세대`로 되살려 내용 같음 | 훈련용 DB `restore-drill` 만든 뒤 지움(남은 DB는 `(default)`뿐). 운영 DB는 읽기만. 시험 파일은 지워 7일 뒤 소프트 삭제에서도 사라짐. 다음 훈련 2027-02 |
 
 ### 5.3 정할 것 (사용자)
 
 - **담당자** — 백업 실패 알림을 받고 복원을 결정할 사람.
-- **DB 삭제 보호 켜기** — 요금 없음. 실수로 DB를 통째로 지우는 것을 막는다: `gcloud firestore databases update --database='(default)' --delete-protection --project=asset-survey-sp`
+- ~~**DB 삭제 보호 켜기**~~ — 2026-11-25 켰다(`gcloud firestore databases update --database='(default)' --delete-protection --project=asset-survey-sp`). DB를 지워야 할 일이 생기면 `--no-delete-protection`으로 먼저 끈다.
 - **PITR 켜기 여부** — 잃을 수 있는 입력을 하루치에서 1분 단위로 줄인다. 저장 용량만큼 추가 요금.
 - **사진 백업** — 지금은 소프트 삭제 7일뿐이다. 더 길게 지켜야 하면 소프트 삭제 기간을 늘리거나(요금) 다른 버킷으로 주기 복사를 둔다.

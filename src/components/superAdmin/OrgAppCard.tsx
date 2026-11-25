@@ -58,7 +58,7 @@ export default memo(function OrgAppCard({
                         {tab === 'pending' && (
                             app.aiVerified ? (
                                 // 대기 목록에 있으므로 아직 승인된 것이 아니다 — "자동 승인"이 아니라 추천으로 적는다
-                                <span className="badge-success font-bold border border-green-200 dark:border-green-700">
+                                <span className="badge-success font-bold border border-accent-200 dark:border-accent-700">
                                     <span aria-hidden="true">✅</span> AI: 승인 추천
                                 </span>
                             ) : app.aiVerifyDetail ? (
@@ -106,7 +106,7 @@ export default memo(function OrgAppCard({
                                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(app.address)}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-0.5 min-h-[44px] px-2 rounded text-xs font-medium text-primary-700 dark:text-primary-300 underline underline-offset-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors break-keep"
+                                    className="inline-flex items-center gap-0.5 min-h-[48px] px-2 rounded text-xs font-medium text-primary-700 dark:text-primary-300 underline underline-offset-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors break-keep"
                                 >
                                     <span aria-hidden="true">📍</span> 지도에서 보기<span className="sr-only">(구글 지도, 새 창)</span>
                                 </a>
@@ -145,7 +145,7 @@ export default memo(function OrgAppCard({
                                 type="button"
                                 onClick={() => onToggleImage(app.id)}
                                 aria-expanded={selectedApp === app.id}
-                                className="btn-secondary btn-sm min-h-[44px]"
+                                className="btn-secondary btn-sm min-h-[48px]"
                             >
                                 <span aria-hidden="true">{selectedApp === app.id ? '▾' : '▸'}</span>
                                 증빙서류 사본 {selectedApp === app.id ? '닫기' : '보기'}
@@ -163,7 +163,7 @@ export default memo(function OrgAppCard({
                                 type="button"
                                 onClick={() => onAiReanalyze(app)}
                                 disabled={!!actionLoading[app.id]}
-                                className="btn-secondary btn-sm min-h-[44px]"
+                                className="btn-secondary btn-sm min-h-[48px]"
                             >
                                 {actionLoading[app.id] === 'ai' ? (
                                     <><div className="w-3.5 h-3.5 spinner" aria-hidden="true" /> AI 분석 중...</>
@@ -183,24 +183,24 @@ export default memo(function OrgAppCard({
                                     type="button"
                                     onClick={() => onAiReanalyze(app)}
                                     disabled={!!actionLoading[app.id]}
-                                    className="btn-secondary btn-sm min-h-[44px]"
+                                    className="btn-secondary btn-sm min-h-[48px]"
                                 >
                                     {actionLoading[app.id] === 'ai' ? '분석 중...' : 'AI 다시 분석'}
                                 </button>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-sm">
                                 <div className="flex items-center gap-1.5">
-                                    <span aria-hidden="true" className={`w-2 h-2 shrink-0 rounded-full ${app.aiVerifyDetail.documentType === '고유번호증' || app.aiVerifyDetail.documentType === '사업자등록증(비영리)' ? 'bg-green-500 dark:bg-green-400' : 'bg-red-500 dark:bg-red-400'}`} />
+                                    <span aria-hidden="true" className={`w-2 h-2 shrink-0 rounded-full ${app.aiVerifyDetail.documentType === '고유번호증' || app.aiVerifyDetail.documentType === '사업자등록증(비영리)' ? 'bg-accent-500 dark:bg-accent-400' : 'bg-red-500 dark:bg-red-400'}`} />
                                     <span className="text-surface-600 dark:text-surface-400">문서 유형:</span>
-                                    <span className={`font-medium ${app.aiVerifyDetail.documentType === '고유번호증' || app.aiVerifyDetail.documentType === '사업자등록증(비영리)' ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                                    <span className={`font-medium ${app.aiVerifyDetail.documentType === '고유번호증' || app.aiVerifyDetail.documentType === '사업자등록증(비영리)' ? 'text-accent-700 dark:text-accent-300' : 'text-red-700 dark:text-red-300'}`}>
                                         {app.aiVerifyDetail.documentType || '확인 불가'}
                                     </span>
                                 </div>
                                 {app.aiVerifyDetail.extractedName && (
                                     <div className="flex items-center gap-1.5">
-                                        <span aria-hidden="true" className={`w-2 h-2 shrink-0 rounded-full ${app.aiVerifyDetail.nameMatch ? 'bg-green-500' : 'bg-red-500'}`} />
+                                        <span aria-hidden="true" className={`w-2 h-2 shrink-0 rounded-full ${app.aiVerifyDetail.nameMatch ? 'bg-accent-500' : 'bg-red-500'}`} />
                                         <span className="text-surface-600 dark:text-surface-400">추출 기관명:</span>
-                                        <span className={`font-medium ${app.aiVerifyDetail.nameMatch ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                                        <span className={`font-medium ${app.aiVerifyDetail.nameMatch ? 'text-accent-700 dark:text-accent-300' : 'text-red-700 dark:text-red-300'}`}>
                                             {app.aiVerifyDetail.extractedName}
                                             {app.aiVerifyDetail.nameMatch ? ' (신청 기관명과 일치)' : ' (신청 기관명과 다름)'}
                                         </span>
@@ -208,21 +208,21 @@ export default memo(function OrgAppCard({
                                 )}
                                 {app.aiVerifyDetail.uniqueNumber && (
                                     <div className="flex items-center gap-1.5">
-                                        <span aria-hidden="true" className="w-2 h-2 shrink-0 rounded-full bg-green-500 dark:bg-green-400" />
+                                        <span aria-hidden="true" className="w-2 h-2 shrink-0 rounded-full bg-accent-500 dark:bg-accent-400" />
                                         <span className="text-surface-600 dark:text-surface-400">{app.aiVerifyDetail.documentType === '고유번호증' ? '고유번호:' : '사업자번호:'}</span>
                                         <span className="font-mono text-surface-700 dark:text-surface-300">{app.aiVerifyDetail.uniqueNumber}</span>
                                     </div>
                                 )}
                                 {app.aiVerifyDetail.address && (
                                     <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2 break-all">
-                                        <span aria-hidden="true" className="w-2 h-2 shrink-0 rounded-full bg-green-500 dark:bg-green-400" />
+                                        <span aria-hidden="true" className="w-2 h-2 shrink-0 rounded-full bg-accent-500 dark:bg-accent-400" />
                                         <span className="text-surface-600 dark:text-surface-400">주소:</span>
                                         <span className="text-surface-700 dark:text-surface-300">{app.aiVerifyDetail.address}</span>
                                         <a
                                             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(app.aiVerifyDetail.address)}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-0.5 min-h-[44px] px-2 rounded text-xs font-medium text-primary-700 dark:text-primary-300 underline underline-offset-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors break-keep"
+                                            className="inline-flex items-center gap-0.5 min-h-[48px] px-2 rounded text-xs font-medium text-primary-700 dark:text-primary-300 underline underline-offset-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors break-keep"
                                         >
                                             <span aria-hidden="true">📍</span> 지도에서 보기<span className="sr-only">(구글 지도, 새 창)</span>
                                         </a>
@@ -247,7 +247,7 @@ export default memo(function OrgAppCard({
                                     type="button"
                                     onClick={() => onApprove(app)}
                                     disabled={!!actionLoading[app.id]}
-                                    className="btn-success btn-sm min-h-[44px] flex-1 md:flex-none"
+                                    className="btn-success btn-sm min-h-[48px] flex-1 md:flex-none"
                                 >
                                     {actionLoading[app.id] === 'approve' ? (
                                         <><div className="w-4 h-4 spinner" aria-hidden="true" />승인 중…</>
@@ -257,7 +257,7 @@ export default memo(function OrgAppCard({
                                     type="button"
                                     onClick={handleRejectClick}
                                     disabled={!!actionLoading[app.id]}
-                                    className="btn-danger btn-sm flex-1 md:flex-none min-h-[44px]"
+                                    className="btn-danger btn-sm flex-1 md:flex-none min-h-[48px]"
                                 >
                                     {actionLoading[app.id] === 'reject' ? (
                                         <><div className="w-4 h-4 spinner" aria-hidden="true" />거절 중…</>
@@ -281,7 +281,7 @@ export default memo(function OrgAppCard({
                                     <button
                                         type="button"
                                         onClick={() => setIsRejecting(false)}
-                                        className="btn-secondary btn-sm min-h-[44px]"
+                                        className="btn-secondary btn-sm min-h-[48px]"
                                     >
                                         취소
                                     </button>
@@ -291,7 +291,7 @@ export default memo(function OrgAppCard({
                                             setIsRejecting(false);
                                             onReject(app, rejectReason);
                                         }}
-                                        className="btn-danger btn-sm min-h-[44px]"
+                                        className="btn-danger btn-sm min-h-[48px]"
                                         disabled={!!actionLoading[app.id] || !rejectReason.trim()}
                                     >
                                         {actionLoading[app.id] === 'reject' ? '처리 중...' : '거절 및 이메일 발송'}
@@ -308,7 +308,7 @@ export default memo(function OrgAppCard({
                             type="button"
                             onClick={() => onMoveToPending(app)}
                             disabled={!!actionLoading[app.id]}
-                            className="btn-secondary btn-sm min-h-[44px] flex-1 md:flex-none"
+                            className="btn-secondary btn-sm min-h-[48px] flex-1 md:flex-none"
                         >
                             {actionLoading[app.id] === 'moveToPending' ? (
                                 <><div className="w-4 h-4 spinner" aria-hidden="true" />되돌리는 중…</>
@@ -318,7 +318,7 @@ export default memo(function OrgAppCard({
                             type="button"
                             onClick={() => onDelete(app)}
                             disabled={!!actionLoading[app.id]}
-                            className="btn-danger btn-sm min-h-[44px] flex-1 md:flex-none"
+                            className="btn-danger btn-sm min-h-[48px] flex-1 md:flex-none"
                         >
                             {actionLoading[app.id] === 'delete' ? (
                                 <><div className="w-4 h-4 spinner" aria-hidden="true" />삭제 중…</>

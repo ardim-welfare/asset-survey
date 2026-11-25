@@ -110,13 +110,13 @@ export default function useSpaceManager() {
         location: SpaceLocation = { buildingId: null, floor: null },
     ): Promise<boolean> => {
         if (!orgId) return false;
-        const problem = validateSpaceName(rawName, spaces);
+        const loc: SpaceLocation = { buildingId: location.buildingId, floor: location.buildingId ? location.floor : null };
+        const problem = validateSpaceName(rawName, spaces, undefined, loc);
         if (problem) {
             showToast(problem, 'warning');
             return false;
         }
         const order = nextSpaceOrder;
-        const loc: SpaceLocation = { buildingId: location.buildingId, floor: location.buildingId ? location.floor : null };
         setBusy(true);
         try {
             const id = await createSpace(orgId, rawName, order, loc);
@@ -141,21 +141,21 @@ export default function useSpaceManager() {
      */
     const saveSpaceDetails = useCallback(async (space: Space, input: string, location?: SpaceLocation): Promise<boolean> => {
         const patch: Parameters<typeof updateSpace>[1] = {};
-        if (normalizeSpaceName(input) !== space.name) {
-            const problem = validateSpaceName(input, spaces, space.id);
+        const nameChanged = normalizeSpaceName(input) !== space.name;
+        const target: SpaceLocation = location
+            ? { buildingId: location.buildingId, floor: location.buildingId ? location.floor : null }
+            : { buildingId: space.buildingId ?? null, floor: space.floor ?? null };
+        const moved = !!location && ((space.buildingId ?? null) !== target.buildingId || (space.floor ?? null) !== target.floor);
+        // 이름을 바꾸거나 다른 층으로 옮길 때 — 옮겨 갈 자리에 같은 이름이 있는지 본다(2026-11-25)
+        if (nameChanged || moved) {
+            const problem = validateSpaceName(input, spaces, space.id, target);
             if (problem) {
                 showToast(problem, 'warning');
                 return false;
             }
-            patch.name = normalizeSpaceName(input);
         }
-        if (location) {
-            const buildingId = location.buildingId;
-            const floor = buildingId ? location.floor : null;
-            if ((space.buildingId ?? null) !== buildingId || (space.floor ?? null) !== floor) {
-                Object.assign(patch, { buildingId, floor, order: nextSpaceOrder });
-            }
-        }
+        if (nameChanged) patch.name = normalizeSpaceName(input);
+        if (moved) Object.assign(patch, { buildingId: target.buildingId, floor: target.floor, order: nextSpaceOrder });
         if (Object.keys(patch).length === 0) return true;
         return withRollback(
             sortSpaces(spaces.map((s) => (s.id === space.id ? { ...s, ...patch } : s))),
@@ -202,13 +202,16 @@ export default function useSpaceManager() {
         const buildingId = location.buildingId;
         const floor = buildingId ? location.floor : null;
         if ((space.buildingId ?? null) === buildingId && (space.floor ?? null) === floor) return;
+        // 옮겨 갈 건물·층에 같은 이름이 있으면 막는다(2026-11-25 — 층마다 같은 이름 허용)
+        const problem = validateSpaceName(space.name, spaces, space.id, { buildingId, floor });
+        if (problem) { showToast(problem, 'warning'); return; }
         const order = nextSpaceOrder;
         await withRollback(
             sortSpaces(spaces.map((s) => (s.id === space.id ? { ...s, buildingId, floor, order } : s))),
             () => updateSpace(space.id, { buildingId, floor, order }),
             '공간 위치를 바꾸지 못했습니다.',
         );
-    }, [spaces, nextSpaceOrder, withRollback]);
+    }, [spaces, nextSpaceOrder, withRollback, showToast]);
 
     const addManager = useCallback(async (space: Space, uid: string) => {
         if (!uid || space.managerUids.includes(uid)) return;
@@ -305,6 +308,14 @@ export default function useSpaceManager() {
         }
         const patches = moving.map((s, i) => ({ id: s.id, patch: { buildingId, floor, order: nextSpaceOrder + i } }));
         const byId = new Map(patches.map((x) => [x.id, x.patch]));
+        // 옮긴 뒤 같은 건물·층에 같은 이름이 둘이 되면 막는다 — 고른 공간끼리 겹치는 것도 잡는다(2026-11-25)
+        const after = spaces.map((s) => (byId.has(s.id) ? { ...s, ...byId.get(s.id) } : s));
+        const clashing = moving.filter((s) => validateSpaceName(s.name, after, s.id, { buildingId, floor }));
+        if (clashing.length > 0) {
+            const names = [...new Set(clashing.map((s) => s.name))];
+            showToast(`옮길 곳에 같은 이름의 공간이 있어 옮기지 않았습니다: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` 외 ${names.length - 3}곳` : ''}`, 'warning');
+            return false;
+        }
         const ok = await withRollback(
             sortSpaces(spaces.map((s) => (byId.has(s.id) ? { ...s, ...byId.get(s.id) } : s))),
             () => updateSpacesBatch(patches),
@@ -343,22 +354,22 @@ export default function useSpaceManager() {
     const addSpaces = useCallback(async (text: string, location: SpaceLocation = { buildingId: null, floor: null }): Promise<number> => {
         if (!orgId) return 0;
         const lines = text.split(/\r?\n/).map((l) => l.split('\t')[0].trim()).filter(Boolean);
+        const loc: SpaceLocation = { buildingId: location.buildingId, floor: location.buildingId ? location.floor : null };
         const accepted: string[] = [];
         const problems: string[] = [];
         const seen = [...spaces];
         for (const line of lines) {
-            const problem = validateSpaceName(line, seen);
+            const problem = validateSpaceName(line, seen, undefined, loc);
             if (problem) { problems.push(`${line}: ${problem}`); continue; }
             const name = normalizeSpaceName(line);
             accepted.push(name);
-            // 같은 목록 안의 겹친 이름도 잡히게 검사 대상에 더한다
-            seen.push({ id: `new-${accepted.length}`, organizationId: orgId, name, order: 0, managerUids: [], teamIds: [], archived: false, buildingId: null, floor: null });
+            // 같은 목록 안의 겹친 이름도 잡히게 검사 대상에 더한다(모두 같은 건물·층에 들어간다)
+            seen.push({ id: `new-${accepted.length}`, organizationId: orgId, name, order: 0, managerUids: [], teamIds: [], archived: false, buildingId: loc.buildingId, floor: loc.floor });
         }
         if (accepted.length === 0) {
             showToast(problems.length > 0 ? `추가할 공간이 없습니다. ${problems.slice(0, 2).join(' / ')}` : '공간 이름을 한 줄에 하나씩 적어 주세요.', 'warning');
             return 0;
         }
-        const loc: SpaceLocation = { buildingId: location.buildingId, floor: location.buildingId ? location.floor : null };
         const start = nextSpaceOrder;
         setBusy(true);
         try {

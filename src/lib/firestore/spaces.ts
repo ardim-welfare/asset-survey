@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { createZodConverter, spaceSchema, SPACE_NAME_MAX } from '../../schemas';
-import { captureError } from '../sentry';
+import { captureError } from '../monitoring';
 import { actorStamp } from './actorStamp';
 import type { Space, SpacePatch } from '../../types/space';
 
@@ -29,18 +29,38 @@ export function normalizeSpaceName(name: string): string {
     return name.trim().replace(/\s+/g, ' ');
 }
 
+/** 공간이 놓일 건물·층 — 이름 겹침 검사에 쓴다 */
+export interface SpacePlace {
+    buildingId?: string | null;
+    floor?: string | null;
+}
+
+/**
+ * 두 공간이 이름이 같으면 구분할 수 없는 자리인가 (2026-11-25, 사용자 의견).
+ * 둘 다 건물이 있고 건물·층 중 하나라도 다르면 구분된다("2층 부모휴게실" ≠ "3층 부모휴게실").
+ * 한쪽이라도 건물이 없으면 위치로 가를 수 없어 겹치는 것으로 본다.
+ */
+function clashes(a: SpacePlace, b: SpacePlace): boolean {
+    if (!a.buildingId || !b.buildingId) return true;
+    return a.buildingId === b.buildingId && (a.floor || null) === (b.floor || null);
+}
+
 /**
  * 공간 이름 검사 — 문제가 없으면 null, 있으면 안내 문구.
- * 같은 기관 안에서 이름이 겹치면 엑셀 위치 대응(2단계)과 보고서에서 구분할 수 없으므로 막는다.
- * 숨긴 공간과 겹치는 것도 막는다 — 숨김을 풀면 같은 이름이 둘이 된다.
+ * 같은 건물·같은 층 안에서 이름이 겹치면 엑셀 위치 대응과 보고서에서 구분할 수 없으므로 막는다.
+ * 층이 다르면 같은 이름을 쓸 수 있다 — 엑셀 위치 대응은 층까지 견주고 애매하면 사람이 고른다(locationMatch).
+ * 건물을 정하지 않은 공간은 예전처럼 기관 전체에서 겹치지 않아야 한다.
+ * 숨긴 공간과 겹치는 것도 막는다 — 숨김을 풀면 같은 자리에 같은 이름이 둘이 된다.
  */
-export function validateSpaceName(name: string, existing: Space[], selfId?: string): string | null {
+export function validateSpaceName(name: string, existing: Space[], selfId?: string, place: SpacePlace = {}): string | null {
     const normalized = normalizeSpaceName(name);
     if (!normalized) return '공간 이름을 입력해주세요.';
     if (normalized.length > SPACE_NAME_MAX) return `공간 이름은 ${SPACE_NAME_MAX}자까지 쓸 수 있습니다.`;
-    const dup = existing.find((s) => s.id !== selfId && normalizeSpaceName(s.name) === normalized);
-    if (dup) return dup.archived ? `삭제한 공간에 같은 이름(${normalized})이 있습니다. 목록 아래 '삭제한 공간'에서 되살려 쓰세요.` : `같은 이름의 공간(${normalized})이 이미 있습니다.`;
-    return null;
+    const dup = existing.find((s) => s.id !== selfId && normalizeSpaceName(s.name) === normalized && clashes(s, place));
+    if (!dup) return null;
+    if (dup.archived) return `삭제한 공간에 같은 이름(${normalized})이 있습니다. 목록 아래 '삭제한 공간'에서 되살려 쓰세요.`;
+    if (place.buildingId && dup.buildingId) return `같은 건물·층에 같은 이름의 공간(${normalized})이 이미 있습니다.`;
+    return `같은 이름의 공간(${normalized})이 이미 있습니다. 건물·층을 정하면 층마다 같은 이름을 쓸 수 있습니다.`;
 }
 
 /** 기관의 공간 목록 (숨긴 공간 포함, 표시 순서대로) */

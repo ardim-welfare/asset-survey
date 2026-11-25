@@ -305,6 +305,39 @@ describe('useSpaceManager', () => {
         expect(result.current.activeSpaces).toHaveLength(0);
     });
 
+    it('층마다 같은 이름 (2026-11-25): 다른 층이면 추가되고, 같은 층으로 옮기거나 고치면 막힌다', async () => {
+        vi.mocked(firestore.getBuildings).mockResolvedValue([building({})]);
+        vi.mocked(firestore.getSpaces).mockResolvedValue([
+            space({ id: 'p1', name: '부모휴게실', order: 0, buildingId: 'b1', floor: '1' }),
+            space({ id: 'p2', name: '상담실', order: 1, buildingId: 'b1', floor: '2' }),
+        ]);
+        vi.mocked(firestore.createSpace).mockResolvedValue('new-1');
+        const { result } = await setup();
+
+        // 2층에 같은 이름 — 된다
+        let ok = false;
+        await act(async () => { ok = await result.current.addSpace('부모휴게실', { buildingId: 'b1', floor: '2' }); });
+        expect(ok).toBe(true);
+        expect(firestore.createSpace).toHaveBeenCalledWith('org-A', '부모휴게실', expect.any(Number), { buildingId: 'b1', floor: '2' });
+
+        // 1층에 또 — 막힌다
+        mockShowToast.mockClear();
+        await act(async () => { ok = await result.current.addSpace('부모휴게실', { buildingId: 'b1', floor: '1' }); });
+        expect(ok).toBe(false);
+        expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/같은 건물·층/), 'warning');
+
+        // 1층 부모휴게실을 2층으로 옮기기(고치기 창·여러 곳 옮기기) — 2층에 이미 있어 막힌다
+        vi.mocked(firestore.updateSpace).mockClear();
+        vi.mocked(firestore.updateSpacesBatch).mockClear();
+        const p1 = result.current.activeSpaces.find((x) => x.id === 'p1')!;
+        await act(async () => { ok = await result.current.saveSpaceDetails(p1, p1.name, { buildingId: 'b1', floor: '2' }); });
+        expect(ok).toBe(false);
+        await act(async () => { ok = await result.current.bulkSetLocation(['p1'], { buildingId: 'b1', floor: '2' }); });
+        expect(ok).toBe(false);
+        expect(firestore.updateSpace).not.toHaveBeenCalled();
+        expect(firestore.updateSpacesBatch).not.toHaveBeenCalled();
+    });
+
     it('여러 공간 한꺼번에 추가 — 빈 줄·겹친 이름·이미 있는 이름은 건너뛰고, 엑셀은 첫 칸만 쓴다', async () => {
         const { result } = await setup();
         vi.mocked(firestore.createSpacesBatch).mockResolvedValue(['n1', 'n2']);

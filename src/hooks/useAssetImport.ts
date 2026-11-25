@@ -16,7 +16,7 @@ import { matchSpaceByLocation, parseLocation } from '../lib/import/locationMatch
 import { readWorkbook, toImportTable, parseAssets, blockingReasons, type SheetTable } from '../lib/import/parseSheet';
 import { autoMapColumns, type ColumnMap, type ImportField, missingRecommended, FIELD_DEF } from '../lib/import/columns';
 import { diffAssets, countByLocation, type LocationSpaceMap } from '../lib/import/diff';
-import { captureError } from '../lib/sentry';
+import { captureError } from '../lib/monitoring';
 import type { Space } from '../types/space';
 import type { Building } from '../types/building';
 import type { Asset, AssetAccounting } from '../types/asset';
@@ -49,8 +49,9 @@ export function suggestLocationMap(
             map[key] = prev;
             continue;
         }
-        const byName = active.find((s) => normalizeSpaceName(s.name) === normalizeSpaceName(key));
-        if (byName) { map[key] = byName.id; continue; }
+        // 층마다 같은 이름을 쓸 수 있으므로(2026-11-25) 이름만으로는 하나일 때만 고른다
+        const byName = active.filter((s) => normalizeSpaceName(s.name) === normalizeSpaceName(key));
+        if (byName.length === 1) { map[key] = byName[0].id; continue; }
         const byPlace = matchSpaceByLocation(key, active, buildings);
         if (byPlace) map[key] = byPlace.id;
     }
@@ -227,9 +228,10 @@ export default function useAssetImport() {
     const createSpaceFor = useCallback(async (key: string, location: string | null) => {
         if (!orgId || !location) return;
         const parsed = parseLocation(location, buildings);
+        const place = { buildingId: parsed.buildingId, floor: parsed.floor };
         let name = parsed.name;
-        if (name !== normalizeSpaceName(location) && validateSpaceName(name, spaces)) name = location;
-        const problem = validateSpaceName(name, spaces);
+        if (name !== normalizeSpaceName(location) && validateSpaceName(name, spaces, undefined, place)) name = location;
+        const problem = validateSpaceName(name, spaces, undefined, place);
         if (problem) {
             showToast(problem, 'warning');
             return;
@@ -238,7 +240,6 @@ export default function useAssetImport() {
         try {
             const active = spaces.filter((s) => !s.archived);
             const order = active.length === 0 ? 0 : Math.max(...active.map((s) => s.order)) + 1;
-            const place = { buildingId: parsed.buildingId, floor: parsed.floor };
             const id = await createSpace(orgId, name, order, place);
             setSpaces((prev) => [...prev, { id, organizationId: orgId, name: normalizeSpaceName(name), order, managerUids: [], teamIds: [], archived: false, ...place }]);
             setLocationMap((prev) => ({ ...prev, [key]: id }));

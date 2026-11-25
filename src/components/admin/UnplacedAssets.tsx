@@ -59,15 +59,16 @@ export default function UnplacedAssets() {
     const createFor = async (g: Group) => {
         if (!al.orgId || !g.location) return;
         const parsed = parseLocation(g.location, al.buildings);
+        const place = { buildingId: parsed.buildingId, floor: parsed.floor };
         let name = parsed.name;
-        if (name !== normalizeSpaceName(g.location) && validateSpaceName(name, al.spaces)) name = g.location;
-        const problem = validateSpaceName(name, al.spaces);
+        if (name !== normalizeSpaceName(g.location) && validateSpaceName(name, al.spaces, undefined, place)) name = g.location;
+        const problem = validateSpaceName(name, al.spaces, undefined, place);
         if (problem) { showToast(problem, 'warning'); return; }
         setWorking(true);
         try {
             const active = al.spaces.filter((s) => !s.archived);
             const order = active.length === 0 ? 0 : Math.max(...active.map((s) => s.order)) + 1;
-            const id = await createSpace(al.orgId, name, order, { buildingId: parsed.buildingId, floor: parsed.floor });
+            const id = await createSpace(al.orgId, name, order, place);
             await al.reload(); // 새 공간이 고르기 칸에 보이게
             setChoice((prev) => ({ ...prev, [g.key]: id }));
             showToast(`공간 '${normalizeSpaceName(name)}'을(를) 만들었습니다. [옮기기]를 누르면 재물이 들어갑니다.`, 'success');
@@ -122,7 +123,7 @@ export default function UnplacedAssets() {
 
     return (
         <div className="max-w-3xl mx-auto animate-fade-in">
-            <Link to="/admin/assets" className="inline-flex items-center gap-1 text-sm font-medium text-primary-700 dark:text-primary-300 min-h-[44px]">
+            <Link to="/admin/assets" className="inline-flex items-center gap-1 text-sm font-medium text-primary-700 dark:text-primary-300 min-h-[48px]">
                 <span aria-hidden="true">←</span> 재물 목록
             </Link>
             <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100 mb-1">공간 미지정 재물 정리</h1>
@@ -174,7 +175,7 @@ export default function UnplacedAssets() {
                     </ul>
 
                     <div className="fixed bottom-3 left-3 right-3 lg:left-[calc(16rem+1.5rem)] lg:right-6 z-40 flex justify-center pointer-events-none">
-                        <div className="pointer-events-auto w-full max-w-3xl glass-card p-3 shadow-xl border border-primary-200 dark:border-primary-800 flex flex-wrap items-center gap-2 bg-white/95 dark:bg-surface-900/95">
+                        <div className="pointer-events-auto w-full max-w-3xl glass-card p-3 shadow-glass-lg border border-primary-200 dark:border-primary-800 flex flex-wrap items-center gap-2 bg-white/95 dark:bg-surface-900/95 backdrop-blur-md">
                             <p className="flex-1 min-w-[10rem] text-sm text-surface-800 dark:text-surface-200 tabular-nums" role="status">
                                 {progress
                                     ? `옮기는 중… ${progress.done.toLocaleString('ko-KR')} / ${progress.total.toLocaleString('ko-KR')}건`

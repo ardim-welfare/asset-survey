@@ -12,7 +12,7 @@ const mockConfirm = vi.fn();
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ userData: { organizationId: 'org-A' } }) }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ showToast: mockShowToast }) }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm: mockConfirm }) }));
-vi.mock('../../lib/sentry', () => ({ captureError: vi.fn() }));
+vi.mock('../../lib/monitoring', () => ({ captureError: vi.fn() }));
 
 const mockReadWorkbook = vi.fn();
 vi.mock('../../lib/import/parseSheet', async () => {
@@ -67,6 +67,16 @@ describe('도우미', () => {
     it('suggestLocationMap: 지난번 연결 → 같은 이름 공간 → 미지정, 숨긴 공간은 제외', () => {
         const spaces = [space({ id: 'a', name: '101호' }), space({ id: 'b', name: '창고', archived: true })];
         expect(suggestLocationMap(['101호', '창고', '복도'], spaces, { 복도: 'a', 창고: 'b' })).toEqual({ '101호': 'a', 복도: 'a' });
+    });
+
+    it('suggestLocationMap: 층마다 같은 이름이 있으면 층이 적힌 위치만 자동으로, 이름만 있으면 사람이 고른다 (2026-11-25)', () => {
+        const buildings = [{ id: 'b1', organizationId: 'org-A', name: '본관', address: '', floors: ['1', '2', '3'], order: 0, archived: false }];
+        const spaces = [
+            space({ id: 'p2', name: '부모휴게실', buildingId: 'b1', floor: '2' }),
+            space({ id: 'p3', name: '부모휴게실', buildingId: 'b1', floor: '3' }),
+        ];
+        expect(suggestLocationMap(['2층 부모휴게실', '본관 3층 부모휴게실', '부모휴게실'], spaces, {}, buildings as never))
+            .toEqual({ '2층 부모휴게실': 'p2', '본관 3층 부모휴게실': 'p3' });
     });
 });
 

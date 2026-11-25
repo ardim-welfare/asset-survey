@@ -78,7 +78,7 @@ export default function EmployeeManager() {
 
     if (loading) {
         return (
-            <div className="max-w-4xl mx-auto animate-fade-in">
+            <div className="max-w-5xl mx-auto animate-fade-in">
                 <SkeletonBox className="h-7 w-28 mb-1" />
                 <SkeletonBox className="h-4 w-40 mb-6" />
                 <SkeletonList count={4} />
@@ -89,7 +89,7 @@ export default function EmployeeManager() {
     const inviteLink = `${APP_URL}?code=${organization?.inviteCode || '------'}`;
 
     return (
-        <div className="max-w-4xl mx-auto animate-fade-in">
+        <div className="max-w-5xl mx-auto animate-fade-in">
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">팀·직원 관리</h1>
                 <p className="text-sm text-surface-600 dark:text-surface-400 mt-1" aria-live="polite">
@@ -130,9 +130,9 @@ export default function EmployeeManager() {
                         기관 코드 <span className="font-mono text-lg font-bold text-primary-700 dark:text-primary-300 select-all">{organization?.inviteCode || '------'}</span>
                     </p>
                     <div className="flex flex-wrap gap-2 mt-3">
-                        <button type="button" onClick={() => void handleCopyInviteCode('link')} className="btn-secondary btn-sm min-h-[44px] px-4">링크 복사</button>
-                        <button type="button" onClick={() => void handleCopyInviteCode('code')} className="btn-secondary btn-sm min-h-[44px] px-4">코드 복사</button>
-                        <button type="button" onClick={() => void handleRegenerateCode()} disabled={regenerating} className="btn-secondary btn-sm min-h-[44px] px-4">
+                        <button type="button" onClick={() => void handleCopyInviteCode('link')} className="btn-secondary btn-sm min-h-[48px] px-4">링크 복사</button>
+                        <button type="button" onClick={() => void handleCopyInviteCode('code')} className="btn-secondary btn-sm min-h-[48px] px-4">코드 복사</button>
+                        <button type="button" onClick={() => void handleRegenerateCode()} disabled={regenerating} className="btn-secondary btn-sm min-h-[48px] px-4">
                             {regenerating ? '새로 만드는 중…' : '코드 새로 만들기'}
                         </button>
                     </div>
@@ -170,7 +170,7 @@ export default function EmployeeManager() {
                                     <button type="button" className="btn-primary min-h-[48px] px-3 flex-shrink-0" disabled={teams.busy || !newTeamName.trim()} onClick={() => void createTeamInDialog()}>팀 만들기</button>
                                 </div>
                                 {/* 잘못 골랐을 때 돌아갈 길 — 예전엔 창을 닫아야만 팀 고르기로 돌아갔다 */}
-                                <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3 mt-2" onClick={() => { setCreatingTeam(false); setNewTeamName(''); }}>
+                                <button type="button" className="btn-secondary btn-sm min-h-[48px] px-3 mt-2" onClick={() => { setCreatingTeam(false); setNewTeamName(''); }}>
                                     있는 팀에서 고르기
                                 </button>
                             </>
@@ -203,7 +203,7 @@ export default function EmployeeManager() {
                             .filter(([key, , n]) => key === 'all' || key === 'active' || n > 0)
                             .map(([key, label, n]) => (
                                 <button key={key} type="button" aria-pressed={statusFilter === key} onClick={() => { setStatusFilter(key); setSelected(new Set()); }}
-                                    className={`min-h-[44px] px-4 rounded-xl text-sm font-medium border ${statusFilter === key
+                                    className={`min-h-[48px] px-4 rounded-xl text-sm font-medium border ${statusFilter === key
                                         ? 'bg-primary-600 border-primary-600 text-white'
                                         : 'bg-white border-surface-300 text-surface-800 dark:bg-surface-800 dark:border-surface-600 dark:text-surface-200'}`}>
                                     {label} <span className="tabular-nums">{n}</span>
@@ -230,7 +230,7 @@ export default function EmployeeManager() {
                             <b className="font-semibold">가입 대기</b>는 미리 등록만 하고 아직 가입하지 않은 사람입니다. 초대 링크로 같은 이메일(구글 계정)로 가입하면 이름과 팀이 저절로 들어가고 '활성'이 됩니다.
                             {' '}아직 메일을 안 보낸 사람에게는 아래에서 골라 [초대 메일 보내기]를 누르세요.
                             {notInvited.length > 0 && (
-                                <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3 mt-2 block"
+                                <button type="button" className="btn-secondary btn-sm min-h-[48px] px-3 mt-2 block"
                                     onClick={() => void bulkSendInvites(notInvited)}>
                                     ✉️ 아직 안 보낸 {notInvited.length}명 모두에게 초대 메일 보내기
                                 </button>
@@ -250,7 +250,7 @@ export default function EmployeeManager() {
                 <div className="glass-card p-8 text-center" aria-live="polite">
                     <p className="text-surface-800 dark:text-surface-200 font-medium">조건에 맞는 직원이 없습니다</p>
                     {(filtering || statusFilter !== 'all') && (
-                        <button type="button" className="btn-secondary min-h-[44px] px-4 mt-3" onClick={() => { setSearchQuery(''); setTeamFilter('all'); setStatusFilter('all'); }}>
+                        <button type="button" className="btn-secondary min-h-[48px] px-4 mt-3" onClick={() => { setSearchQuery(''); setTeamFilter('all'); setStatusFilter('all'); }}>
                             모든 직원 보기
                         </button>
                     )}
@@ -258,7 +258,7 @@ export default function EmployeeManager() {
             ) : (
                 <div className="glass-card overflow-hidden">
                     <div className="flex items-center gap-1 border-b border-surface-100 dark:border-surface-700 bg-surface-50/60 dark:bg-surface-800/60">
-                        <label className="w-11 h-11 flex items-center justify-center flex-shrink-0 cursor-pointer">
+                        <label className="w-12 h-12 flex items-center justify-center flex-shrink-0 cursor-pointer">
                             <input type="checkbox" className="w-5 h-5 accent-primary-600"
                                 checked={allShownPicked}
                                 ref={(el) => { if (el) el.indeterminate = pickedShown > 0 && !allShownPicked; }}
@@ -289,11 +289,11 @@ export default function EmployeeManager() {
             {pickedMembers.length > 0 && <div className="h-36 sm:h-24" aria-hidden="true" />}
             {pickedMembers.length > 0 && (
                 <div className="fixed bottom-3 left-3 right-3 lg:left-[calc(16rem+1.5rem)] lg:right-6 z-40 flex justify-center pointer-events-none">
-                    <div className="pointer-events-auto w-full max-w-4xl glass-card p-3 shadow-xl border border-primary-200 dark:border-primary-800 flex flex-wrap items-center gap-2 bg-white/95 dark:bg-surface-900/95"
+                    <div className="pointer-events-auto w-full max-w-5xl glass-card p-3 shadow-glass-lg border border-primary-200 dark:border-primary-800 flex flex-wrap items-center gap-2 bg-white/95 dark:bg-surface-900/95 backdrop-blur-md"
                         role="region" aria-label="고른 직원에게 할 일">
                         <span className="text-sm font-semibold text-surface-900 dark:text-surface-100 tabular-nums mr-auto">{pickedMembers.length}명 고름</span>
                         <label htmlFor="bulk-team" className="sr-only">고른 직원의 팀 지정</label>
-                        <select id="bulk-team" value="" className="input w-auto min-w-[9rem] min-h-[44px] text-sm"
+                        <select id="bulk-team" value="" className="input w-auto min-w-[9rem] min-h-[48px] text-sm"
                             onChange={(e) => {
                                 const v = e.target.value;
                                 if (!v) return;
@@ -304,18 +304,21 @@ export default function EmployeeManager() {
                             <option value={NO_TEAM}>팀 비우기</option>
                         </select>
                         {pickedPending.length > 0 && (
-                            <button type="button" className="btn-primary btn-sm min-h-[44px] px-3"
+                            <button type="button" className="btn-primary btn-sm min-h-[48px] px-3"
                                 onClick={() => void bulkSendInvites(pickedPending).then((ok) => { if (ok) setSelected(new Set()); })}>
-                                ✉️ 초대 메일 보내기 ({pickedPending.length}명)
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                                </svg>
+                                <span>초대 메일 보내기 ({pickedPending.length}명)</span>
                             </button>
                         )}
                         {pickedPending.length > 0 && (
-                            <button type="button" className="btn-secondary btn-sm min-h-[44px] px-3 text-red-700 dark:text-red-300"
+                            <button type="button" className="btn-secondary btn-sm min-h-[48px] px-3 text-red-700 dark:text-red-300"
                                 onClick={() => void bulkDeletePending(pickedPending).then((ok) => { if (ok) setSelected(new Set()); })}>
                                 가입 대기 {pickedPending.length}명 등록 취소
                             </button>
                         )}
-                        <button type="button" className="btn-ghost btn-sm min-h-[44px] px-3" onClick={() => setSelected(new Set())}>고르기 해제</button>
+                        <button type="button" className="btn-ghost btn-sm min-h-[48px] px-3" onClick={() => setSelected(new Set())}>고르기 해제</button>
                     </div>
                 </div>
             )}

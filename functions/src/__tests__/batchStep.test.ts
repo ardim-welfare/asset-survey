@@ -4,29 +4,28 @@
  * 세 배치(dailyNightlyBatch·nightlyStatsBatch·weeklyMaintenanceBatch)가 같은 실패 처리 규약을
  * 여기에 의존한다. 지키려는 것은 둘이다:
  *   1. 스텝이 실패해도 배치가 멈추지 않되 **조용히 넘어가지 않는다**(captureError로 승격)
- *   2. 그렇게 올린 보고가 **실제로 전송된다**(종료 시 flush)
- *
- * 2번이 핵심이다. Sentry 전송은 비동기라 핸들러가 반환하면 Cloud Run 인스턴스가 동결되며
- * 버퍼가 사라지는데, 스케줄 함수에는 경계에서 flush해 주는 래퍼가 없다. flush를 빠뜨려도
- * 코드는 멀쩡해 보이고 테스트도 통과하므로 — 백업 실패 알림이 사라진 뒤에야 드러난다 —
- * 여기서 고정한다.
+ *   2. 실패·경고가 운영자 메일로 **실제로 전송된다**(종료 시 기다림)
  */
 
 const mockCaptureError = jest.fn();
-const mockFlushSentry = jest.fn();
-jest.mock('../core/sentry', () => ({
+jest.mock('../core/monitoring', () => ({
     captureError: (...args: unknown[]) => mockCaptureError(...args),
-    flushSentry: (...args: unknown[]) => mockFlushSentry(...args),
 }));
 
-import { runStep, logBatchResult } from '../utils/batchStep';
+const mockSendAdminAlertMail = jest.fn();
+jest.mock('../core/adminAlertMail', () => ({
+    sendAdminAlertMail: (...args: unknown[]) => mockSendAdminAlertMail(...args),
+}));
+
+import { runStep, logBatchResult, noteBatchAlert, resetBatchAlerts } from '../utils/batchStep';
 
 describe('batchStep', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         console.error = jest.fn();
         console.log = jest.fn();
-        mockFlushSentry.mockResolvedValue(undefined);
+        mockSendAdminAlertMail.mockResolvedValue(true);
+        resetBatchAlerts();
     });
 
     describe('runStep()', () => {
@@ -59,31 +58,70 @@ describe('batchStep', () => {
     });
 
     describe('logBatchResult()', () => {
-        it('실패가 없어도 flush한다 — 스텝 밖에서 올라온 보고가 있을 수 있다', async () => {
+        it('실패가 없으면 완료 로그만 남긴다', async () => {
             await logBatchResult('nightly', []);
 
-            expect(mockFlushSentry).toHaveBeenCalledTimes(1);
+            expect(console.log).toHaveBeenCalledWith('[Batch] nightly completed.');
         });
 
-        it('실패가 있으면 error 로그를 남기고 flush한다', async () => {
+        it('실패가 있으면 error 로그를 남긴다', async () => {
             await logBatchResult('nightly', ['backupFirestore', 'checkInsuranceExpiry']);
 
             expect(console.error).toHaveBeenCalledWith(
                 expect.stringContaining('2 failed step(s): backupFirestore, checkInsuranceExpiry')
             );
-            expect(mockFlushSentry).toHaveBeenCalledTimes(1);
         });
+    });
 
-        it('flush가 끝나기 전에 반환하지 않는다', async () => {
-            let flushed = false;
-            mockFlushSentry.mockImplementation(
-                () => new Promise<void>(resolve => setTimeout(() => { flushed = true; resolve(); }, 10))
-            );
-
+    // Discord를 비워 둔 운영(OPERATIONS.md)에서는 captureError가 아무 데도 닿지 않는다.
+    // 메일이 유일한 경보 경로이므로 "실패가 있으면 반드시 1통, 없으면 0통"을 고정한다.
+    describe('운영 경보 메일', () => {
+        it('실패가 없고 경고도 없으면 메일을 보내지 않는다', async () => {
+            await runStep([], 'nightly', 'backupFirestore', async () => undefined);
             await logBatchResult('nightly', []);
 
-            // await 없이 반환하면 여기서 false다 — 인스턴스가 동결되며 버퍼가 사라지는 형태
-            expect(flushed).toBe(true);
+            expect(mockSendAdminAlertMail).not.toHaveBeenCalled();
+        });
+
+        it('스텝이 실패하면 실패 메시지를 담아 메일 1통을 보낸다', async () => {
+            const failed: string[] = [];
+            await runStep(failed, 'nightly', 'backupFirestore', async () => { throw new Error('버킷 권한 거부\n조치: gcloud ...'); });
+            await runStep(failed, 'nightly', 'verifyPreviousBackup', async () => { throw new Error('어제 백업 없음'); });
+            await logBatchResult('nightly', failed);
+
+            expect(mockSendAdminAlertMail).toHaveBeenCalledTimes(1);
+            const mail = mockSendAdminAlertMail.mock.calls[0][0];
+            expect(mail.subject).toBe('nightly 실패 2건 (backupFirestore, verifyPreviousBackup)');
+            const text = mail.lines.join('\n');
+            expect(text).toContain('[실패] backupFirestore\n버킷 권한 거부\n조치: gcloud ...');
+            expect(text).toContain('[실패] verifyPreviousBackup\n어제 백업 없음');
+        });
+
+        it('스텝 안의 경고(noteBatchAlert)만 있어도 메일을 보낸다', async () => {
+            noteBatchAlert('[경고] 기관 파기 실패 — org1');
+            await logBatchResult('weekly', []);
+
+            expect(mockSendAdminAlertMail).toHaveBeenCalledTimes(1);
+            expect(mockSendAdminAlertMail.mock.calls[0][0].subject).toBe('weekly 확인 필요 1건');
+        });
+
+        it('보낸 경보는 비워서 다음 실행에 섞이지 않는다', async () => {
+            noteBatchAlert('[경고] 첫 실행');
+            await logBatchResult('weekly', []);
+            await logBatchResult('weekly', []);
+
+            expect(mockSendAdminAlertMail).toHaveBeenCalledTimes(1);
+        });
+
+        it('메일 전송을 기다린 뒤 반환한다', async () => {
+            let sent = false;
+            mockSendAdminAlertMail.mockImplementation(
+                () => new Promise<boolean>(resolve => setTimeout(() => { sent = true; resolve(true); }, 10))
+            );
+            noteBatchAlert('[경고] 기다림');
+            await logBatchResult('weekly', []);
+
+            expect(sent).toBe(true);
         });
     });
 });
