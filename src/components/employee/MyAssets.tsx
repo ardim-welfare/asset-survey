@@ -13,6 +13,7 @@ import { StatusBadge, MissingBadge, UsefulLifeOverBadge } from '../common/AssetB
 import { SkeletonBox, SkeletonList } from '../common/Skeleton';
 import { isUsefulLifeOver, usefulLifeEnd } from '../../lib/usefulLife';
 import type { Asset } from '../../types/asset';
+import { spaceDisplayNames } from '../../lib/spaceGroups';
 import type { Space } from '../../types/space';
 
 const sub = 'text-xs text-surface-600 dark:text-surface-400';
@@ -50,6 +51,7 @@ export default function MyAssets() {
 
     const spaceParam = params.get('space');
     const current = spaces.some((s) => s.id === spaceParam) ? spaceParam : 'all';
+    const labels = useMemo(() => spaceDisplayNames(spaces), [spaces]);
     const shown = useMemo(() => filterAssets(assets, {
         ...DEFAULT_FILTERS, search, space: current ?? 'all', status: withInactive ? 'all' : 'active',
     }), [assets, search, current, withInactive]);
@@ -94,7 +96,7 @@ export default function MyAssets() {
                                         ? 'bg-primary-600 text-white dark:bg-primary-500'
                                         : 'bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 border border-surface-200 dark:border-surface-700'}`}
                                 >
-                                    {s.name}{s.id !== 'all' && <span className="tabular-nums"> {countIn(s.id)}</span>}
+                                    {s.id === 'all' ? s.name : (labels.get(s.id) ?? s.name)}{s.id !== 'all' && <span className="tabular-nums"> {countIn(s.id)}</span>}
                                 </button>
                             );
                         })}

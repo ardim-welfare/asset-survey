@@ -22,6 +22,7 @@ import {
     buildTargetIndex, findInTargets, judge, resolveInput, targetKey,
     type FoundAsset, type IndexedTarget, type Judgement, type ScanDraft,
 } from '../lib/survey/judge';
+import { spaceDisplayNames } from '../lib/spaceGroups';
 import type { Survey, SurveyTarget, Scan, ScanCondition, ScanMethod, SurveySubmission } from '../types/survey';
 import type { Space } from '../types/space';
 
@@ -129,7 +130,8 @@ export default function useScanner(initialSpaceId: string | null) {
 
     const index = useMemo(() => buildTargetIndex(targets), [targets]);
     const scanMap = useMemo(() => new Map(scans.map((s) => [s.id, s])), [scans]);
-    const spaceName = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
+    // 층마다 같은 이름이 있으면 '2층 부모휴게실'처럼 층을 붙여 '다른 공간' 안내가 헷갈리지 않게 한다(2026-11-25)
+    const spaceName = useMemo(() => spaceDisplayNames(spaces), [spaces]);
 
     /** 찍힌 글자 처리 — 처리 중이면 false(카메라가 다음 프레임에 다시 넘긴다) */
     const handle = useCallback((text: string, method: ScanMethod): boolean => {

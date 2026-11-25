@@ -161,6 +161,28 @@ describe('spaces — 이름 검사', () => {
         expect(validateSpaceName('옛 창고', existing)).toMatch(/삭제한 공간/);
     });
 
+    it('층마다 같은 이름을 쓸 수 있다 — 같은 건물·층에서만 막는다 (2026-11-25)', () => {
+        const placed = [
+            space({ id: 'p2', name: '부모휴게실', buildingId: 'b1', floor: '2' }),
+            space({ id: 'x', name: '상담실' }), // 건물 미지정
+            space({ id: 'old', name: '테라스', buildingId: 'b1', floor: '3', archived: true }),
+        ];
+        // 다른 층은 된다
+        expect(validateSpaceName('부모휴게실', placed, undefined, { buildingId: 'b1', floor: '3' })).toBeNull();
+        // 다른 건물 같은 층도 된다
+        expect(validateSpaceName('부모휴게실', placed, undefined, { buildingId: 'b2', floor: '2' })).toBeNull();
+        // 같은 건물·층은 막는다
+        expect(validateSpaceName('부모휴게실', placed, undefined, { buildingId: 'b1', floor: '2' })).toMatch(/같은 건물·층/);
+        // 건물을 정하지 않으면 예전처럼 기관 전체에서 겹치면 안 된다 — 층을 정하라고 안내
+        expect(validateSpaceName('부모휴게실', placed)).toMatch(/층마다 같은 이름/);
+        expect(validateSpaceName('상담실', placed, undefined, { buildingId: 'b1', floor: '2' })).toMatch(/층마다 같은 이름/);
+        // 같은 자리의 숨긴 공간과 겹치면 되살리라고, 다른 층이면 된다
+        expect(validateSpaceName('테라스', placed, undefined, { buildingId: 'b1', floor: '3' })).toMatch(/삭제한 공간/);
+        expect(validateSpaceName('테라스', placed, undefined, { buildingId: 'b1', floor: '2' })).toBeNull();
+        // 자기 자신을 다른 층으로 옮기는 것은 겹침이 아니다
+        expect(validateSpaceName('부모휴게실', placed, 'p2', { buildingId: 'b1', floor: '4' })).toBeNull();
+    });
+
     it('자기 자신과는 겹친다고 보지 않는다 (이름 바꾸기)', () => {
         expect(validateSpaceName('2층 사무실', existing, 'a')).toBeNull();
     });
